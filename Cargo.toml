@@ -1,0 +1,14 @@
+[package]
+name = "chemapp_rs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lazy_static = "*"
+libloading="0.7.4"
+function_name = "*"
+nalgebra = "0.32.*"
+serde = {version = "*", features = ["derive"]}
+chemformula = {path = "../chemformula"}
