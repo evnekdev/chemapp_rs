@@ -3,10 +3,11 @@ use lazy_static::{lazy_static};
 use std::collections::{HashMap};
 use std::str::{Utf8Error};
 use std::ffi::{NulError};
-
+use serde::{Serialize, Deserialize};
+use bincode::{Encode};
 
 /// Custom error struct
-#[derive(Debug)]
+#[derive(Debug,Clone,Serialize,Deserialize,Encode)]
 pub enum ChemAppError{
 	NativeError(usize),
 	OtherError(String),

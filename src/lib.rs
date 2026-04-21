@@ -1,3 +1,5 @@
+#![allow(unused_variables)]
+
 extern crate libloading;
 
 use libloading::{Library};
@@ -10,10 +12,12 @@ pub mod error;
 pub mod defs;
 pub mod native;
 pub mod calculator;
+pub mod interactions;
 
 static DEFAULT_LIBNAME : &str = r"ca_vc_e_local.dll";
 
 //#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct Engine{
 	pub n_isothermal: usize,
 	pub n_target: usize,
@@ -28,6 +32,7 @@ impl Default for Engine {
 }
 
 //#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct SystemDimensions{
 	nconstituents: i32,       // na
 	ncomponents: i32,         // nb

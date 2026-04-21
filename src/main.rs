@@ -1,4 +1,4 @@
-use chemapp::{native::*, calculator::*, *};
+use chemapp_rs::{native::*, calculator::*, *};
 use nalgebra::{dvector};
 
 
@@ -19,7 +19,7 @@ pub fn main(){
 		println!("idx = {:?}", &idx);
 	}
 	
-	for idx in (0..100).phases_valid(&calculator).phases_constituents(&calculator).constituents_HM(&calculator){
+	for idx in (0..100).phases_valid(&calculator).phases_constituents(&calculator).constituents_hm(&calculator){
 		println!("idx = {:?}", &idx);
 	}
 }

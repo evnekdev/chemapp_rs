@@ -8,9 +8,12 @@ description = "Port of ChemApp library (GTT-technologies) for thermodynamic calc
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+nom = "7.1.*"
+tempfile = "*"
 lazy_static = "*"
 libloading="0.7.*"
 function_name = "*"
-nalgebra = "0.32.*"
+nalgebra = "*"
 serde = {version = "*", features = ["derive"]}
+bincode = {version = "2.0", features=["serde","alloc"]}
 chemformula = {path = "../chemformula"}

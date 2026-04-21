@@ -13,7 +13,7 @@ use std::ffi::{CString, CStr};
 use function_name::{named};
 
 use crate::{Engine, SystemDimensions};
-use crate::defs::{funcswin32};
+use crate::defs::{FUNCSWIN32,FUNCSWIN64};
 use crate::error::{ChemAppError};
 
 const NAME_LENGTH_MAX : usize = 25;
@@ -21,10 +21,10 @@ const NAME_LENGTH_MAX : usize = 25;
 fn func_alias(name: &'static str)->&'static str {
 	#[cfg(target_family="windows")]
 	#[cfg(target_pointer_width="32")]
-	return funcswin32[name];
+	return FUNCSWIN32[name];
 	#[cfg(target_family="windows")]
 	#[cfg(target_pointer_width="64")]
-	return funcswin64[name];
+	return FUNCSWIN64[name];
 }
 
 fn clen(array: &[u8]) -> usize {
@@ -66,7 +66,7 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		unsafe {
-		let func: Symbol<extern "stdcall" fn(errcode: &mut usize)->()>
+		let func: Symbol<extern "system" fn(errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 		func(&mut errcode);
 		}
@@ -81,7 +81,7 @@ impl Engine {
 		let mut vers = 0;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(vers: &mut i32, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(vers: &mut i32, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&mut vers, &mut errcode);
 		}
@@ -95,7 +95,7 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&mut errcode);
 		}
@@ -110,7 +110,7 @@ impl Engine {
 		let mut lite = 0;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(lite: &mut i32, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(lite: &mut i32, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&mut lite, &mut errcode);
 		}
@@ -125,7 +125,7 @@ impl Engine {
 		let mut errcode = 0;
 		let mut cstring: [u8; 256] = [0;256];
 		unsafe {
-			let func : Symbol<extern "stdcall" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()>
+			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&mut cstring[0], 256, &mut errcode);
 		}
@@ -140,7 +140,7 @@ impl Engine {
 		let mut errcode = 0;
 		let mut cstring: [u8; 80] = [0;80];
 		unsafe {
-			let func : Symbol<extern "stdcall" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()>
+			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&mut cstring[0], 80, &mut errcode);
 		}
@@ -155,7 +155,7 @@ impl Engine {
 		let mut errcode = 0;
 		let mut cstring: [u8; 80] = [0;80];
 		unsafe {
-			let func : Symbol<extern "stdcall" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()>
+			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&mut cstring[0], 80, &mut errcode);
 		}
@@ -170,7 +170,7 @@ impl Engine {
 		let mut errcode = 0;
 		let mut cstring: [u8; 80] = [0;80];
 		unsafe {
-			let func : Symbol<extern "stdcall" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()>
+			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&mut cstring[0], 80, &mut errcode);
 		}
@@ -198,7 +198,7 @@ impl Engine {
 		let coption_length = option.len();
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(coption: &u8, coption_length: usize, valuea: &usize, valueb: &usize, valuec: &usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(coption: &u8, coption_length: usize, valuea: &usize, valueb: &usize, valuec: &usize, errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], coption_length, &valuea, &valueb, &valuec, &mut errcode);
 		}
@@ -213,7 +213,7 @@ impl Engine {
 		let mut dims : SystemDimensions =  SystemDimensions::new();
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(na: &mut i32, nb: &mut i32, nc: &mut i32, nd: &mut i32, ne: &mut i32, nf: &mut i32, ng: &mut i32, nh: &mut i32, ni: &mut i32, nj: &mut i32, nk: &mut i32, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(na: &mut i32, nb: &mut i32, nc: &mut i32, nd: &mut i32, ne: &mut i32, nf: &mut i32, ng: &mut i32, nh: &mut i32, ni: &mut i32, nj: &mut i32, nk: &mut i32, errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 			func(&mut dims.nconstituents, &mut dims.ncomponents, &mut dims.nmixtures, &mut dims.nexcess_gibbs, &mut dims.nexcess_magnetic, &mut dims.nsublattices, &mut dims.nspecies, &mut dims.nconstituents_mqm, &mut dims.nranges_constituent, &mut dims.nranges, &mut dims.ndependent, &mut errcode);
 		}
@@ -228,7 +228,7 @@ impl Engine {
 		let mut dims : SystemDimensions =  SystemDimensions::new();
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(na: &mut i32, nb: &mut i32, nc: &mut i32, nd: &mut i32, ne: &mut i32, nf: &mut i32, ng: &mut i32, nh: &mut i32, ni: &mut i32, nj: &mut i32, nk: &mut i32, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(na: &mut i32, nb: &mut i32, nc: &mut i32, nd: &mut i32, ne: &mut i32, nf: &mut i32, ng: &mut i32, nh: &mut i32, ni: &mut i32, nj: &mut i32, nk: &mut i32, errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 			func(&mut dims.nconstituents, &mut dims.ncomponents, &mut dims.nmixtures, &mut dims.nexcess_gibbs, &mut dims.nexcess_magnetic, &mut dims.nsublattices, &mut dims.nspecies, &mut dims.nconstituents_mqm, &mut dims.nranges_constituent, &mut dims.nranges, &mut dims.ndependent, &mut errcode);
 		}
@@ -244,7 +244,7 @@ impl Engine {
 		let mut num = 0;
 		let coption: CString = CString::new(option)?;
 		unsafe {
-			let func : Symbol<extern "stdcall" fn(option: &u8, option_len: usize, num: &mut usize, errcode: &mut usize)->()>
+			let func : Symbol<extern "system" fn(option: &u8, option_len: usize, num: &mut usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option.len(), &mut num, &mut errcode);
 		}
@@ -259,7 +259,7 @@ impl Engine {
 		let coption: CString = CString::new(option)?;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_len: usize, unit: &usize, errcode: &mut usize)->()> 
+			let func: Symbol<extern "system" fn(option: &u8, option_len: usize, unit: &usize, errcode: &mut usize)->()> 
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option.len(), &unit, &mut errcode);
 		}
@@ -273,7 +273,7 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 			func(&mut errcode);
 		}
@@ -287,7 +287,7 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 			func(&mut errcode);
 		}
@@ -301,7 +301,7 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 			func(&mut errcode);
 		}
@@ -311,13 +311,13 @@ impl Engine {
 	/******************************************/
 	/// OPEN-FILE
 	#[named]
-	pub fn tqopen(&self, filename: &str, unit: i32)->Result<(), ChemAppError>{
+	pub fn tqopen(&self, filename: &str, unit: usize)->Result<(), ChemAppError>{
 		let fname = func_alias(function_name!());
 		let cfilename: CString = CString::new(filename)?;
 		let cfilename_length = filename.len();
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(cfilename: &u8, filename_length: usize, unit: &i32, errcode: &mut usize)>
+			let func: Symbol<extern "system" fn(cfilename: &u8, filename_length: usize, unit: &usize, errcode: &mut usize)>
 			= self.library.get(fname.as_bytes())?;
 			func(&cfilename.as_bytes()[0], cfilename_length, &unit, &mut errcode);
 		}
@@ -333,7 +333,7 @@ impl Engine {
 		let ctext : CString = CString::new(text)?;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_len: usize, text: &u8, text_len: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(option: &u8, option_len: usize, text: &u8, text_len: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option.len(), &ctext.as_bytes()[0], text.len(), &mut errcode);
 		}
@@ -343,13 +343,13 @@ impl Engine {
 	/******************************************/
 	/// OPEN-ASCII-DATA-FILE
 	#[named]
-	pub fn tqopna(&self, name: &str, unit: i32) -> Result<(),ChemAppError>{
+	pub fn tqopna(&self, name: &str, unit: usize) -> Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
 		let cname: CString = CString::new(name)?;
 		let cname_length = name.len();
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(cname: &u8, cfilename_length: usize, unit: &i32, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(cname: &u8, cfilename_length: usize, unit: &usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cname.as_bytes()[0], cname_length, &unit, &mut errcode);
 		}
@@ -359,13 +359,13 @@ impl Engine {
 	/******************************************/
 	/// OPEN-BINARY-DATA-FILE
 	#[named]
-	pub fn tqopnb(&self, name: &str, unit: i32) -> Result<(),ChemAppError>{
+	pub fn tqopnb(&self, name: &str, unit: usize) -> Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
 		let cname: CString = CString::new(name)?;
 		let cname_length = name.len();
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(cname: &u8, cname_length: usize, unit: &i32, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(cname: &u8, cname_length: usize, unit: &usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cname.as_bytes()[0], cname_length, &unit, &mut errcode);
 		}
@@ -375,13 +375,13 @@ impl Engine {
 	/******************************************/
 	/// OPEN-TRANSPARENT-DATA-FILE
 	#[named]
-	pub fn tqopnt(&self, name: &str, unit: i32) -> Result<(),ChemAppError>{
+	pub fn tqopnt(&self, name: &str, unit: usize) -> Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
 		let cname: CString = CString::new(name)?;
 		let cname_length = name.len();
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(cname: &u8, cname_length: usize, unit: &i32, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(cname: &u8, cname_length: usize, unit: &usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cname.as_bytes()[0], cname_length, &unit, &mut errcode);
 		}
@@ -391,11 +391,11 @@ impl Engine {
 	/******************************************/
 	/// CLOSE-FILE
 	#[named]
-	pub fn tqclos(&self, unit: i32) -> Result<(),ChemAppError>{
+	pub fn tqclos(&self, unit: usize) -> Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(unit: &i32, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(unit: &usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&unit, &mut errcode);
 		}
@@ -418,7 +418,7 @@ impl Engine {
 		let mut cunit: [u8; NAME_LENGTH_MAX] = [0;NAME_LENGTH_MAX];
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_length: usize, unit: &mut u8, unit_length: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, unit: &mut u8, unit_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &mut cunit[0], NAME_LENGTH_MAX, &mut errcode);
 		}
@@ -436,7 +436,7 @@ impl Engine {
 		let unit_length = unit.len();
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_length: usize, unit: &u8, unit_length: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, unit: &u8, unit_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &cunit.as_bytes()[0], unit_length, &mut errcode);
 		}
@@ -453,7 +453,7 @@ impl Engine {
 		let mut indexs = 0;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(name: &u8, name_length: usize, indexs: &mut usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(name: &u8, name_length: usize, indexs: &mut usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cname.as_bytes()[0], name_length, &mut indexs, &mut errcode);
 		}
@@ -468,7 +468,7 @@ impl Engine {
 		let mut cname: [u8; NAME_LENGTH_MAX] = [0; NAME_LENGTH_MAX];
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexs: &usize, name: &mut u8, name_length: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexs: &usize, name: &mut u8, name_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexs, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
 		}
@@ -484,7 +484,7 @@ impl Engine {
 		let name_length = name.len();
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexs: &usize, name: &u8, name_length: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexs: &usize, name: &u8, name_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexs, &cname.as_bytes()[0], name_length, &mut errcode);
 		}
@@ -499,7 +499,7 @@ impl Engine {
 		let mut nscom = 0;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(nscom: &mut usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(nscom: &mut usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&mut nscom, &mut errcode);
 		}
@@ -516,9 +516,9 @@ impl Engine {
 		let mut wmass = 0.0f64;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexs: &usize, stoi: &mut f64, wmass: &mut f64, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexs: &usize, stoi: &mut f64, wmass: &mut f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&ncomp, &mut stoi[0], &mut wmass, &mut errcode);
+			func(&indexs, &mut stoi[0], &mut wmass, &mut errcode);
 		}
 		println!("indexs = {}, stoi = {:?}", indexs, &stoi);
 		return wrap_result((stoi, wmass), errcode);
@@ -552,7 +552,7 @@ impl Engine {
 		//println!("namememory = {:?}", namememory);
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(names: &u8, names_length: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(names: &u8, names_length: usize, errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 			func(&namememory[0], length, &mut errcode);
 		}
@@ -569,7 +569,7 @@ impl Engine {
 		let mut indexp  = 0;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(cname: &u8, cname_length: usize, indexp: &mut usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(cname: &u8, cname_length: usize, indexp: &mut usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cname.as_bytes()[0], cname_length, &mut indexp, &mut errcode);
 		}
@@ -584,7 +584,7 @@ impl Engine {
 		let mut cname: [u8; NAME_LENGTH_MAX] = [0;NAME_LENGTH_MAX];
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexp: &usize, cname: &mut u8, cname_length: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexp: &usize, cname: &mut u8, cname_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
 		}
@@ -599,11 +599,11 @@ impl Engine {
 		let mut cname: [u8; NAME_LENGTH_MAX] = [0;NAME_LENGTH_MAX];
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexp: &usize, cname: &mut u8, cname_length: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexp: &usize, cname: &mut u8, cname_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
 		}
-		return wrap_result(from_utf8(&cname)?.to_owned(), errcode);
+		return wrap_result(from_utf8(&cname)?.to_owned().trim().to_string(), errcode);
 	}
 	
 	/******************************************/
@@ -614,7 +614,7 @@ impl Engine {
 		let mut nphase  = 0;
 			let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(nphase: &mut usize, errcode: &mut usize)>
+			let func: Symbol<extern "system" fn(nphase: &mut usize, errcode: &mut usize)>
 				= self.library.get(fname.as_bytes())?;
 			func(&mut nphase, &mut errcode);
 		}
@@ -631,7 +631,7 @@ impl Engine {
 		let cname : CString = CString::new(name)?;
 		let cname_length = name.len();
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(cname: &u8, name_length: usize, indexp: &usize, indexc: &mut usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(cname: &u8, name_length: usize, indexp: &usize, indexc: &mut usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cname.as_bytes()[0], cname_length, &indexp, &mut indexc, &mut errcode);
 		}
@@ -646,7 +646,7 @@ impl Engine {
 		let mut cname: [u8; NAME_LENGTH_MAX] = [0; NAME_LENGTH_MAX];
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexp: &usize, indexc: &usize, cname: &mut u8, cname_length: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, cname: &mut u8, cname_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
 		}
@@ -661,7 +661,7 @@ impl Engine {
 		let mut value = 0;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexp: &usize, indexc: &usize, value: &mut i32, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, value: &mut i32, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &mut value, &mut errcode);
 		}
@@ -676,7 +676,7 @@ impl Engine {
 		let mut nconst  = 0;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexp: &usize, nconst: &mut usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexp: &usize, nconst: &mut usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &mut nconst, &mut errcode);
 		}
@@ -684,10 +684,20 @@ impl Engine {
 	}
 	
 	/******************************************/
-	/// TODO
+	/// GET-STOICHIOMETRY-OF-PHASE-CONSTITUENT
 	#[named]
-	pub fn tqstpc(&self)->Result<(),ChemAppError>{
-		todo!();
+	pub fn tqstpc(&self, indexp: usize, indexc: usize)->Result<(Vec<f64>,f64),ChemAppError>{
+		//todo!();
+		let fname = func_alias(function_name!());
+		let ncomp = self.tqnosc()?;
+		let mut stoi : Vec<f64> = vec![0.0;ncomp];
+		let mut wmass = 0.0f64;
+		let mut errcode = 0;
+		unsafe {
+			let func : Symbol<extern "system" fn(indexp: &usize, indexc: &usize, stoi: &mut f64, wmass: &mut f64, errcode: &mut usize)> = self.library.get(fname.as_bytes())?;
+			func(&indexp, &indexc, &mut stoi[0], &mut wmass, &mut errcode);
+		}
+		return wrap_result((stoi, wmass), errcode);
 	}
 	
 	/******************************************/
@@ -698,7 +708,7 @@ impl Engine {
 		let mut charge = 0;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexp: &usize, indexc: &usize, charge: &mut i32, errcode: &mut usize)->()> 
+			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, charge: &mut i32, errcode: &mut usize)->()> 
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &mut charge, &mut errcode);
 		}
@@ -714,7 +724,7 @@ impl Engine {
 		let mut errcode = 0;
 		let mut indexc: usize = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(name: &u8, name_len: usize, indexp: &usize, indexl: &usize, indexc: &mut usize, errcode: &mut usize)->()> 
+			let func: Symbol<extern "system" fn(name: &u8, name_len: usize, indexp: &usize, indexl: &usize, indexc: &mut usize, errcode: &mut usize)->()> 
 				= self.library.get(fname.as_bytes())?;
 			func(&cname.as_bytes()[0], name.len(), &indexp, &indexl, &mut indexc, &mut errcode);
 		}
@@ -722,10 +732,17 @@ impl Engine {
 	}
 	
 	/******************************************/
-	///TODO
+	/// GET-NAME-OF-SUBLATTICE-CONSTITUENT
 	#[named]
-	pub fn tqgnlc(&self)->Result<(),ChemAppError>{
-		todo!();
+	pub fn tqgnlc(&self, indexp: usize, indexl: usize, indexc: usize)->Result<String,ChemAppError>{
+		let fname = func_alias(function_name!());
+		let mut cname : [u8; NAME_LENGTH_MAX] = [0; NAME_LENGTH_MAX];
+		let mut errcode = 0usize;
+		unsafe {
+			let func : Symbol<extern "system" fn(indexp: &usize, indexl: &usize, indexc: &usize, cname: &mut u8, cname_length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
+			func(&indexp, &indexl, &indexc, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
+		}
+		return wrap_result(from_utf8(&cname)?.trim().to_owned(), errcode);
 	}
 	
 	/******************************************/
@@ -736,7 +753,7 @@ impl Engine {
 		let mut errcode = 0;
 		let mut nosl: usize = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexp: &usize, nosl: &mut usize, errcode: &mut usize)->()> 
+			let func: Symbol<extern "system" fn(indexp: &usize, nosl: &mut usize, errcode: &mut usize)->()> 
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &mut nosl, &mut errcode);
 		}
@@ -751,7 +768,7 @@ impl Engine {
 		let mut errcode = 0;
 		let mut nosc = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexp: &usize, index: &usize, nosc: &mut usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexp: &usize, index: &usize, nosc: &mut usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &index, &mut nosc, &mut errcode);
 		}
@@ -766,7 +783,7 @@ impl Engine {
 		let mut cstatus: [u8;NAME_LENGTH_MAX] = [0;NAME_LENGTH_MAX];
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexp: &usize, cstatus: &mut u8, cstatus_length: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexp: &usize, cstatus: &mut u8, cstatus_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &mut cstatus[0], NAME_LENGTH_MAX, &mut errcode);
 		}
@@ -782,7 +799,7 @@ impl Engine {
 		let cstatus_length = status.len();
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexp: &usize, cstatus: &u8, cstatus_length: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexp: &usize, cstatus: &u8, cstatus_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &cstatus.as_bytes()[0], cstatus_length, &mut errcode);
 		}
@@ -797,7 +814,7 @@ impl Engine {
 		let mut cstatus: [u8;NAME_LENGTH_MAX] = [0;NAME_LENGTH_MAX];
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexp: &usize, indexc: &usize, cstatus: &u8, cstatus_length: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, cstatus: &u8, cstatus_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &mut cstatus[0], NAME_LENGTH_MAX, &mut errcode);
 		}
@@ -813,7 +830,7 @@ impl Engine {
 		let cstatus_length = status.len();
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexp: &usize, indexc: &usize, status: &u8, status_length: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, status: &u8, status_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &cstatus.as_bytes()[0], cstatus_length, &mut errcode);
 		}
@@ -830,7 +847,7 @@ impl Engine {
 		let mut numcon  = 0;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, val: &f64, numcon: &mut i32, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, val: &f64, numcon: &mut i32, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &val, &mut numcon, &mut errcode);
 		}
@@ -844,7 +861,7 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(numcon: &i32, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(numcon: &i32, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&numcon, &mut errcode);
 		}
@@ -860,7 +877,7 @@ impl Engine {
 		let vals_ = [vals.0, vals.1];
 		let cidents: CString = CString::new(idents)?;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(idents: &u8, idents_len: usize, vals: &f64, errcode: &mut usize)->()> 
+			let func: Symbol<extern "system" fn(idents: &u8, idents_len: usize, vals: &f64, errcode: &mut usize)->()> 
 				= self.library.get(fname.as_bytes())?;
 			func(&cidents.as_bytes()[0], idents.len(), &vals_[0], &mut errcode);
 		}
@@ -875,7 +892,7 @@ impl Engine {
 		let cidents: CString = CString::new(idents)?;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(idents: &u8, idents_len: usize, indexp: &usize, indexc: &usize, val: &f64, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(idents: &u8, idents_len: usize, indexp: &usize, indexc: &usize, val: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cidents.as_bytes()[0], idents.len(), &indexp, &indexc, &val, &mut errcode);
 		}
@@ -890,7 +907,7 @@ impl Engine {
 		let coption: CString = CString::new(option)?;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_len: usize, indexp: &usize, val: &f64, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(option: &u8, option_len: usize, indexp: &usize, val: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option.len(), &indexp, &val, &mut errcode);
 		}
@@ -906,7 +923,7 @@ impl Engine {
 		let cidents: CString = CString::new(idents)?;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(idents: &u8, idents_len: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(idents: &u8, idents_len: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cidents.as_bytes()[0], idents.len(), &mut errcode);
 		}
@@ -923,7 +940,7 @@ impl Engine {
 		let vals_ : [f64;2] = [vals.0, vals.1];
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, vals: &f64, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, vals: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &vals_[0], &mut errcode);
 		}
@@ -940,7 +957,7 @@ impl Engine {
 		let vals_ : [f64;2] = [vals.0, vals.1];
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, vals: &f64, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, vals: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &vals_[0], &mut errcode);
 		}
@@ -957,7 +974,7 @@ impl Engine {
 		let vals_ : [f64;2] = [vals.0, vals.1];
 			let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, vals: &f64, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, vals: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &vals_[0], &mut errcode);
 		}
@@ -974,7 +991,7 @@ impl Engine {
 		let vals_ : [f64;2] = [vals.0, vals.1];
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, vals: &f64, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, vals: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &vals_[0], &mut errcode);
 		}
@@ -991,7 +1008,7 @@ impl Engine {
 		let mut icont : usize = 0;
 		let vals_: [f64;2] = [vals.0, vals.1];
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_len: usize, indexp: &usize, indexc: &usize, vals: &f64, icont: &mut usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(option: &u8, option_len: usize, indexp: &usize, indexc: &usize, vals: &f64, icont: &mut usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option.len(), &indexp, &indexc, &vals_[0], &mut icont, &mut errcode);
 		}
@@ -1008,7 +1025,7 @@ impl Engine {
 		let mut icont : usize = 0;
 		let vals_: [f64;2] = [vals.0, vals.1];
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_len: usize, indexp: &usize, indexc: &usize, vals: &f64, icont: &mut usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(option: &u8, option_len: usize, indexp: &usize, indexc: &usize, vals: &f64, icont: &mut usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option.len(), &indexp, &indexc, &vals_[0], &mut icont, &mut errcode);
 		}
@@ -1024,7 +1041,7 @@ impl Engine {
 		let option_length = option.len();
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_length: usize, val: &f64, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, val: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &val, &mut errcode);
 		}
@@ -1038,7 +1055,7 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&mut errcode);
 		}
@@ -1055,7 +1072,7 @@ impl Engine {
 		let mut value = 0.0f64;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, value: &mut f64, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, value: &mut f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &mut value, &mut errcode);
 		}
@@ -1071,7 +1088,7 @@ impl Engine {
 		let mut fval = 0.0f64;
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(option: &u8, option_len: usize, indexp: &usize, index: &usize, fval: &mut f64, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(option: &u8, option_len: usize, indexp: &usize, index: &usize, fval: &mut f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option.len(), &indexp, &index, &mut fval, &mut errcode);
 		}
@@ -1089,7 +1106,7 @@ impl Engine {
 		let mut errcode = 0;
 		let mut fval = 0.0f64;
 		unsafe {
-			let func : Symbol<extern "stdcall" fn(idents: &u8, idents_len: usize, option: &u8, option_len: usize, fval: &mut f64, errcode: &mut usize)->()>
+			let func : Symbol<extern "system" fn(idents: &u8, idents_len: usize, option: &u8, option_len: usize, fval: &mut f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cidents.as_bytes()[0], idents.len(), &coption.as_bytes()[0], option.len(), &mut fval, &mut errcode);
 		}
@@ -1104,7 +1121,7 @@ impl Engine {
 		let mut errcode = 0;
 		let mut fval = 0.0f64;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexp: &usize, indexl: &usize, indexc: &usize, fval: &mut f64, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexp: &usize, indexl: &usize, indexc: &usize, fval: &mut f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexl, &indexc, &mut fval, &mut errcode);
 		}
@@ -1119,7 +1136,7 @@ impl Engine {
 		let mut value = 0.0;
 			let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(indexp: &usize, indexa: &usize, indexb: &usize, indexc: &usize, indexd: &usize, value: &mut f64, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(indexp: &usize, indexa: &usize, indexb: &usize, indexc: &usize, indexd: &usize, value: &mut f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexa, &indexb, &indexc, &indexd, &mut value, &mut errcode);
 		}
@@ -1133,7 +1150,7 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&mut errcode);
 		}
@@ -1149,7 +1166,7 @@ impl Engine {
 		let mut fval = 0.0f64;
 		let coption: CString = CString::new(option)?;
 		unsafe {
-			let func : Symbol<extern "stdcall" fn(indexp: &usize, indexc: &usize, option: &u8, option_len: usize, indexr: &usize, fval: &mut f64, errcode: &mut usize)->()> 
+			let func : Symbol<extern "system" fn(indexp: &usize, indexc: &usize, option: &u8, option_len: usize, indexr: &usize, fval: &mut f64, errcode: &mut usize)->()> 
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &coption.as_bytes()[0], option.len(), &indexr, &mut fval, &mut errcode);
 		}
@@ -1157,17 +1174,49 @@ impl Engine {
 	}
 	
 	/******************************************/
-	/// TODO
+	/// LIST-EXCESS-PARAMETERS-OF-PHASE
 	#[named]
-	pub fn tqlpar(&self)->Result<(),ChemAppError>{
-		todo!();
+	pub fn tqlpar(&self, indexp: usize, option: &str)->Result<Vec<String>,ChemAppError>{
+		let fname = func_alias(function_name!());
+		let mut errcode = 0usize;
+		let mut nopar = 0usize;
+		let coption: CString = CString::new(option)?;
+		let mut lgtpar: [usize;1999] = [0usize;1999];
+		let mut chrpar: [[u8;156];1999] = [[0u8;156];1999];
+		unsafe {
+			let func : Symbol<extern "system" fn(indexp: &usize, option: &u8, option_len: usize, nopar: &mut usize, chrpar: &mut u8, chrpar_len: usize, lgtpar: &mut usize, noerr: &mut usize)->()> = self.library.get(fname.as_bytes())?;
+			func(&indexp, &coption.as_bytes()[0],option.len(),&mut nopar, &mut chrpar[0][0], 156, &mut lgtpar[0], &mut errcode);
+		}
+		let vec : Vec<String> = chrpar.iter().take(nopar).map(|bytes| {String::from_utf8_lossy(bytes).trim().to_string()}).collect();
+		//println!("vec = {:?}", &vec);
+		return wrap_result(vec, errcode);
 	}
 	
 	/******************************************/
-	/// TODO
+	/// GET-EXCESS-PARAMETERS-OF-PHASE
 	#[named]
-	pub fn tqgpar(&self)->Result<(),ChemAppError>{
-		todo!();
+	pub fn tqgpar(&self, indexp: usize, option: &str, indexx: usize)->Result<Vec<Vec<f64>>,ChemAppError>{
+		//println!("TQGPAR, indexp: {:?}, option: {:?}, indexx: {:?}", &indexp, option, &indexx);
+		let fname = func_alias(function_name!());
+		let mut errcode = 0usize;
+		let coption: CString = CString::new(option)?;
+		//println!("COPTION = {:?}", &coption);
+		let mut noexpr = 0usize;
+		let mut nvala = 0usize;
+		let mut vala : [[f64;20];28] = [[0.0;20];28];
+		unsafe {
+			let func : Symbol<extern "system" fn(indexp: &usize, option: &u8, option_len: usize, indexx: &usize, noexpr: &mut usize, nvala: &mut usize, vala: &mut f64, noerr: &mut usize)->()> = self.library.get(fname.as_bytes())?;
+			func(&indexp, &coption.as_bytes()[0], option.len(), &indexx, &mut noexpr, &mut nvala, &mut vala[0][0], &mut errcode);
+		}
+		let mut vecc : Vec<Vec<f64>> = Vec::new();
+		for k in 0..noexpr {
+			let mut vec : Vec<f64> = Vec::new();
+			for m in 0..nvala {
+				vec.push(vala[k][m]);
+			}
+			vecc.push(vec);
+		}
+		return Ok(vecc);
 	}
 	
 	/******************************************/
@@ -1177,7 +1226,7 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "stdcall" fn(i1: &usize, i2: &usize, i3: &usize, i4: &usize, i5: &usize, val: &f64, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(i1: &usize, i2: &usize, i3: &usize, i4: &usize, i5: &usize, val: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&i1, &i2, &i3, &i4, &i5, &val, &mut errcode);
 		}
@@ -1193,7 +1242,7 @@ impl Engine {
 		let cfile_length = file.len();
 		let mut errcode = 0;
 		unsafe{
-			let func: Symbol<extern "stdcall" fn(cfile: &u8, cfile_length: usize, errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(cfile: &u8, cfile_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cfile.as_bytes()[0], cfile_length, &mut errcode);
 		}

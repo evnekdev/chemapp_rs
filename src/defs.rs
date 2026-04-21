@@ -6,7 +6,7 @@ use lazy_static::{lazy_static};
 use std::collections::{HashMap};
 
 lazy_static!{
-pub static ref funcswin32 : HashMap<&'static str, &'static str> = HashMap::from([
+pub static ref FUNCSWIN32 : HashMap<&'static str, &'static str> = HashMap::from([
 		("tqini", "_TQINI@4"),
 		("tqvers", "_TQVERS@8"),
 		("tqcprt", "_TQCPRT@4"),
@@ -77,14 +77,14 @@ pub static ref funcswin32 : HashMap<&'static str, &'static str> = HashMap::from(
 		("tqgtlc", "_TQGTLC@20"),
 		("tqbond", "_TQBOND@28"),
 		("tqerr",  "_TQERR@4"),
-		("tqgdat", "_TQGPAR@32"),
+		("tqgdat", "_TQGDAT@32"),
 		("tqlpar", "_TQLPAR@32"),
 		("tqgpar", "_TQGPAR@32"),
 		("tqcdat", "_TQCDAT@28"),
 		("tqwasc", "_TQWASC@12"),
 		]);
 		
-pub static ref funcswin64 : HashMap<&'static str, &'static str> = HashMap::from([
+pub static ref FUNCSWIN64 : HashMap<&'static str, &'static str> = HashMap::from([
 		("tqini", "TQINI"),
 		("tqvers", "TQVERS"),
 		("tqcprt", "TQCPRT"),
@@ -155,7 +155,7 @@ pub static ref funcswin64 : HashMap<&'static str, &'static str> = HashMap::from(
 		("tqgtlc", "TQGTLC"),
 		("tqbond", "TQBOND"),
 		("tqerr",  "TQERR"),
-		("tqgdat", "TQGPAR"),
+		("tqgdat", "TQGDAT"),
 		("tqlpar", "TQLPAR"),
 		("tqgpar", "TQGPAR"),
 		("tqcdat", "TQCDAT"),
