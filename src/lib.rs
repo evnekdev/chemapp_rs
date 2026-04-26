@@ -23,7 +23,6 @@ extern crate libloading;
 
 use libloading::{Library};
 
-use chemformula::{Transform};
 pub use crate::calculator::{Calculator, ComponentIterator, PhaseIterator, ConstituentIterator};
 
 pub mod error;

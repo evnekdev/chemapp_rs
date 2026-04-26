@@ -4,8 +4,6 @@
 //! Disclaimer - this submodule can be subject to change.
 
 use std::collections::{HashMap};
-use std::str::{FromStr};
-use nom::{IResult, bytes::complete::{tag,take_while1},character::complete::{char,digit1,multispace0},combinator::{map_res,opt},sequence::{tuple,preceded,separated_pair}};
 
 use super::calculator::{Calculator};
 use crate::error::{ChemAppError};
@@ -37,6 +35,7 @@ impl InteractionGEMQM {
 
 /*******************************************************************************************************************************************************************************************************************************/
 /// An excess magnetic interaction in a mixture phase.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct InteractionMagnMQM {
 	indexp: usize,
@@ -99,6 +98,7 @@ impl Compound {
 
 /*******************************************************************************************************************************************************************************************************************************/
 /// A cache which allows to apply and reset parameter deltas, which is important for construction of sensitivity matrices (delta calc values vs delta parameters).
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct ParameterCache {
 	lookup_ge: HashMap<(String,String),usize>,
@@ -113,7 +113,7 @@ pub struct ParameterCache {
 
 impl ParameterCache {
 	
-	fn load_compound(calculator: &Calculator, phasename: &str)->Result<Compound,ChemAppError> {
+	pub fn load_compound(calculator: &Calculator, phasename: &str)->Result<Compound,ChemAppError> {
 		let indexp = calculator.engine.tqinp(phasename)?;
 		let h298 = calculator.engine.tqgdat(indexp, 1, "H", 0)?;
 		let s298 = calculator.engine.tqgdat(indexp, 1, "S", 0)?;
@@ -125,7 +125,7 @@ impl ParameterCache {
 		});
 	}
 	
-	fn load_endmembers(calculator: &Calculator, phasename: &str)->Result<Vec<Endmember>,ChemAppError>{
+	pub fn load_endmembers(calculator: &Calculator, phasename: &str)->Result<Vec<Endmember>,ChemAppError>{
 		let mut vecc : Vec<Endmember> = Vec::new();
 		let indexp = calculator.engine.tqinp(phasename)?;
 		let nendm = calculator.engine.tqnopc(indexp)?;
@@ -145,7 +145,7 @@ impl ParameterCache {
 		return Ok(vecc);
 	}
 	
-	fn load_interactions_ge(calculator: &Calculator, phasename: &str)->Result<Vec<InteractionGEMQM>,ChemAppError>{
+	pub fn load_interactions_ge(calculator: &Calculator, phasename: &str)->Result<Vec<InteractionGEMQM>,ChemAppError>{
 		let indexp = calculator.engine.tqinp(phasename)?;
 		let sinteractions : Vec<String> = calculator.interactions_ge_expanded(indexp)?;
 		//println!("sinderactions = {:?}", &sinteractions);
@@ -165,12 +165,12 @@ impl ParameterCache {
 		return Ok(interactions);
 	}
 	
-	fn load_interactions_magn(calculator: &Calculator, phase: &str)->Result<Vec<InteractionMagnMQM>,ChemAppError>{
+	pub fn load_interactions_magn(calculator: &Calculator, phase: &str)->Result<Vec<InteractionMagnMQM>,ChemAppError>{
 		//todo!();
 		return Ok(vec![]);
 	}
 	
-	fn generate_lookup_cmp(compounds: &[Compound])->HashMap<String,usize>{
+	pub fn generate_lookup_cmp(compounds: &[Compound])->HashMap<String,usize>{
 		let mut hmap : HashMap<String,usize> = HashMap::new();
 		for k in 0..compounds.len(){
 			let name = compounds[k].phasename.clone();
@@ -179,7 +179,7 @@ impl ParameterCache {
 		return hmap;
 	}
 	
-	fn generate_lookup_endm(endmembers: &[Endmember])->HashMap<(String,String),usize>{
+	pub fn generate_lookup_endm(endmembers: &[Endmember])->HashMap<(String,String),usize>{
 		let mut hmap : HashMap<(String,String),usize> = HashMap::new();
 		for k in 0..endmembers.len(){
 			let phasename = endmembers[k].phasename.clone();
@@ -189,7 +189,7 @@ impl ParameterCache {
 		return hmap;
 	}
 	
-	fn generate_lookup_interactions_ge(interactions: &[InteractionGEMQM])->HashMap<(String,String),usize>{
+	pub fn generate_lookup_interactions_ge(interactions: &[InteractionGEMQM])->HashMap<(String,String),usize>{
 		let mut hmap : HashMap<(String,String),usize> = HashMap::new();
 		for k in 0..interactions.len(){
 			let phasename = interactions[k].phasename.clone();
@@ -199,7 +199,7 @@ impl ParameterCache {
 		return hmap;
 	}
 	
-	fn generate_lookup_interactions_magn(interactions: &[InteractionMagnMQM])->HashMap<(String,String),usize>{
+	pub fn generate_lookup_interactions_magn(interactions: &[InteractionMagnMQM])->HashMap<(String,String),usize>{
 		let mut hmap : HashMap<(String,String),usize> = HashMap::new();
 		for k in 0..interactions.len(){
 			let phasename = interactions[k].phasename.clone();
@@ -210,10 +210,10 @@ impl ParameterCache {
 	}
 	
 	pub fn new<T: AsRef<str> + std::fmt::Debug>(calculator: & Calculator, phasenames: &[T], include_ge: bool, include_magn: bool, include_endm: bool, include_cmp: bool)->Result<Self,ChemAppError> {
-		let mut compounds : Vec<Compound> = Vec::new();
-		let mut endmembers : Vec<Endmember> = Vec::new();
+		let compounds : Vec<Compound> = Vec::new();
+		let endmembers : Vec<Endmember> = Vec::new();
 		let mut interactions_ge : Vec<InteractionGEMQM> = Vec::new();
-		let mut interactions_magn : Vec<InteractionMagnMQM> = Vec::new();
+		let interactions_magn : Vec<InteractionMagnMQM> = Vec::new();
 		//println!("ParameterCache::new, phasenames = {:?}", &phasenames);
 		for phasename in phasenames.iter(){
 			let indexp = calculator.engine.tqinp(phasename.as_ref())?;

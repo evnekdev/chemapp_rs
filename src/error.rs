@@ -34,7 +34,7 @@ impl ChemAppError {
 
 impl fmt::Display for ChemAppError {
 	fn fmt(&self, formatter: &mut fmt::Formatter)->fmt::Result {
-		write!(formatter, "{}", self.description());
+		let _ = write!(formatter, "{}", self.description());
 		return Ok(());
 	}
 }

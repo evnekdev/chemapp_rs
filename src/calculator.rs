@@ -3,18 +3,17 @@
 //! A high level submodule for easy operations on ChemApp library - avoid unnecessary boilerplate code. The user is still free to use both `native` and `Calculator` style function in a free manner.
 //! An important feature of `Calculator` is the ability of predefining the composition basis - a useful feature, for example, in oxide systems, where system components are defined as elements, but the compositions should be entered as oxides (CaO, FeO, SiO2, etc). 
 
-use std::cmp::{Ordering};
 use std::path::Path;
 use std::ffi::OsStr;
 use std::collections::{HashMap};
 use std::iter::{Filter, Map, FlatMap};
 use std::ops::{Range};
-use nalgebra::{DVector, SVector, Matrix, Dim, DimName, U1, Storage};
+use nalgebra::{DVector, SVector};
 use nom::{IResult,sequence::{tuple,delimited},
 branch::{alt},
-character::complete::{u32,char,multispace1,multispace0,digit1},
+character::complete::{char,multispace1,multispace0,digit1},
 combinator::{map_res},
-bytes::complete::{tag,tag_no_case},
+bytes::complete::{tag},
 multi::{separated_list1}
 };
 use tempfile::NamedTempFile;
@@ -123,7 +122,7 @@ impl Calculator {
 	}
 	/// Internally, creates a temporary file (deleted once the current `Calculator` instance is dropped) to redirect ChemApp outputs; this is a useful feature in environments where console window is not available.
 	pub fn redirect_error_to_temp(&mut self)->Result<(),ChemAppError>{
-		let mut parent = Path::new(&self.engine.library_name).parent().expect("Does not have a parent directory").to_path_buf();
+		let parent = Path::new(&self.engine.library_name).parent().expect("Does not have a parent directory").to_path_buf();
 		let temp_file = NamedTempFile::new_in(parent).unwrap();
 		let temp_file_ = temp_file.keep().unwrap().1;
 		let filename :String = temp_file_.to_string_lossy().into_owned();
@@ -185,7 +184,8 @@ impl Calculator {
 		self.set_clim(interval, true);
 		// set compositions
 		let mut xvar : DVector<f64> = x_i.clone();
-		let mut xvarprev : DVector<f64> = xvar.clone();
+		//let mut xvarprev : DVector<f64> = xvar.clone();
+		let mut xvarprev : DVector<f64>;
 		match (fixed,adjusting) {
 			(Some(sidxf),Some(sidxa)) => {
 				for iter in 0..nitermax {
@@ -264,7 +264,7 @@ impl Calculator {
 				if self.phases()?.phases_stable(&self).count() > 1 {
 					return Ok(());
 				}
-				x_other = x2;
+				//x_other = x2;
 			}
 			x_other = x1;
 		}
@@ -407,7 +407,7 @@ impl Calculator {
 /********************************************************************************************************/
 /********************************************************************************************************/
 
-fn parse_speciespower<'a>(s: &'a str)->IResult<&'a str,(usize,&str)>{
+fn parse_speciespower<'a>(s: &'a str)->IResult<&'a str,(usize,&'a str)>{
 	//let (s, (_,species,_,power,_)) = tuple((tag("("),map_res(digit1, str::parse::<u32>),tag(")^["),map_res(digit1, str::parse::<u32>),tag("]")))(s)?;
 	let (s, (_,species,_,power,_)) = tuple((tag("("),map_res(digit1, str::parse::<u32>),tag(")^["),alt((digit1,tag("*"))),tag("]")))(s)?;
 	return Ok((s, (species as usize, power)));
@@ -459,7 +459,7 @@ pub fn convert_ge_interaction_species<'a>(engine: &'a Engine, indexp: usize, s: 
 		Err(_) => {}
 	}
 	let (s, (index,species1,species2,species3,species4,itype)) = parse_interaction_reciprocal(s)?;
-	let mut vecc_ : Vec<String> = vec![species_name(engine,indexp,species1),species_name(engine,indexp,species2),species_name(engine,indexp,species3),species_name(engine,indexp,species4)];
+	let vecc_ : Vec<String> = vec![species_name(engine,indexp,species1),species_name(engine,indexp,species2),species_name(engine,indexp,species3),species_name(engine,indexp,species4)];
 	return Ok((s,vecc_));
 }
 
@@ -925,8 +925,8 @@ impl Drop for Calculator {
 	fn drop(&mut self){
 		match &self.nondefault_errunit {
 			Some((filename,unit)) => {
-				self.engine.tqclos(*unit);
-				std::fs::remove_file(&filename);
+				let _ = self.engine.tqclos(*unit);
+				let _ = std::fs::remove_file(&filename);
 			}
 			None => {}
 		}

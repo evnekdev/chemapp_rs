@@ -1,15 +1,14 @@
 // chemapp::native.rs
 
 //! This submodule exports ChemApp functions as-is with the minimal changes in the function signatures to adapt to the Rust infrastructure.
+#![allow(unused_imports)]
 
 extern crate libloading;
 
-use lazy_static::{LazyStatic};
 use libloading::{Library, Symbol};
 use std::str::{from_utf8};
-use std::collections::{HashMap};
 use std::cmp::{min};
-use std::ffi::{CString, CStr};
+use std::ffi::{CString};
 use function_name::{named};
 
 use crate::{Engine, SystemDimensions};
@@ -172,7 +171,7 @@ impl Engine {
 		let mut cstring: [u8; 80] = [0;80];
 		unsafe {
 			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			= self.library.get(fname.as_bytes())?;
 			func(&mut cstring[0], 80, &mut errcode);
 		}
 		return wrap_result(from_utf8(&cstring[0..clen(&cstring)])?.to_owned(), errcode);
@@ -183,10 +182,14 @@ impl Engine {
 	#[named]
 	pub fn tqgted(&self)->Result<(u32,u32), ChemAppError>{
 		let fname = func_alias(function_name!());
-		todo!();
 		let mut month : u32 = 0;
 		let mut year  : u32 = 0;
 		let mut errcode = 0;
+		unsafe {
+			let func : Symbol<extern "system" fn(month: &mut u32, year: &mut u32, errcode: &mut usize)->()>
+				= self.library.get(fname.as_bytes())?;
+			func(&mut month, &mut year, &mut errcode);
+		}
 		return wrap_result((month, year), errcode);
 	}
 	
