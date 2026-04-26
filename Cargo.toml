@@ -3,7 +3,10 @@ name = "chemapp_rs"
 version = "0.1.0"
 edition = "2021"
 author = "Evgenii Nekhoroshev e.nekhoroshev@uq.edu.au, evgnekhoroshev@gmail.com"
+repository = "https://github.com/evnekdev/chemapp_rs"
 description = "Port of ChemApp library (GTT-technologies) for thermodynamic calculations to Rust environment; includes native ChemApp functions starting with 'tq' and a higher-level interface for easier access to calculations."
+keywords = ["chemistry", "thermodynamics", "ffi", "equilibrium", "chemapp"]
+categories = ["science", "api-bindings"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
