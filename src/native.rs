@@ -1,6 +1,6 @@
 // chemapp::native.rs
 
-/// Wraps around native ChemApp dll functions to adapt function calls to the Rust infrastructure
+//! This submodule exports ChemApp functions as-is with the minimal changes in the function signatures to adapt to the Rust infrastructure.
 
 extern crate libloading;
 
@@ -49,6 +49,7 @@ fn wrap_result<T>(result: T, errcode: usize)->Result<T, ChemAppError>{
 impl Engine {
 	
 	/******************************************/
+	/// Initializes a new instance of `Engine` from a DLL path or name. In case a name only is used, the DLL has to be discoverable in PATH system variable (modify the system environment variables if it is not the case).
 	pub fn new(library_name: &str) -> Result<Engine,ChemAppError> {
 		
 		return Ok(Engine {

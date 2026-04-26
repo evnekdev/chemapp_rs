@@ -1,3 +1,5 @@
+//! This submodule wraps the native error codes from Fortran (integer values) into a Rust enum to facilitate working with their descriptions + support of non-ChemApp error (library loading, etc) added.
+
 use std::fmt;
 use lazy_static::{lazy_static};
 use std::collections::{HashMap};

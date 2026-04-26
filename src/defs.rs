@@ -1,11 +1,16 @@
 // defs.rs
 
-/// External function signatures of ChemApp library, both 32bit and 64bit are supported
+//! External function signatures of ChemApp libraries, both 32bit and 64bit are supported (Windows only for the time being).
+//! Depending on the bitness and the calling convention, DLLs export the available functions slightly differently. For example, "stdcall" 32bit decorates function names with an prefix underscore and a @NBYTES suffix to indicate the total number of bytes the function arguments would occupy on the execution stack. The 64bit versions, however, use a different calling convention and usually do not decorate (or mangle) function names.
+//!   
+//! Since Rust language does not accept @-mangles names as function names directly, a translation dictionary between the conventional tq... names and the mangled version exported by DLLs is provided.
 
 use lazy_static::{lazy_static};
 use std::collections::{HashMap};
 
 lazy_static!{
+
+/// Function name aliases on WIN32 applications
 pub static ref FUNCSWIN32 : HashMap<&'static str, &'static str> = HashMap::from([
 		("tqini", "_TQINI@4"),
 		("tqvers", "_TQVERS@8"),
@@ -84,6 +89,7 @@ pub static ref FUNCSWIN32 : HashMap<&'static str, &'static str> = HashMap::from(
 		("tqwasc", "_TQWASC@12"),
 		]);
 		
+/// Function name aliases on WIN64 applications
 pub static ref FUNCSWIN64 : HashMap<&'static str, &'static str> = HashMap::from([
 		("tqini", "TQINI"),
 		("tqvers", "TQVERS"),

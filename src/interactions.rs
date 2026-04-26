@@ -1,4 +1,8 @@
 // chemapp_rs::interactions.rs
+
+//! A newer submodule which facilitates working with *model parameters* (only available for unencrypted *.dat datafiles). Involves 'tqgdat', 'tqcdat', 'tqgpar' ChemApp routines.
+//! Disclaimer - this submodule can be subject to change.
+
 use std::collections::{HashMap};
 use std::str::{FromStr};
 use nom::{IResult, bytes::complete::{tag,take_while1},character::complete::{char,digit1,multispace0},combinator::{map_res,opt},sequence::{tuple,preceded,separated_pair}};
@@ -10,7 +14,7 @@ use crate::{Engine};
 
 /*******************************************************************************************************************************************************************************************************************************/
 
-
+/// An excess free energy interaction in a mixture phase.
 #[derive(Debug)]
 pub struct InteractionGEMQM {
 	indexp: usize,
@@ -32,7 +36,7 @@ impl InteractionGEMQM {
 }
 
 /*******************************************************************************************************************************************************************************************************************************/
-
+/// An excess magnetic interaction in a mixture phase.
 #[derive(Debug)]
 pub struct InteractionMagnMQM {
 	indexp: usize,
@@ -52,7 +56,7 @@ impl InteractionMagnMQM {
 }
 
 /*******************************************************************************************************************************************************************************************************************************/
-
+/// A representation of a mixture phase endmember. Currently, only H298 and S298 are considered.
 #[derive(Debug)]
 pub struct Endmember {
 	indexp: usize,
@@ -74,7 +78,7 @@ impl Endmember {
 }
 
 /*******************************************************************************************************************************************************************************************************************************/
-
+/// A representation of a `PURE` phase (a stoichiometric compound). Currenly, only H298 and S298 are considered.
 #[derive(Debug)]
 pub struct Compound {
 	indexp: usize,
@@ -94,7 +98,7 @@ impl Compound {
 }
 
 /*******************************************************************************************************************************************************************************************************************************/
-
+/// A cache which allows to apply and reset parameter deltas, which is important for construction of sensitivity matrices (delta calc values vs delta parameters).
 #[derive(Debug)]
 pub struct ParameterCache {
 	lookup_ge: HashMap<(String,String),usize>,
@@ -217,7 +221,6 @@ impl ParameterCache {
 			//println!("modelname = {:?}", &modelname);
 			match modelname.as_ref() {
 				"PURE" => {
-					//println!("MATCH PURE");
 					if include_cmp {
 						//let compound : Compound = Self::load_compound(calculator, phasename.as_ref())?;
 						//compounds.push(compound);
@@ -229,14 +232,12 @@ impl ParameterCache {
 						//let mut endmembers_ : Vec<Endmember> = Self::load_endmembers(calculator, phasename.as_ref())?;
 						//endmembers.append(&mut endmembers_);
 					}
-					//println!("INCLUDE_GE = {:?}", &include_ge);
 					if include_ge {
 						let mut interactions : Vec<InteractionGEMQM> = Self::load_interactions_ge(calculator, phasename.as_ref())?;
 						interactions_ge.append(&mut interactions);
 					}
 					if include_magn {
-						//let mut interactions : Vec<InteractionMagnMQM> = Self::load_interactions_magn(calculator, phasename.as_ref())?;
-						//interactions_magn.append(&mut interactions);
+						todo!();
 					}
 				}
 				_ => {
@@ -244,15 +245,10 @@ impl ParameterCache {
 				}
 			}
 		}
-		//println!("compounds = {:?}", &compounds);
-		//println!("endmembers = {:?}", &endmembers);
-		//println!("interactions_ge = {:?}", &interactions_ge);
-		//println!("interactions_magn = {:?}", &interactions_magn);
 		let lookup_ge = Self::generate_lookup_interactions_ge(&interactions_ge);
 		let lookup_magn  = Self::generate_lookup_interactions_magn(&interactions_magn);
 		let lookup_cmp  = Self::generate_lookup_cmp(&compounds);
 		let lookup_endm = Self::generate_lookup_endm(&endmembers);
-		//println!("LOOKUP_GE = {:?}, LOOKUP_MAGN = {:?}, LOOKUP_CMP = {:?}, LOOKUP_ENDM = {:?}", &lookup_ge, &lookup_magn, &lookup_cmp, &lookup_endm);
 		return Ok(Self {
 			lookup_ge: lookup_ge,
 			lookup_magn: lookup_magn,
@@ -380,6 +376,7 @@ impl ParameterCache {
 
 impl Calculator {
 	
+	/// Creates an instance of `ParameterCache` for changing model parameter values and restoring them back to the original values
 	pub fn generate_parameter_cache<T: AsRef<str> + std::fmt::Debug>(&mut self, phasenames: &[T], include_ge: bool, include_magn: bool, include_endm: bool, include_cmp: bool)->Result<(),ChemAppError> {
 		self.cache = Some(ParameterCache::new(self, phasenames, include_ge, include_magn, include_endm, include_cmp)?);
 		return Ok(());

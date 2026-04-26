@@ -1,6 +1,7 @@
 // chemapp::calculator.rs
 
-/// A high level module for easy operations on ChemApp library
+//! A high level submodule for easy operations on ChemApp library - avoid unnecessary boilerplate code. The user is still free to use both `native` and `Calculator` style function in a free manner.
+//! An important feature of `Calculator` is the ability of predefining the composition basis - a useful feature, for example, in oxide systems, where system components are defined as elements, but the compositions should be entered as oxides (CaO, FeO, SiO2, etc). 
 
 use std::cmp::{Ordering};
 use std::path::Path;
@@ -25,7 +26,7 @@ use chemformula::{Transform};
 
 /********************************************************************************************************/
 /********************************************************************************************************/
-
+/// A higher-level abtraction entity.
 #[derive(Debug)]
 pub struct Calculator {
 	pub engine: Engine,
@@ -58,10 +59,8 @@ impl Default for Calculator {
 impl Calculator {
 	/// Initialize a [`Calculator`] from a ChemApp dll file and a datafile
 	pub fn from_library(libname: & str, datfile: & str)->Result<Calculator, ChemAppError>{
-		//println!("Calculator::from_library");
 		let engine = Engine::new(libname).unwrap();
 		Self::init_engine(&engine, datfile)?;
-		//println!("Self::init_engine");
 		let components : Vec<String> = (0..engine.tqnosc()?).into_iter().map(|idx| engine.tqgnsc(idx+1)).filter_map(|r| r.ok()).collect();
 		let transform = Transform::from_formulas_s(&components, &components);
 		return Ok(Calculator {
@@ -74,16 +73,15 @@ impl Calculator {
 			transform: transform,
 		});
 	}
-	
-	fn init_engine(engine: &Engine, datfile: &str)->Result<(),ChemAppError>{
+	/// Initializes the ChemApp interface and preconfigures it with the thermodynamic info from a datafile.
+	pub fn init_engine(engine: &Engine, datfile: &str)->Result<(),ChemAppError>{
 		engine.tqini()?;
-		//println!("engine.tqini()?");
 		Self::load_datafile(engine, datfile)?;
-		//println!("Self::load_datafile");
 		return Ok(());
 	}
 	
-	fn load_datafile(engine: &Engine, datfile: &str)->Result<(),ChemAppError>{
+	/// A higher-level abstraction over datafile handling, this function is only needed to be called once while the datafile type (open or transparent header) is automatically detected.
+	pub fn load_datafile(engine: &Engine, datfile: &str)->Result<(),ChemAppError>{
 		let res = get_extension_from_filename(datfile);
 		match res {
 			Some(extension) => {
@@ -118,30 +116,15 @@ impl Calculator {
 		}
 		return Ok(());
 	}
-	/// set a formula transform for input compositions
+	/// Set a formula transform for input compositions
 	pub fn set_transform<T: AsRef<str>>(&mut self, basis: &[T])->Result<(),ChemAppError>{
 		self.transform = Transform::from_formulas_s(&self.names_components()?, basis);
-		//println!("components = {:?}", &self.names_components()?);
-		//println!("self.transform.f2i = {}", &self.transform.f2i);
-		//println!("self.transform.i2f = {}", &self.transform.i2f);
 		return Ok(());
 	}
-	/*
-	pub fn redirect_error_to_temp(&mut self)->Result<(),ChemAppError>{
-		let mut path = Path::new(&self.engine.library_name).to_path_buf();
-		path.set_extension("tmp");
-		let filename = path.to_string_lossy().into_owned();
-		let unit = 30;
-		self.engine.tqopen(&filename,unit)?;
-		self.engine.tqcio("ERROR",unit)?;
-		self.nondefault_errunit = Some((filename,unit));
-		return Ok(());
-	}
-	*/
+	/// Internally, creates a temporary file (deleted once the current `Calculator` instance is dropped) to redirect ChemApp outputs; this is a useful feature in environments where console window is not available.
 	pub fn redirect_error_to_temp(&mut self)->Result<(),ChemAppError>{
 		let mut parent = Path::new(&self.engine.library_name).parent().expect("Does not have a parent directory").to_path_buf();
 		let temp_file = NamedTempFile::new_in(parent).unwrap();
-		//let filename = temp_file.path().to_string_lossy().into_owned();
 		let temp_file_ = temp_file.keep().unwrap().1;
 		let filename :String = temp_file_.to_string_lossy().into_owned();
 		let unit = 30;
@@ -150,29 +133,28 @@ impl Calculator {
 		self.nondefault_errunit = Some((filename,unit));
 		return Ok(());
 	}
-	
+	/// Resets all input conditions to prepare for another calculation (with the same datafile).
 	pub fn reset(&self)->Result<(),ChemAppError>{
 		self.engine.tqremc(-2)?;
 		return Ok(());
 	}
-	
+	/// Iterates over system component indices.
 	pub fn components(&self)->Result<Range<usize>,ChemAppError>{
 		return Ok(1..self.engine.tqnosc()?+1);
 	}
-	
+	/// Iterates over phase indices.
 	pub fn phases(&self)->Result<Range<usize>,ChemAppError>{
 		return Ok(1..self.engine.tqnop()?+1);
 	}
-	
-	
+	/// Iterates over system component names.
 	pub fn names_components(&self)->Result<Vec<String>,ChemAppError>{
 		return Ok((0..self.engine.tqnosc()?).into_iter().map(|idx| self.engine.tqgnsc(idx+1)).filter_map(|r| r.ok()).collect());
 	}
-	
+	/// Iterates over phase names
 	pub fn names_phases(&self)->Result<Vec<String>,ChemAppError>{
 		return Ok((0..self.engine.tqnop()?).into_iter().map(|idx| self.engine.tqgnp(idx+1)).filter_map(|r| r.ok()).collect());
 	}
-	
+	/// A simple isothermal calculation (temperature + initial composition in the pre-transformed basis).
 	fn calculate_isothermal(&self, x_i: &DVector<f64>, temp: f64)->Result<(),ChemAppError>{
 		self.reset()?;
 		self.engine.tqsetc("T", 0, 0, temp)?;
@@ -211,23 +193,11 @@ impl Calculator {
 					//self.engine.tqshow()?;
 					self.engine.tqce("T", 0, 0, interval)?;
 					xvarprev = xvar.clone();
-					/*
-					for k in 0..xvar.len(){xvar[k] = self.engine.tqgetr("A", 0, k+1)?;}
-					let xf = xvar[sidxf-1];
-					let xa = xvar[sidxa-1];
-					*/
 					let xfold = xvar[sidxf-1];
 					let xaold = xvar[sidxa-1];
 					let xfnew = self.engine.tqgetr("XP", masterphase, sidxf)?;
 					let xanew = self.engine.tqgetr("XP", masterphase, sidxa)?;
-					/*
-					let xfnew = self.engine.tqgetr("A", 0, sidxf)?;
-					let xanew = self.engine.tqgetr("A", 0, sidxa)?;
-					*/
 					let tliq  = self.engine.tqgetr("T", 0, 0)?;
-					//println!("xfold = {:?}, xaold = {:?}, xfnew = {:?}, xanew = {:?}", &xfold, &xaold, &xfnew, &xanew);
-					//xvar[sidxf-1] = xvarprev[sidxf-1];
-					//xvar[sidxa-1] = xaold / xfold / xfnew;
 					xvar[sidxa-1] = xvar[sidxf-1]*xanew/xfnew;
 					if iter > 0 {
 						xvar = (&xvar + &xvarprev)*0.5;
@@ -308,51 +278,51 @@ impl Calculator {
 	pub fn calculate_target_x_from_left_s<const N: usize>(&self, x1: &SVector<f64,N>, x2: &SVector<f64,N>, temp: f64, target: usize)->Result<(),ChemAppError>{
 		return self.calculate_target_x_from_left(&self.transform.transform_f2i_s2d(x1), &self.transform.transform_f2i_s2d(x2), temp, target);
 	}
-	
+	/// Returns the resulting system temperature
 	pub fn system_temperature(&self)->Result<f64,ChemAppError>{
 		return self.engine.tqgetr("T", 0, 0);
 	}
-	
+	/// Returns the resulting system pressure
 	pub fn system_pressure(&self)->Result<f64,ChemAppError>{
 		return self.engine.tqgetr("P", 0, 0);
 	}
-	
+	/// Returns the enthalpy of a phase
 	pub fn phase_h(&self, indexp: usize)->Result<f64,ChemAppError>{
 		return self.engine.tqgetr("H", indexp, 0);
 	}
-	
+	/// Returns the Gibbs free energy of a phase
 	pub fn phase_g(&self, indexp: usize)->Result<f64,ChemAppError>{
 		return self.engine.tqgetr("G", indexp, 0);
 	}
-	
+	/// Returns the entropy of a phase
 	pub fn phase_s(&self, indexp: usize)->Result<f64,ChemAppError>{
 		return self.engine.tqgetr("S", indexp, 0);
 	}
-	
+	/// Returns the heat capacity of a phase
 	pub fn phase_cp(&self, indexp: usize)->Result<f64,ChemAppError>{
 		return self.engine.tqgetr("CP", indexp, 0);
 	}
-	
+	/// Return the volume of a phase
 	pub fn phase_v(&self, indexp: usize)->Result<f64,ChemAppError>{
 		return self.engine.tqgetr("V", indexp, 0);
 	}
-	
+	/// Returns the enthalpy of a phase per amount unit
 	pub fn phase_hm(&self, indexp: usize)->Result<f64,ChemAppError>{
 		return self.engine.tqgetr("HM", indexp, 0);
 	}
-	
+	/// Returns the Gibbs free energy of a phase per amount unit
 	pub fn phase_gm(&self, indexp: usize)->Result<f64,ChemAppError>{
 		return self.engine.tqgetr("GM", indexp, 0);
 	}
-	
+	/// Returns the entropy of a phase per amount unit
 	pub fn phase_sm(&self, indexp: usize)->Result<f64,ChemAppError>{
 		return self.engine.tqgetr("SM", indexp, 0);
 	}
-	
+	/// Returns the heat capacity of a phase per amount unit
 	pub fn phase_cpm(&self, indexp: usize)->Result<f64,ChemAppError>{
 		return self.engine.tqgetr("CPM", indexp, 0);
 	}
-	
+	/// Returns the volume of a phase per amount unit
 	pub fn phase_vm(&self, indexp: usize)->Result<f64,ChemAppError>{
 		return self.engine.tqgetr("VM", indexp, 0);
 	}
@@ -378,17 +348,17 @@ impl Calculator {
 		xe /= xe.sum();
 		return Ok(xe);
 	}
-	
+	/// Returns the stoichiometry of a phase constituent in the input basis
 	pub fn constituent_stoichiometry_full(&self, indexp: usize, indexc: usize)->Result<DVector<f64>, ChemAppError>{
 		let comp_s : DVector<f64> = self.engine.tqstpc(indexp, indexc).unwrap().0.into();
 		let comp_ : DVector<f64> = self.transform.transform_i2f_d2d(&comp_s);
 		return Ok(comp_);
 	}
-	
+	/// Number of independent formula units in the input basis
 	pub fn number_endmembers(&self)->usize{
 		return self.transform.number_f();
 	}
-	
+	/// Returns the normalized stoichiometry of a phase constituent in the input basis
 	pub fn constituent_stoichiometry_reduced(&self, indexp: usize, indexc: usize)->Result<(DVector<f64>,f64),ChemAppError>{
 		let comp_s : DVector<f64> = self.engine.tqstpc(indexp, indexc).unwrap().0.into();
 		let mut comp_ : DVector<f64> = self.transform.transform_i2f_d2d(&comp_s);
@@ -396,7 +366,7 @@ impl Calculator {
 		comp_ /= ntotal;
 		return Ok((comp_,ntotal));
 	}
-	
+	/// Returns the normalized stoichiometry of a phase constituent in the input basis
 	pub fn constituent_stoichiometry_reduced_static<const N: usize>(&self, indexp: usize, indexc: usize)->Result<(SVector<f64,N>,f64),ChemAppError>{
 		let comp_s : DVector<f64> = self.engine.tqstpc(indexp, indexc).unwrap().0.into();
 		let mut comp_ : SVector<f64,N> = self.transform.transform_i2f_d2s(&comp_s);
@@ -404,9 +374,8 @@ impl Calculator {
 		comp_ /= ntotal;
 		return Ok((comp_,ntotal));
 	}
-	
+	/// Lists the Gibbs free energy excess interactions in a phase as-is (species indices are used which are subject to change from a datafile to a datafile)
 	pub fn interactions_ge_expanded(&self, indexp: usize)->Result<Vec<String>,ChemAppError>{
-		//let interactions : Vec<String> = self.engine.tqlpar(indexp, "G")?.into_iter().map(|s| convert_ge_interaction(&self.engine,indexp,&s).unwrap().1).collect();
 		let interactions0 : Vec<String> = self.engine.tqlpar(indexp, "G")?;
 		let mut interactions : Vec<String> = Vec::with_capacity(interactions0.len());
 		for k in 0..interactions0.len(){
@@ -419,9 +388,8 @@ impl Calculator {
 		}
 		return Ok(interactions);
 	}
-	
+	/// Lists post-processed Gibbs free energy excess interactions in a phase (species indices are replaced by species names).
 	pub fn interactions_ge_expanded_species(&self,indexp:usize)->Result<Vec<Vec<String>>,ChemAppError>{
-		//let interactions : Vec<Vec<String>> = self.engine.tqlpar(indexp,"G")?.into_iter().map(|s| convert_ge_interaction_species(&self.engine,indexp,&s).unwrap().1).collect();
 		let interactions0 : Vec<String> = self.engine.tqlpar(indexp, "G")?;
 		let mut interactions : Vec<Vec<String>> = Vec::with_capacity(interactions0.len());
 		for k in 0..interactions0.len(){
@@ -432,7 +400,6 @@ impl Calculator {
 				Err(_) => {continue;}
 			}
 		}
-		//println!("{:?}", &interactions);
 		return Ok(interactions);
 	}
 	
@@ -560,6 +527,7 @@ pub fn convert_ge_interaction<'a>(engine: &'a Engine, indexp: usize, s: &'a str)
 /********************************************************************************************************/
 /********************************************************************************************************/
 
+/// Facilitates iteration over indices of the system components
 pub trait ComponentIterator where Self : Sized + Iterator<Item=usize>{
 	
 	fn components_valid(self, calculator: &Calculator)->Filter<Self,Box<dyn Fn(&usize)->bool>>{
@@ -621,25 +589,25 @@ pub trait ComponentIterator where Self : Sized + Iterator<Item=usize>{
 
 /********************************************************************************************************/
 /********************************************************************************************************/
-
+/// Facilitates iteration over phase indices
 pub trait PhaseIterator where Self : Sized + Iterator<Item=usize>{
-	
+	/// for any input indices in the iterator, retains only those within 1..nphases range
 	fn phases_valid(self, calculator: &Calculator)->Filter<Self, Box<dyn Fn(&usize)->bool>>{
 		let nphases = calculator.engine.tqnop().unwrap();
 		return self.filter(Box::new(move |idx : &usize| *idx > 0 && *idx <= nphases));
 	}
-	
+	/// retains only phases with AC = 1.00 (stable), filters out the rest (applicable only after a tqce... routine was called)
 	fn phases_stable<'a>(self, calculator: &'a Calculator)->Filter<Self, Box<dyn Fn(&usize)->bool + 'a>>{
 		return self.filter(Box::new(move |idx: &usize| calculator.engine.tqgetr("AC", *idx, 0).unwrap() > 0.9999));
 	}
-	
+	/// maps phase indices to their corresponding model names
 	fn phases_models<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->String + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqmodl(idx).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// retains only mixture (solution) phase indices
 	fn solutions<'a>(self, calculator: &'a Calculator)->Filter<Self, Box<dyn Fn(&usize)->bool + 'a>>{
 		let closure = move |idx: &usize| {
 			let modl = calculator.engine.tqmodl(*idx).unwrap();
@@ -651,7 +619,7 @@ pub trait PhaseIterator where Self : Sized + Iterator<Item=usize>{
 		};
 		return self.filter(Box::new(closure));
 	}
-	
+	/// retains only `PURE` (stoichiometric compounds) indices
 	fn compounds<'a>(self, calculator: &'a Calculator)->Filter<Self, Box<dyn Fn(&usize)->bool + 'a>>{
 		let closure = move |idx: &usize| {
 			let modl = calculator.engine.tqmodl(*idx).unwrap();
@@ -662,7 +630,7 @@ pub trait PhaseIterator where Self : Sized + Iterator<Item=usize>{
 		};
 		return self.filter(Box::new(closure));
 	}
-	
+	/// maps phase indices to their compositions in the input basis (applicable only after a tqce... routine was called)
 	fn phases_compositions<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->DVector<f64> + 'a>>{
 		let closure = move |idx: usize| {
 			// TODO make sure it works correctly with other units!
@@ -677,105 +645,105 @@ pub trait PhaseIterator where Self : Sized + Iterator<Item=usize>{
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps phase indices to their relative activities in the system (applicable only after a tqce... routine was called)
 	fn phases_ac<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->f64 + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqgetr("AC", idx, 0).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps phase indices to their amounts (applicable only after a tqce... routine was called)
 	fn phases_a<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->f64 + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqgetr("A", idx, 0).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps phase indices to their chemical potentials (applicable only after a tqce... routine was called)
 	fn phases_mu<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->f64 + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqgetr("MU", idx, 0).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps phase indices to their enthalpies (applicable only after a tqce... routine was called)
 	fn phases_h<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->f64 + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqgetr("H", idx, 0).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps phase indices to their Gibbs free energies (applicable only after a tqce... routine was called)
 	fn phases_g<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->f64 + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqgetr("G", idx, 0).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps phase indices to their entropies (applicable only after a tqce... routine was called)
 	fn phases_s<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->f64 + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqgetr("S", idx, 0).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps phase indices to their heat capacities (applicable only after a tqce... routine was called)
 	fn phases_cp<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->f64 + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqgetr("CP", idx, 0).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps phase indices to their volumes (applicable only after a tqce... routine was called)
 	fn phases_v<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->f64 + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqgetr("V", idx, 0).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps phase indices to their enthalpies per amount unit (applicable only after a tqce... routine was called)
 	fn phases_hm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->f64 + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqgetr("HM", idx, 0).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps phase indices to their Gibbs free energies per amount unit (applicable only after a tqce... routine was called)
 	fn phases_gm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->f64 + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqgetr("GM", idx, 0).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps phase indices to their entropies per amount unit (applicable only after a tqce... routine was called)
 	fn phases_sm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->f64 + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqgetr("SM", idx, 0).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps phase indices to their heat capacities per amount unit (applicable only after a tqce... routine was called)
 	fn phases_cpm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->f64 + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqgetr("CPM", idx, 0).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps phase indices to their volumes per amount unit (applicable only after a tqce... routine was called)
 	fn phases_vm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->f64 + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqgetr("VM", idx, 0).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps phase indices to their names
 	fn phases_names<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut(usize)->String + 'a>>{
 		let closure = move |idx: usize| {
 			return calculator.engine.tqgnp(idx).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// retains only phase indices with `ENTERED` status
 	fn phases_status_entered<'a>(self, calculator: &'a Calculator)->Filter<Self, Box<dyn Fn(&usize)->bool + 'a>>{
 		let closure = move |idx: &usize| {
 			let status = calculator.engine.tqgsp(*idx).unwrap();
@@ -788,7 +756,7 @@ pub trait PhaseIterator where Self : Sized + Iterator<Item=usize>{
 		};
 		return self.filter(Box::new(closure));
 	}
-	
+	/// retains only phase indices with `DORMANT` status
 	fn phases_status_dormant<'a>(self, calculator: &'a Calculator)->Filter<Self, Box<dyn Fn(&usize)->bool + 'a>>{
 		let closure = move |idx: &usize| {
 			let status = calculator.engine.tqgsp(*idx).unwrap();
@@ -801,7 +769,7 @@ pub trait PhaseIterator where Self : Sized + Iterator<Item=usize>{
 		};
 		return self.filter(Box::new(closure));
 	}
-	
+	/// retains only phase indices with `ELIMINATED` status
 	fn phases_status_eliminated<'a>(self, calculator: &'a Calculator)->Filter<Self, Box<dyn Fn(&usize)->bool + 'a>>{
 		let closure = move |idx: &usize| {
 			let status = calculator.engine.tqgsp(*idx).unwrap();
@@ -812,7 +780,7 @@ pub trait PhaseIterator where Self : Sized + Iterator<Item=usize>{
 		};
 		return self.filter(Box::new(closure));
 	}
-	
+	/// iterates over the phase constituent indices for each phase index in the iterator
 	fn phases_constituents<'a>(self, calculator: &'a Calculator)->FlatMap<Self, Map<Range<usize>, Box<dyn FnMut(usize)->(usize,usize)>>, Box<dyn FnMut(usize)-> Map<Range<usize>, Box<dyn FnMut(usize)->(usize,usize)>> + 'a>>{
 		let closure = move |indexp: usize| {
 			return constituents_for(calculator, indexp);
@@ -830,11 +798,7 @@ fn constituents_for(calculator: &Calculator, indexp: usize)->Map<Range<usize>,Bo
 /********************************************************************************************************/
 /********************************************************************************************************/
 
-
-
-/********************************************************************************************************/
-/********************************************************************************************************/
-
+/// Facilitates iteration over indices of phase constituents
 pub trait ConstituentIterator where Self : Sized + Iterator<Item=(usize,usize)>{
 	fn constituents_valid<'a>(self, calculator: &'a Calculator)->Filter<Self, Box<dyn FnMut(&(usize,usize))->bool + 'a>>{
 		let nphases = calculator.engine.tqnop().unwrap();
@@ -854,98 +818,98 @@ pub trait ConstituentIterator where Self : Sized + Iterator<Item=(usize,usize)>{
 		};
 		return self.filter(Box::new(closure));
 	}
-	
+	/// Maps constituent indices to their corresponding names
 	fn constituents_names<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->(String,String) + 'a>>{
 		let closure = move |(indexp, indexc): (usize, usize)| {
 			return (calculator.engine.tqgnp(indexp).unwrap(), calculator.engine.tqgnpc(indexp, indexc).unwrap());
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps constituent indices to their amounts (after a tqce... routine was called)
 	fn constituents_a<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
 			return calculator.engine.tqgetr("A", indexp, indexc).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps constituent indices to their activities (after a tqce... routine was called)
 	fn constituents_ac<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
 			return calculator.engine.tqgetr("AC", indexp, indexc).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps constituent indices to their chemical potential values (after a tqce... routine was called)
 	fn constituents_mu<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
 			return calculator.engine.tqgetr("MU", indexp, indexc).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps constituent indices to their enthalpies (after a tqce... routine was called)
 	fn constituents_h<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
 			return calculator.engine.tqgetr("H", indexp, indexc).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps constituent indices to their Gibbs free energies (after a tqce... routine was called)
 	fn constituents_g<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
 			return calculator.engine.tqgetr("G", indexp, indexc).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps constituent indices to their entropies (after a tqce... routine was called)
 	fn constituents_s<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
 			return calculator.engine.tqgetr("S", indexp, indexc).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps constituent indices to their heat capacity values (after a tqce... routine was called)
 	fn constituents_cp<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
 			return calculator.engine.tqgetr("CP", indexp, indexc).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps constituent indices to their volumes (after a tqce... routine was called)
 	fn constituents_v<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
 			return calculator.engine.tqgetr("V", indexp, indexc).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps constituent indices to their partial enthalpies (after a tqce... routine was called)
 	fn constituents_hm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
 			return calculator.engine.tqgetr("HM", indexp, indexc).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps constituent indices to their partial Gibbs free energies (after a tqce... routine was called)
 	fn constituents_gm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
 			return calculator.engine.tqgetr("GM", indexp, indexc).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps constituent indices to their partial entropies (after a tqce... routine was called)
 	fn constituents_sm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
 			return calculator.engine.tqgetr("SM", indexp, indexc).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps constituent indices to their partial heat capacities (after a tqce... routine was called)
 	fn constituents_cpm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
 			return calculator.engine.tqgetr("CPM", indexp, indexc).unwrap();
 		};
 		return self.map(Box::new(closure));
 	}
-	
+	/// maps constituent indices to their partial volumes (after a tqce... routine was called)
 	fn constituents_vm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
 			return calculator.engine.tqgetr("VM", indexp, indexc).unwrap();
@@ -955,6 +919,7 @@ pub trait ConstituentIterator where Self : Sized + Iterator<Item=(usize,usize)>{
 	
 }
 
+/// Custom `Drop` re-implementation to ensure any temporary files are deleted.
 impl Drop for Calculator {
 	
 	fn drop(&mut self){
