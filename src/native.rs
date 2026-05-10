@@ -1150,15 +1150,16 @@ impl Engine {
 	/******************************************/
 	/// GET-ERROR-MESSAGE
 	#[named]
-	pub fn tqerr(&self)->Result<(),ChemAppError>{
+	pub fn tqerr(&self)->Result<String,ChemAppError>{
 		let fname = func_alias(function_name!());
+		let mut cmess : [u8; 80 * 3] = [0; 80 * 3];
 		let mut errcode = 0;
 		unsafe {
-			let func: Symbol<extern "system" fn(errcode: &mut usize)->()>
+			let func: Symbol<extern "system" fn(message: &mut u8, message_len: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&mut errcode);
+			func(&mut cmess[0], 80 * 3, &mut errcode);
 		}
-		return wrap_result((), errcode);
+		return wrap_result(from_utf8(&cmess)?.to_owned(), errcode);
 	}
 	
 	/******************************************/
