@@ -51,17 +51,17 @@ impl Default for Engine {
 /// An abstraction over system info returned by `tqused` and `tqsize` functions.
 #[derive(Debug)]
 pub struct SystemDimensions{
-	nconstituents: i32,       // na
-	ncomponents: i32,         // nb
-	nmixtures: i32,           // nc
-	nexcess_gibbs: i32,       // nd
-	nexcess_magnetic: i32,    // ne
-	nsublattices: i32,        // nf
-	nspecies: i32,            // ng
-	nconstituents_mqm: i32,   // nh
-	nranges_constituent: i32, // ni
-	nranges: i32,             // nj
-	ndependent: i32,          // nk
+	pub nconstituents: i32,       // na
+	pub ncomponents: i32,         // nb
+	pub nmixtures: i32,           // nc
+	pub nexcess_gibbs: i32,       // nd
+	pub nexcess_magnetic: i32,    // ne
+	pub nsublattices: i32,        // nf
+	pub nspecies: i32,            // ng
+	pub nconstituents_mqm: i32,   // nh
+	pub nranges_constituent: i32, // ni
+	pub nranges: i32,             // nj
+	pub ndependent: i32,          // nk
 }
 
 impl SystemDimensions {
