@@ -79,6 +79,20 @@ impl Calculator {
 		return Ok(());
 	}
 	
+	pub fn from_library_unloaded(libname: &str)->Result<Calculator,ChemAppError>{
+		let engine = Engine::new(libname).unwrap();
+		engine.tqini()?;
+		return Ok(Calculator {
+			engine: engine,
+			cache : None,
+			file  : "".to_string(),
+			nondefault_errunit : None,
+			number_isothermal : 0,
+			number_target_t : 0,
+			transform : Transform::default(),
+		});
+	}
+	
 	/// A higher-level abstraction over datafile handling, this function is only needed to be called once while the datafile type (open or transparent header) is automatically detected.
 	pub fn load_datafile(engine: &Engine, datfile: &str)->Result<(),ChemAppError>{
 		let res = get_extension_from_filename(datfile);
