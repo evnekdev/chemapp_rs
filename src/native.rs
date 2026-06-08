@@ -165,13 +165,13 @@ impl Engine {
 	/******************************************/
 	/// GET-HASP-DONGLE-INFO
 	#[named]
-	pub fn tqgthi(&self)->Result<(String,usize), ChemAppError>{
+	pub fn tqgthi(&self)->Result<(String,i32), ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		let mut hid = 0;
 		let mut cstring: [u8; 80] = [0;80];
 		unsafe {
-			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, hid: &mut usize, errcode: &mut usize)->()>
+			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, hid: &mut i32, errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 			func(&mut cstring[0], 80, &mut hid, &mut errcode);
 		}
