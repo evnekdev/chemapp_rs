@@ -81,7 +81,7 @@ pub static ref FUNCSWIN32 : HashMap<&'static str, &'static str> = HashMap::from(
 		("tqstxp", "_TQSTXP@24"),
 		("tqgtlc", "_TQGTLC@20"),
 		("tqbond", "_TQBOND@28"),
-		("tqerr",  "_TQERR@4"),
+		("tqerr",  "_TQERR@12"),
 		("tqgdat", "_TQGDAT@32"),
 		("tqlpar", "_TQLPAR@32"),
 		("tqgpar", "_TQGPAR@32"),
