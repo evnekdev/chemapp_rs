@@ -1166,17 +1166,19 @@ impl Engine {
 	/******************************************/
 	/// GET-INPUT-THERMODYNAMIC-DATA-OF-PHASE-CONSTITUENT
 	#[named]
-	pub fn tqgdat(&self, indexp: usize, indexc: usize, option: &str, indexr: usize)->Result<f64,ChemAppError>{
+	pub fn tqgdat(&self, indexp: usize, indexc: usize, option: &str, indexr: usize)->Result<Vec<f64>,ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
-		let mut fval = 0.0f64;
+		//let mut fval = 0.0f64;
+		let mut fval = [0.0;25];
+		let mut nfval = 0usize;
 		let coption: CString = CString::new(option)?;
 		unsafe {
-			let func : Symbol<extern "system" fn(indexp: &usize, indexc: &usize, option: &u8, option_len: usize, indexr: &usize, fval: &mut f64, errcode: &mut usize)->()> 
+			let func : Symbol<extern "system" fn(indexp: &usize, indexc: &usize, option: &u8, option_len: usize, indexr: &usize, nfval: &mut usize, fval: &mut f64, errcode: &mut usize)->()> 
 				= self.library.get(fname.as_bytes())?;
-			func(&indexp, &indexc, &coption.as_bytes()[0], option.len(), &indexr, &mut fval, &mut errcode);
+			func(&indexp, &indexc, &coption.as_bytes()[0], option.len(), &indexr, &mut nfval, &mut fval[0], &mut errcode);
 		}
-		return wrap_result(fval, errcode);
+		return wrap_result(fval[0..nfval].into_iter().copied().collect(), errcode);
 	}
 	
 	/******************************************/

@@ -115,8 +115,8 @@ impl ParameterCache {
 	
 	pub fn load_compound(calculator: &Calculator, phasename: &str)->Result<Compound,ChemAppError> {
 		let indexp = calculator.engine.tqinp(phasename)?;
-		let h298 = calculator.engine.tqgdat(indexp, 1, "H", 0)?;
-		let s298 = calculator.engine.tqgdat(indexp, 1, "S", 0)?;
+		let h298 = calculator.engine.tqgdat(indexp, 1, "H", 0)?[0];
+		let s298 = calculator.engine.tqgdat(indexp, 1, "S", 0)?[0];
 		return Ok(Compound {
 			indexp: indexp,
 			phasename: phasename.to_string(),
@@ -131,8 +131,8 @@ impl ParameterCache {
 		let nendm = calculator.engine.tqnopc(indexp)?;
 		for k in 0..nendm {
 			let name = calculator.engine.tqgnpc(indexp, k+1)?;
-			let h298 = calculator.engine.tqgdat(indexp, k+1, "H", 0)?;
-			let s298 = calculator.engine.tqgdat(indexp, k+1, "S", 0)?;
+			let h298 = calculator.engine.tqgdat(indexp, k+1, "H", 0)?[0];
+			let s298 = calculator.engine.tqgdat(indexp, k+1, "S", 0)?[0];
 			vecc.push(Endmember {
 				indexp: indexp,
 				indexc: k+1,
