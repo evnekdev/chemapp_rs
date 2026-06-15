@@ -408,7 +408,7 @@ impl Calculator {
 		let interactions0 : Vec<String> = self.engine.tqlpar(indexp, "M")?;
 		let mut interactions : Vec<String> = Vec::with_capacity(interactions0.len());
 		for k in 0..interactions0.len(){
-			match convert_ge_interaction(&self.engine,indexp,&interactions0[k]){
+			match convert_magn_interaction(&self.engine,indexp,&interactions0[k]){
 				Ok(s) => {
 					interactions.push(s.1);
 				}
@@ -569,6 +569,10 @@ pub fn convert_ge_interaction<'a>(engine: &'a Engine, indexp: usize, s: &'a str)
 	let (s, (index,species1,species2,species3,species4,itype)) = parse_interaction_reciprocal(s)?;
 	let interaction = format!("({})-({}) : ({})-({}) ({})", &species_name(engine,indexp,species1), &species_name(engine,indexp,species2), &species_name(engine,indexp,species3), &species_name(engine,indexp,species4), &itype);
 	return Ok((s,interaction));
+}
+
+pub fn convert_magn_interaction<'a>(engine: &'a Engine, indexp: usize, s: &'a str)->IResult<&'a str, String>{
+	todo!();
 }
 
 
