@@ -402,12 +402,42 @@ impl Calculator {
 		}
 		return Ok(interactions);
 	}
+	
+	/// Lists the magnetic interactions in a phase as-is (species indices are used which are subject to change from a datafile to a datafile)
+	pub fn interactions_magn_expanded(&self, indexp: usize)->Result<Vec<String>,ChemAppError>{
+		let interactions0 : Vec<String> = self.engine.tqlpar(indexp, "M")?;
+		let mut interactions : Vec<String> = Vec::with_capacity(interactions0.len());
+		for k in 0..interactions0.len(){
+			match convert_ge_interaction(&self.engine,indexp,&interactions0[k]){
+				Ok(s) => {
+					interactions.push(s.1);
+				}
+				Err(_) => {continue;}
+			}
+		}
+		return Ok(interactions);
+	}
+	
 	/// Lists post-processed Gibbs free energy excess interactions in a phase (species indices are replaced by species names).
-	pub fn interactions_ge_expanded_species(&self,indexp:usize)->Result<Vec<Vec<String>>,ChemAppError>{
+	pub fn interactions_ge_expanded_species(&self,indexp: usize)->Result<Vec<Vec<String>>,ChemAppError>{
 		let interactions0 : Vec<String> = self.engine.tqlpar(indexp, "G")?;
 		let mut interactions : Vec<Vec<String>> = Vec::with_capacity(interactions0.len());
 		for k in 0..interactions0.len(){
 			match convert_ge_interaction_species(&self.engine,indexp,&interactions0[k]){
+				Ok(s) => {
+					interactions.push(s.1);
+				}
+				Err(_) => {continue;}
+			}
+		}
+		return Ok(interactions);
+	}
+	/// Lists post-processed magnetic excess interactions in a phase (species indices are replaced by species names).
+	pub fn interactions_magn_expanded_species(&self, indexp: usize)->Result<Vec<Vec<String>>, ChemAppError>{
+		let interactions0 : Vec<String> = self.engine.tqlpar(indexp, "M")?;
+		let mut interactions : Vec<Vec<String>> = Vec::with_capacity(interactions0.len());
+		for k in 0..interactions0.len(){
+			match convert_magn_interaction_species(&self.engine,indexp,&interactions0[k]){
 				Ok(s) => {
 					interactions.push(s.1);
 				}
@@ -445,6 +475,10 @@ fn parse_ending_species<'a>(s: &'a str)->IResult<&'a str, usize>{
 fn parse_interaction_type(s: &str) -> IResult<&str, &str> {
 	let (s, itype) = delimited(tag("("),alt((tag("Guts"),tag("Quasichemical"),tag("Bragg-Williams-Hillert"),tag("Bragg-Williams"),tag("Reciprocal"),)),tag(")"))(s)?;
 	return Ok((s,itype));
+}
+
+pub fn convert_magn_interaction_species<'a>(engine: &'a Engine, indexp: usize, s: &'a str)->IResult<&'a str, Vec<String>>{
+	todo!();
 }
 
 pub fn convert_ge_interaction_species<'a>(engine: &'a Engine, indexp: usize, s: &'a str)->IResult<&'a str,Vec<String>>{
