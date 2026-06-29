@@ -61,7 +61,7 @@ impl Calculator {
 		let engine = Engine::new(libname).unwrap();
 		Self::init_engine(&engine, datfile)?;
 		let components : Vec<String> = (0..engine.tqnosc()?).into_iter().map(|idx| engine.tqgnsc(idx+1)).filter_map(|r| r.ok()).collect();
-		let transform = Transform::from_formulas_s(&components, &components);
+		let transform = Transform::new(&components, &components, true);
 		return Ok(Calculator {
 			engine: engine,
 			cache: None,
@@ -69,7 +69,7 @@ impl Calculator {
 			nondefault_errunit: None,
 			number_isothermal: 0,
 			number_target_t: 0,
-			transform: transform,
+			transform: transform.unwrap(),
 		});
 	}
 	/// Initializes the ChemApp interface and preconfigures it with the thermodynamic info from a datafile.
@@ -131,7 +131,7 @@ impl Calculator {
 	}
 	/// Set a formula transform for input compositions
 	pub fn set_transform<T: AsRef<str>>(&mut self, basis: &[T])->Result<(),ChemAppError>{
-		self.transform = Transform::from_formulas_s(&self.names_components()?, basis);
+		self.transform = Transform::new(&self.names_components().unwrap(), basis, true).unwrap();
 		return Ok(());
 	}
 	/// Internally, creates a temporary file (deleted once the current `Calculator` instance is dropped) to redirect ChemApp outputs; this is a useful feature in environments where console window is not available.
@@ -179,15 +179,15 @@ impl Calculator {
 		//self.number_isothermal += 1;
 		return Ok(());
 	}
-	/// Perform a no-target isothermal calculation for an input composition and a temperature, use dynamic vectors
+	/// Perform a no-target isothermal calculation for an input composition and a temperature, use dynamic vectors; TODO check the composition transformations
 	pub fn calculate_isothermal_d(& self, compositions: &DVector<f64>, temp: f64)->Result<(),ChemAppError>{
-		return self.calculate_isothermal(&self.transform.transform_f2i_d2d(compositions), temp);
+		return self.calculate_isothermal(&self.transform.transform_final2init(compositions, false, false, false).column(0).into_owned(), temp);
 	}
-	/// Perform a no-target isothermal calculation for an input composition and a temperature, use static vectors
+	/// Perform a no-target isothermal calculation for an input composition and a temperature, use static vectors; TODO check the composition transformations
 	pub fn calculate_isothermal_s<const N: usize>(&self, compositions: &SVector<f64,N>, temp: f64)->Result<(),ChemAppError>{
 		//println!("compositions = {:?}, N = {}", &compositions, N);
 		//println!("f2i: {:?}", &self.transform.f2i);
-		return self.calculate_isothermal(&self.transform.transform_f2i_s2d(compositions), temp);
+		return self.calculate_isothermal(&self.transform.transform_final2init(compositions, false, false, false).column(0).into_owned(), temp);
 	}
 	
 	fn calculate_target_t(&self, x_i: &DVector<f64>, masterphase: usize, target: usize, interval: (f64,f64), precipitation: bool, fixed: Option<usize>, adjusting: Option<usize>)->Result<(),ChemAppError>{
@@ -258,13 +258,13 @@ impl Calculator {
 		}
 	}
 	}
-	/// Perform a T-target calculation for an input composition and a temperature, use dynamic vectors
+	/// Perform a T-target calculation for an input composition and a temperature, use dynamic vectors; TODO check the composition transformations
 	pub fn calculate_target_t_d(&self, compositions: &DVector<f64>, masterphase: usize, target: usize, interval: (f64,f64), precipitation: bool, fixed: Option<usize>, adjusting: Option<usize>)->Result<(),ChemAppError>{
-		return self.calculate_target_t(&self.transform.transform_f2i_d2d(compositions), masterphase, target, interval, precipitation, fixed, adjusting);
+		return self.calculate_target_t(&self.transform.transform_final2init(compositions, false, false, false).column(0).into_owned(), masterphase, target, interval, precipitation, fixed, adjusting);
 	}
-	/// Perform a T-target calculation for an input composition and a temperature, use static vectors
+	/// Perform a T-target calculation for an input composition and a temperature, use static vectors; TODO check the composition transformations
 	pub fn calculate_target_t_s<const N: usize>(&self, compositions: &SVector<f64,N>, masterphase: usize, target: usize, interval: (f64,f64), precipitation: bool, fixed: Option<usize>, adjusting: Option<usize>)->Result<(),ChemAppError>{
-		return self.calculate_target_t(&self.transform.transform_f2i_s2d(compositions), masterphase, target, interval, precipitation, fixed, adjusting);
+		return self.calculate_target_t(&self.transform.transform_final2init(compositions, false, false, false).column(0).into_owned(), masterphase, target, interval, precipitation, fixed, adjusting);
 	}
 	
 	fn calculate_target_x_from_left(&self, x1: &DVector<f64>, x2: &DVector<f64>, temp: f64, target: usize)->Result<(),ChemAppError>{
@@ -284,13 +284,13 @@ impl Calculator {
 		}
 		return Err(ChemAppError::OtherError("Cannot converge X target".to_string()));
 	}
-	/// Perform a composition search starting from `x1` until a required phase is met, use dynamic vectors
+	/// Perform a composition search starting from `x1` until a required phase is met, use dynamic vectors; TODO check the composition transformations
 	pub fn calculate_target_x_from_left_d(&self, x1: &DVector<f64>, x2: &DVector<f64>, temp: f64, target: usize)->Result<(),ChemAppError>{
-		return self.calculate_target_x_from_left(&self.transform.transform_f2i_d2d(x1), &self.transform.transform_f2i_d2d(x2), temp, target);
+		return self.calculate_target_x_from_left(&self.transform.transform_final2init(x1, false, false, false).column(0).into_owned(), &self.transform.transform_final2init(x2, false, false, false).column(0).into_owned(), temp, target);
 	}
-	/// Perform a composition search starting from `x1` until a required phase is met, use static vectors
+	/// Perform a composition search starting from `x1` until a required phase is met, use static vectors; TODO check the composition transformations
 	pub fn calculate_target_x_from_left_s<const N: usize>(&self, x1: &SVector<f64,N>, x2: &SVector<f64,N>, temp: f64, target: usize)->Result<(),ChemAppError>{
-		return self.calculate_target_x_from_left(&self.transform.transform_f2i_s2d(x1), &self.transform.transform_f2i_s2d(x2), temp, target);
+		return self.calculate_target_x_from_left(&self.transform.transform_final2init(x1, false, false, false).column(0).into_owned(), &self.transform.transform_final2init(x2, false, false, false).column(0).into_owned(), temp, target);
 	}
 	/// Returns the resulting system temperature
 	pub fn system_temperature(&self)->Result<f64,ChemAppError>{
@@ -347,43 +347,23 @@ impl Calculator {
 		for k in 0..ncomp {
 			xp[k] = self.engine.tqgetr("XP", indexp, k+1)?;
 		}
-		let mut xe : DVector<f64> = self.transform.transform_i2f_d2d(&xp);
-		xe /= xe.sum();
-		return Ok(xe);
-	}
-	/// Composition of a phase (transformed), static vectors
-	pub fn phase_composition_static<const N: usize>(&self, indexp: usize)->Result<SVector<f64,N>, ChemAppError>{
-		let ncomp = self.engine.tqnosc()?;
-		let mut xp: DVector<f64> = DVector::zeros(ncomp);
-		for k in 0..ncomp {
-			xp[k] = self.engine.tqgetr("XP", indexp, k+1)?;
-		}
-		let mut xe : SVector<f64,N> = self.transform.transform_i2f_d2s(&xp);
-		xe /= xe.sum();
+		let xe : DVector<f64> = self.transform.transform_init2final(&xp, false, false, true).column(0).into_owned();
 		return Ok(xe);
 	}
 	/// Returns the stoichiometry of a phase constituent in the input basis
 	pub fn constituent_stoichiometry_full(&self, indexp: usize, indexc: usize)->Result<DVector<f64>, ChemAppError>{
 		let comp_s : DVector<f64> = self.engine.tqstpc(indexp, indexc).unwrap().0.into();
-		let comp_ : DVector<f64> = self.transform.transform_i2f_d2d(&comp_s);
+		let comp_ : DVector<f64> = self.transform.transform_init2final(&comp_s, false, false, false).column(0).into_owned();
 		return Ok(comp_);
 	}
 	/// Number of independent formula units in the input basis
 	pub fn number_endmembers(&self)->usize{
-		return self.transform.number_f();
+		return self.transform.number_final();
 	}
 	/// Returns the normalized stoichiometry of a phase constituent in the input basis
 	pub fn constituent_stoichiometry_reduced(&self, indexp: usize, indexc: usize)->Result<(DVector<f64>,f64),ChemAppError>{
 		let comp_s : DVector<f64> = self.engine.tqstpc(indexp, indexc).unwrap().0.into();
-		let mut comp_ : DVector<f64> = self.transform.transform_i2f_d2d(&comp_s);
-		let ntotal = comp_.sum();
-		comp_ /= ntotal;
-		return Ok((comp_,ntotal));
-	}
-	/// Returns the normalized stoichiometry of a phase constituent in the input basis
-	pub fn constituent_stoichiometry_reduced_static<const N: usize>(&self, indexp: usize, indexc: usize)->Result<(SVector<f64,N>,f64),ChemAppError>{
-		let comp_s : DVector<f64> = self.engine.tqstpc(indexp, indexc).unwrap().0.into();
-		let mut comp_ : SVector<f64,N> = self.transform.transform_i2f_d2s(&comp_s);
+		let mut comp_ : DVector<f64> = self.transform.transform_init2final(&comp_s, false, false, false).column(0).into_owned();
 		let ntotal = comp_.sum();
 		comp_ /= ntotal;
 		return Ok((comp_,ntotal));
@@ -691,8 +671,7 @@ pub trait PhaseIterator where Self : Sized + Iterator<Item=usize>{
 			for k in 0..ncomp {
 				xp[k] = calculator.engine.tqgetr("XP", idx, k+1).unwrap();
 			}
-			let mut xe = calculator.transform.transform_i2f_d2d(&xp);
-			xe /= xe.sum();
+			let xe : DVector<f64> = calculator.transform.transform_init2final(&xp, false, false, true).column(0).into_owned();
 			return xe;
 		};
 		return self.map(Box::new(closure));
