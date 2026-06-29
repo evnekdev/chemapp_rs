@@ -1,6 +1,8 @@
 use chemapp_rs::{calculator::*};
 use nalgebra::{dvector};
-
+use chemapp_rs::ComponentIterator;
+use chemapp_rs::PhaseIterator;
+use chemapp_rs::ConstituentIterator;
 
 pub fn main(){
 	println!("chemapp module");

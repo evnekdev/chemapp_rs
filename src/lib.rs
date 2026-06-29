@@ -23,12 +23,15 @@ extern crate libloading;
 
 use libloading::{Library};
 
-pub use crate::calculator::{Calculator, ComponentIterator, PhaseIterator, ConstituentIterator};
+pub use crate::calculator::{Calculator};
+pub use crate::iterator::{ComponentIterator, PhaseIterator, ConstituentIterator};
 
 pub mod error;
 pub mod defs;
 pub mod native;
+pub mod iterator;
 pub mod calculator;
+pub mod parse;
 pub mod interactions;
 
 static DEFAULT_LIBNAME : &str = r"ca_vc_e_local.dll";
