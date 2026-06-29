@@ -4,6 +4,7 @@
 
 ### Added
   - Support for magnetic interactions
+  - added `from_library_unloaded` to `Calculator`
 
 ### Changed
   - `usize` in `tqgthi` output to `i32`

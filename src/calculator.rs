@@ -23,20 +23,22 @@ use crate::interactions::{ParameterCache};
 use chemformula::{Transform};
 
 
-/********************************************************************************************************/
-/********************************************************************************************************/
+/*****************************************************************************************************************************************************************************************************/
+/*****************************************************************************************************************************************************************************************************/
+
 /// A higher-level abtraction entity.
 #[derive(Debug)]
 pub struct Calculator {
-	pub engine: Engine,
-	pub cache: Option<ParameterCache>,
-	pub file: String,
-	pub nondefault_errunit : Option<(String,usize)>,
-	pub number_isothermal: usize,
-	pub number_target_t: usize,
-	pub transform: Transform,
+	pub engine: Engine, /// a loaded instance of ChemApp engine
+	pub cache: Option<ParameterCache>, // a copy of model parameters, allowing to restore delta inputs
+	pub file: String, // datafile 
+	pub nondefault_errunit : Option<(String,usize)>, /// a custom file to output errors
+	pub number_isothermal: usize, /// isothermal calculation counter
+	pub number_target_t: usize, /// target calculation counter
+	pub transform: Transform, /// instead of raw input using the system components basis, the user can define a custom formula basis; the transform is handled internally
 }
 
+/// A helper function to tell whether we deal with an open format *.DAT, transparent header *.CST, or binary formats/
 fn get_extension_from_filename(filename: &str)->Option<String>{
 	return Path::new(filename).extension().and_then(|s| OsStr::to_str(s).and_then(|s| Some(s.to_lowercase())));
 }
@@ -78,7 +80,7 @@ impl Calculator {
 		Self::load_datafile(engine, datfile)?;
 		return Ok(());
 	}
-	
+	/// Initializes a ChemApp interface without a datafile
 	pub fn from_library_unloaded(libname: &str)->Result<Calculator,ChemAppError>{
 		let engine = Engine::new(libname).unwrap();
 		engine.tqini()?;
