@@ -29,98 +29,98 @@ pub trait ConstituentIterator where Self : Sized + Iterator<Item=(usize,usize)>{
 	/// Maps constituent indices to their corresponding names
 	fn constituents_names<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->(String,String) + 'a>>{
 		let closure = move |(indexp, indexc): (usize, usize)| {
-			return (calculator.engine.tqgnp(indexp).unwrap(), calculator.engine.tqgnpc(indexp, indexc).unwrap());
+			return (calculator.engine.tqgnp(indexp).unwrap(), calculator.engine.tqgnpc(indexp, indexc).unwrap_or("<NONE>".to_string()));
 		};
 		return self.map(Box::new(closure));
 	}
 	/// maps constituent indices to their amounts (after a tqce... routine was called)
 	fn constituents_a<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
-			return calculator.engine.tqgetr("A", indexp, indexc).unwrap();
+			return calculator.engine.tqgetr("A", indexp, indexc).unwrap_or(f64::NAN);
 		};
 		return self.map(Box::new(closure));
 	}
 	/// maps constituent indices to their activities (after a tqce... routine was called)
 	fn constituents_ac<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
-			return calculator.engine.tqgetr("AC", indexp, indexc).unwrap();
+			return calculator.engine.tqgetr("AC", indexp, indexc).unwrap_or(f64::NAN);
 		};
 		return self.map(Box::new(closure));
 	}
 	/// maps constituent indices to their chemical potential values (after a tqce... routine was called)
 	fn constituents_mu<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
-			return calculator.engine.tqgetr("MU", indexp, indexc).unwrap();
+			return calculator.engine.tqgetr("MU", indexp, indexc).unwrap_or(f64::NAN);
 		};
 		return self.map(Box::new(closure));
 	}
 	/// maps constituent indices to their enthalpies (after a tqce... routine was called)
 	fn constituents_h<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
-			return calculator.engine.tqgetr("H", indexp, indexc).unwrap();
+			return calculator.engine.tqgetr("H", indexp, indexc).unwrap_or(f64::NAN);
 		};
 		return self.map(Box::new(closure));
 	}
 	/// maps constituent indices to their Gibbs free energies (after a tqce... routine was called)
 	fn constituents_g<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
-			return calculator.engine.tqgetr("G", indexp, indexc).unwrap();
+			return calculator.engine.tqgetr("G", indexp, indexc).unwrap_or(f64::NAN);
 		};
 		return self.map(Box::new(closure));
 	}
 	/// maps constituent indices to their entropies (after a tqce... routine was called)
 	fn constituents_s<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
-			return calculator.engine.tqgetr("S", indexp, indexc).unwrap();
+			return calculator.engine.tqgetr("S", indexp, indexc).unwrap_or(f64::NAN);
 		};
 		return self.map(Box::new(closure));
 	}
 	/// maps constituent indices to their heat capacity values (after a tqce... routine was called)
 	fn constituents_cp<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
-			return calculator.engine.tqgetr("CP", indexp, indexc).unwrap();
+			return calculator.engine.tqgetr("CP", indexp, indexc).unwrap_or(f64::NAN);
 		};
 		return self.map(Box::new(closure));
 	}
 	/// maps constituent indices to their volumes (after a tqce... routine was called)
 	fn constituents_v<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
-			return calculator.engine.tqgetr("V", indexp, indexc).unwrap();
+			return calculator.engine.tqgetr("V", indexp, indexc).unwrap_or(f64::NAN);
 		};
 		return self.map(Box::new(closure));
 	}
 	/// maps constituent indices to their partial enthalpies (after a tqce... routine was called)
 	fn constituents_hm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
-			return calculator.engine.tqgetr("HM", indexp, indexc).unwrap();
+			return calculator.engine.tqgetr("HM", indexp, indexc).unwrap_or(f64::NAN);
 		};
 		return self.map(Box::new(closure));
 	}
 	/// maps constituent indices to their partial Gibbs free energies (after a tqce... routine was called)
 	fn constituents_gm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
-			return calculator.engine.tqgetr("GM", indexp, indexc).unwrap();
+			return calculator.engine.tqgetr("GM", indexp, indexc).unwrap_or(f64::NAN);
 		};
 		return self.map(Box::new(closure));
 	}
 	/// maps constituent indices to their partial entropies (after a tqce... routine was called)
 	fn constituents_sm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
-			return calculator.engine.tqgetr("SM", indexp, indexc).unwrap();
+			return calculator.engine.tqgetr("SM", indexp, indexc).unwrap_or(f64::NAN);
 		};
 		return self.map(Box::new(closure));
 	}
 	/// maps constituent indices to their partial heat capacities (after a tqce... routine was called)
 	fn constituents_cpm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
-			return calculator.engine.tqgetr("CPM", indexp, indexc).unwrap();
+			return calculator.engine.tqgetr("CPM", indexp, indexc).unwrap_or(f64::NAN);
 		};
 		return self.map(Box::new(closure));
 	}
 	/// maps constituent indices to their partial volumes (after a tqce... routine was called)
 	fn constituents_vm<'a>(self, calculator: &'a Calculator)->Map<Self, Box<dyn FnMut((usize,usize))->f64 + 'a>>{
 		let closure = move |(indexp, indexc): (usize,usize)| {
-			return calculator.engine.tqgetr("VM", indexp, indexc).unwrap();
+			return calculator.engine.tqgetr("VM", indexp, indexc).unwrap_or(f64::NAN);
 		};
 		return self.map(Box::new(closure));
 	}
