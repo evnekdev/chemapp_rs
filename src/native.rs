@@ -11,7 +11,7 @@ use std::cmp::{min};
 use std::ffi::{CString};
 use function_name::{named};
 
-use crate::{Engine, SystemDimensions};
+use crate::{Engine, SystemDimensions, TransparentHeader};
 use crate::defs::{FUNCSWIN32,FUNCSWIN64};
 use crate::error::{ChemAppError};
 
@@ -36,6 +36,10 @@ fn clen(array: &[u8]) -> usize {
 		else {length += 1;}
 	}
 	return length;
+}
+
+fn cu8array2string(cstring: &[u8])->String {
+	return from_utf8(&cstring[0..clen(&cstring)]).unwrap_or("<UNRECOGNIZED UTF8 SEQUENCE>").to_owned();
 }
 
 fn wrap_result<T>(result: T, errcode: usize)->Result<T, ChemAppError>{
@@ -411,9 +415,41 @@ impl Engine {
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
-	/// TODO
-	pub fn tqgtrh(&self)->Result<(),i32>{
-		todo!();
+	/// GET-TRANSPARENT-FILE-HEADER-INFO
+	#[named]
+	pub fn tqgtrh(&self)->Result<TransparentHeader,ChemAppError>{
+		const SLENGTH0 : usize = 41;
+		const SLENGTH1 : usize = 81;
+		const SLENGTH2 : usize = 256;
+		let fname = func_alias(function_name!());
+		let mut cver = 0;
+		let mut cnwp : [u8; SLENGTH0] = [0; SLENGTH0];
+		let mut cvnw : [i32; 3] = [0; 3];
+		let mut cnrp : [u8; SLENGTH0] = [0; SLENGTH0];
+		let mut cvnr : [i32; 3] = [0; 3];
+		let mut cdtc : [i32; 6] = [0; 6];
+		let mut cdte : [i32; 6] = [0; 6];
+		let mut cid  : [u8; SLENGTH2] = [0; SLENGTH2];
+		let mut cusr : [u8; SLENGTH1] = [0; SLENGTH1];
+		let mut crem : [u8; SLENGTH1] = [0; SLENGTH1];
+		let mut errcode = 0;
+		unsafe {
+			let func : Symbol<extern "system" fn(&mut i32, &mut u8, usize, &mut i32, &mut u8, usize, &mut i32, &mut i32, &mut i32, &mut u8, usize, &mut u8, usize, &mut u8, usize, &mut usize)->()> = self.library.get(fname.as_bytes())?;
+			func(&mut cver, &mut cnwp[0], SLENGTH0, &mut cvnw[0], &mut cnrp[0], SLENGTH0, &mut cvnr[0], &mut cdtc[0], &mut cdte[0], &mut cid[0], SLENGTH2, &mut cusr[0], SLENGTH1, &mut crem[0], SLENGTH1, &mut errcode);
+		}
+		let header : TransparentHeader = TransparentHeader {
+			version : cver,
+			name_writing_program       : cu8array2string(&cnwp),
+			version_writing_program    : cvnw,
+			name_reading_program       : cu8array2string(&cnrp),
+			minversion_reading_program : cvnr,
+			creation_date              : cdtc,
+			expiry_date                : cdte,
+			user_ids_allowed           : cu8array2string(&cid),
+			license_holders_allowed    : cu8array2string(&cusr),
+			remark                     : cu8array2string(&crem),
+		};
+		return wrap_result(header, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
