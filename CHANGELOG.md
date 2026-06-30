@@ -3,6 +3,7 @@
 ## [0.2.0]? -
 
 ### Added
+  - Support for Unix-like platforms
   - `TransparentHeader` structure
   - Support for magnetic interactions
   - added `from_library_unloaded` to `Calculator`
