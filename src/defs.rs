@@ -177,7 +177,7 @@ pub static ref FUNCSWIN64 : HashMap<&'static str, &'static str> = HashMap::from(
 		("tqwasc", "TQWASC"),
 		]);
 		
-pub static ref FUNCUNIX32 : HashMap<&'static str, &'static str> = HashMap::from([
+pub static ref FUNCSUNIX32 : HashMap<&'static str, &'static str> = HashMap::from([
 		("tqini",  "tqini_"),
 		("tqvers", "tqvers_"),
 		("tqcprt", "tqcprt_"),
@@ -255,7 +255,7 @@ pub static ref FUNCUNIX32 : HashMap<&'static str, &'static str> = HashMap::from(
 		("tqwasc", "tqwasc_"),
 ]);
 		
-pub static ref FUNCUNIX64 : HashMap<&'static str, &'static str> = HashMap::from([
+pub static ref FUNCSUNIX64 : HashMap<&'static str, &'static str> = HashMap::from([
 		("tqini",  "tqini_"),
 		("tqvers", "tqvers_"),
 		("tqcprt", "tqcprt_"),

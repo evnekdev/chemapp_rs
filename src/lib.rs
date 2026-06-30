@@ -23,6 +23,7 @@ extern crate libloading;
 
 use libloading::{Library};
 
+pub use crate::error::ChemAppError;
 pub use crate::calculator::{Calculator};
 pub use crate::iterator::{ComponentIterator, PhaseIterator, ConstituentIterator};
 
