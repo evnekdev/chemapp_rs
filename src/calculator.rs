@@ -7,12 +7,12 @@ use std::path::Path;
 use std::ffi::OsStr;
 //use std::collections::{HashMap};
 use std::ops::{Range};
-use nalgebra::{DVector, SVector};
+use nalgebra::{DVector, SVector, Vector, Dim, Storage};
 use tempfile::NamedTempFile;
 use chemformula::{Transform};
 
 use crate::{Engine, error::{ChemAppError}};
-use crate::interactions::{ParameterCache};
+use crate::cache::{ParameterCache};
 use crate::parse::*;
 use crate::iterator::phase::PhaseIterator;
 
@@ -170,7 +170,7 @@ impl Calculator {
 		return Ok((0..self.engine.tqnop()?).into_iter().map(|idx| self.engine.tqgnp(idx+1)).filter_map(|r| r.ok()).collect());
 	}
 	/// A simple isothermal calculation (temperature + initial composition in the pre-transformed basis).
-	fn calculate_isothermal(&self, x_i: &DVector<f64>, temp: f64)->Result<(),ChemAppError>{
+	fn calculate_isothermal_(&self, x_i: &DVector<f64>, temp: f64)->Result<(),ChemAppError>{
 		self.reset()?;
 		self.engine.tqsetc("T", 0, 0, temp)?;
 		for k in 0..x_i.len(){
@@ -182,17 +182,11 @@ impl Calculator {
 		return Ok(());
 	}
 	/// Perform a no-target isothermal calculation for an input composition and a temperature, use dynamic vectors; TODO check the composition transformations
-	pub fn calculate_isothermal_d(& self, compositions: &DVector<f64>, temp: f64)->Result<(),ChemAppError>{
-		return self.calculate_isothermal(&self.transform.transform_final2init(compositions, false, false, false).column(0).into_owned(), temp);
-	}
-	/// Perform a no-target isothermal calculation for an input composition and a temperature, use static vectors; TODO check the composition transformations
-	pub fn calculate_isothermal_s<const N: usize>(&self, compositions: &SVector<f64,N>, temp: f64)->Result<(),ChemAppError>{
-		//println!("compositions = {:?}, N = {}", &compositions, N);
-		//println!("f2i: {:?}", &self.transform.f2i);
-		return self.calculate_isothermal(&self.transform.transform_final2init(compositions, false, false, false).column(0).into_owned(), temp);
+	pub fn calculate_isothermal<D: Dim, S: Storage<f64,D>>(& self, compositions: &Vector<f64,D,S>, temp: f64)->Result<(),ChemAppError>{
+		return self.calculate_isothermal_(&self.transform.transform_final2init(compositions, false, false, false).column(0).into_owned(), temp);
 	}
 	
-	fn calculate_target_t(&self, x_i: &DVector<f64>, masterphase: usize, target: usize, interval: (f64,f64), precipitation: bool, fixed: Option<usize>, adjusting: Option<usize>)->Result<(),ChemAppError>{
+	fn calculate_target_t_(&self, x_i: &DVector<f64>, masterphase: usize, target: usize, interval: (f64,f64), precipitation: bool, fixed: Option<usize>, adjusting: Option<usize>)->Result<(),ChemAppError>{
 		// set non-compositional conditions
 		let nitermax = 10usize;
 		let val = if precipitation {-0.5} else {0.0};
@@ -261,15 +255,11 @@ impl Calculator {
 	}
 	}
 	/// Perform a T-target calculation for an input composition and a temperature, use dynamic vectors; TODO check the composition transformations
-	pub fn calculate_target_t_d(&self, compositions: &DVector<f64>, masterphase: usize, target: usize, interval: (f64,f64), precipitation: bool, fixed: Option<usize>, adjusting: Option<usize>)->Result<(),ChemAppError>{
-		return self.calculate_target_t(&self.transform.transform_final2init(compositions, false, false, false).column(0).into_owned(), masterphase, target, interval, precipitation, fixed, adjusting);
-	}
-	/// Perform a T-target calculation for an input composition and a temperature, use static vectors; TODO check the composition transformations
-	pub fn calculate_target_t_s<const N: usize>(&self, compositions: &SVector<f64,N>, masterphase: usize, target: usize, interval: (f64,f64), precipitation: bool, fixed: Option<usize>, adjusting: Option<usize>)->Result<(),ChemAppError>{
-		return self.calculate_target_t(&self.transform.transform_final2init(compositions, false, false, false).column(0).into_owned(), masterphase, target, interval, precipitation, fixed, adjusting);
+	pub fn calculate_target_t<D: Dim, S: Storage<f64,D>>(&self, compositions: &Vector<f64,D,S>, masterphase: usize, target: usize, interval: (f64,f64), precipitation: bool, fixed: Option<usize>, adjusting: Option<usize>)->Result<(),ChemAppError>{
+		return self.calculate_target_t_(&self.transform.transform_final2init(compositions, false, false, false).column(0).into_owned(), masterphase, target, interval, precipitation, fixed, adjusting);
 	}
 	
-	fn calculate_target_x_from_left(&self, x1: &DVector<f64>, x2: &DVector<f64>, temp: f64, target: usize)->Result<(),ChemAppError>{
+	fn calculate_target_x_from_left_(&self, x1: &DVector<f64>, x2: &DVector<f64>, temp: f64, target: usize)->Result<(),ChemAppError>{
 		let n_iter_max = 10;
 		let mut x_initial = x1.clone();
 		let mut x_other = x2;
@@ -287,13 +277,10 @@ impl Calculator {
 		return Err(ChemAppError::OtherError("Cannot converge X target".to_string()));
 	}
 	/// Perform a composition search starting from `x1` until a required phase is met, use dynamic vectors; TODO check the composition transformations
-	pub fn calculate_target_x_from_left_d(&self, x1: &DVector<f64>, x2: &DVector<f64>, temp: f64, target: usize)->Result<(),ChemAppError>{
-		return self.calculate_target_x_from_left(&self.transform.transform_final2init(x1, false, false, false).column(0).into_owned(), &self.transform.transform_final2init(x2, false, false, false).column(0).into_owned(), temp, target);
+	pub fn calculate_target_x_from_left<D: Dim, S: Storage<f64,D>>(&self, x1: &Vector<f64,D,S>, x2: &Vector<f64,D,S>, temp: f64, target: usize)->Result<(),ChemAppError>{
+		return self.calculate_target_x_from_left_(&self.transform.transform_final2init(x1, false, false, false).column(0).into_owned(), &self.transform.transform_final2init(x2, false, false, false).column(0).into_owned(), temp, target);
 	}
-	/// Perform a composition search starting from `x1` until a required phase is met, use static vectors; TODO check the composition transformations
-	pub fn calculate_target_x_from_left_s<const N: usize>(&self, x1: &SVector<f64,N>, x2: &SVector<f64,N>, temp: f64, target: usize)->Result<(),ChemAppError>{
-		return self.calculate_target_x_from_left(&self.transform.transform_final2init(x1, false, false, false).column(0).into_owned(), &self.transform.transform_final2init(x2, false, false, false).column(0).into_owned(), temp, target);
-	}
+	
 	/// Returns the resulting system temperature
 	pub fn system_temperature(&self)->Result<f64,ChemAppError>{
 		return self.engine.tqgetr("T", 0, 0);

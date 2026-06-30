@@ -1,6 +1,6 @@
 // defs.rs
 
-//! External function signatures of ChemApp libraries, both 32bit and 64bit are supported (Windows only for the time being).
+//! External function signatures of ChemApp libraries, both 32bit and 64bit are supported (Windows + Unix-like).
 //! Depending on the bitness and the calling convention, DLLs export the available functions slightly differently. For example, "stdcall" 32bit decorates function names with an prefix underscore and a @NBYTES suffix to indicate the total number of bytes the function arguments would occupy on the execution stack. The 64bit versions, however, use a different calling convention and usually do not decorate (or mangle) function names.
 //!   
 //! Since Rust language does not accept @-mangles names as function names directly, a translation dictionary between the conventional tq... names and the mangled version exported by DLLs is provided.

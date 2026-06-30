@@ -33,7 +33,7 @@ pub mod native;
 pub mod iterator;
 pub mod calculator;
 pub mod parse;
-pub mod interactions;
+pub mod cache;
 
 static DEFAULT_LIBNAME : &str = r"ca_vc_e_local.dll";
 

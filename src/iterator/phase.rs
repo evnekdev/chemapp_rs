@@ -1,11 +1,13 @@
-/// chemapp_rs::iterator::phase.rs
+// chemapp_rs::iterator::phase.rs
+//! `PhaseIterator` trait facilitating iteration and property retrieval for phases.
 use std::iter::{Filter, Map, FlatMap};
 use std::ops::Range;
 use nalgebra::{DVector};
 use crate::Calculator;
 
-/********************************************************************************************************/
-/********************************************************************************************************/
+/*******************************************************************************************************************************************************************************************************************************/
+/*******************************************************************************************************************************************************************************************************************************/
+
 /// Facilitates iteration over phase indices
 pub trait PhaseIterator where Self : Sized + Iterator<Item=usize>{
 	/// for any input indices in the iterator, retains only those within 1..nphases range
@@ -28,7 +30,6 @@ pub trait PhaseIterator where Self : Sized + Iterator<Item=usize>{
 	fn solutions<'a>(self, calculator: &'a Calculator)->Filter<Self, Box<dyn Fn(&usize)->bool + 'a>>{
 		let closure = move |idx: &usize| {
 			let modl = calculator.engine.tqmodl(*idx).unwrap_or("<NONE>".to_string());
-			//println!("modl = <{}>", &modl);
 			match modl[0..4].as_ref() {
 				"PURE" => {return false;}
 				_ => {return true;}
@@ -206,7 +207,13 @@ pub trait PhaseIterator where Self : Sized + Iterator<Item=usize>{
 	
 }
 
+/*******************************************************************************************************************************************************************************************************************************/
+/*******************************************************************************************************************************************************************************************************************************/
+
 fn constituents_for(calculator: &Calculator, indexp: usize)->Map<Range<usize>,Box<dyn FnMut(usize)->(usize,usize)>>{
 	let ncons = calculator.engine.tqnopc(indexp).unwrap();
 	return (1..ncons+1).map(Box::new(move |indexc: usize| {return (indexp,indexc);}));
 }
+
+/*******************************************************************************************************************************************************************************************************************************/
+/*******************************************************************************************************************************************************************************************************************************/

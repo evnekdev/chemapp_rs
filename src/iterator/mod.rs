@@ -1,4 +1,6 @@
-/// chemapp_rs::iterator.rs
+// chemapp_rs::iterator.rs
+//! Useful iterators over system components, phases, and phase constituents in a datafile.
+
 
 pub mod component;
 pub mod phase;
