@@ -21,12 +21,19 @@ const NAME_LENGTH_MAX : usize = 25;
 /*********************************************************************************************************************************************************************************************************/
 
 fn func_alias(name: &'static str)->&'static str {
-	#[cfg(target_family="windows")]
-	#[cfg(target_pointer_width="32")]
-	return FUNCSWIN32[name];
-	#[cfg(target_family="windows")]
-	#[cfg(target_pointer_width="64")]
-	return FUNCSWIN64[name];
+	 #[cfg(all(target_family = "windows", target_pointer_width = "32"))]
+    let funcs = &FUNCSWIN32;
+
+    #[cfg(all(target_family = "windows", target_pointer_width = "64"))]
+    let funcs = &FUNCSWIN64;
+
+    #[cfg(all(target_family = "unix", target_pointer_width = "32"))]
+    let funcs = &FUNCSUNIX32;
+
+    #[cfg(all(target_family = "unix", target_pointer_width = "64"))]
+    let funcs = &FUNCSUNIX64;
+
+    funcs[name]
 }
 
 fn clen(array: &[u8]) -> usize {
@@ -72,11 +79,16 @@ impl Engine {
 	pub fn tqini(&self) -> Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-		let func: Symbol<extern "system" fn(errcode: &mut usize)->()>
-			= self.library.get(fname.as_bytes())?;
-		func(&mut errcode);
+			let func: Symbol<extern "system" fn(errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
+			func(&mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -87,11 +99,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut vers = 0;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(vers: &mut i32, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(vers: &mut i32, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&mut vers, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(vers, errcode);
 	}
 	
@@ -101,11 +118,17 @@ impl Engine {
 	pub fn tqcprt(&self) -> Result<(), ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -116,11 +139,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut lite = 0;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(lite: &mut i32, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(lite: &mut i32, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&mut lite, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(lite > 0, errcode);
 	}
 	
@@ -131,11 +159,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		let mut cstring: [u8; 256] = [0;256];
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&mut cstring[0], 256, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(from_utf8(&cstring[0..clen(&cstring)])?.to_owned(), errcode);
 	}
 	
@@ -146,11 +179,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		let mut cstring: [u8; 80] = [0;80];
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&mut cstring[0], 80, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(from_utf8(&cstring[0..clen(&cstring)])?.to_owned(), errcode);
 	}
 	
@@ -161,11 +199,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		let mut cstring: [u8; 80] = [0;80];
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&mut cstring[0], 80, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(from_utf8(&cstring[0..clen(&cstring)])?.to_owned(), errcode);
 	}
 	
@@ -177,11 +220,16 @@ impl Engine {
 		let mut errcode = 0;
 		let mut hid = 0;
 		let mut cstring: [u8; 80] = [0;80];
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, hid: &mut i32, errcode: &mut usize)->()>
-			= self.library.get(fname.as_bytes())?;
+			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, hid: &mut i32, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&mut cstring[0], 80, &mut hid, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((from_utf8(&cstring[0..clen(&cstring)])?.to_owned(),hid), errcode);
 	}
 	
@@ -193,11 +241,16 @@ impl Engine {
 		let mut month : u32 = 0;
 		let mut year  : u32 = 0;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func : Symbol<extern "system" fn(month: &mut u32, year: &mut u32, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func : Symbol<extern "system" fn(month: &mut u32, year: &mut u32, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&mut month, &mut year, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((month, year), errcode);
 	}
 	
@@ -209,11 +262,17 @@ impl Engine {
 		let coption : CString = CString::new(option)?;
 		let coption_length = option.len();
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(coption: &u8, coption_length: usize, valuea: &usize, valueb: &usize, valuec: &usize, errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], coption_length, &valuea, &valueb, &valuec, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -224,11 +283,17 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut dims : SystemDimensions =  SystemDimensions::new();
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(na: &mut i32, nb: &mut i32, nc: &mut i32, nd: &mut i32, ne: &mut i32, nf: &mut i32, ng: &mut i32, nh: &mut i32, ni: &mut i32, nj: &mut i32, nk: &mut i32, errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 			func(&mut dims.nconstituents, &mut dims.ncomponents, &mut dims.nmixtures, &mut dims.nexcess_gibbs, &mut dims.nexcess_magnetic, &mut dims.nsublattices, &mut dims.nspecies, &mut dims.nconstituents_mqm, &mut dims.nranges_constituent, &mut dims.nranges, &mut dims.ndependent, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(dims, errcode);
 	}
 	
@@ -239,11 +304,17 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut dims : SystemDimensions =  SystemDimensions::new();
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(na: &mut i32, nb: &mut i32, nc: &mut i32, nd: &mut i32, ne: &mut i32, nf: &mut i32, ng: &mut i32, nh: &mut i32, ni: &mut i32, nj: &mut i32, nk: &mut i32, errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 			func(&mut dims.nconstituents, &mut dims.ncomponents, &mut dims.nmixtures, &mut dims.nexcess_gibbs, &mut dims.nexcess_magnetic, &mut dims.nsublattices, &mut dims.nspecies, &mut dims.nconstituents_mqm, &mut dims.nranges_constituent, &mut dims.nranges, &mut dims.ndependent, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(dims, errcode);
 	}
 	
@@ -255,11 +326,17 @@ impl Engine {
 		let mut errcode = 0;
 		let mut num = 0;
 		let coption: CString = CString::new(option)?;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(option: &u8, option_len: usize, num: &mut usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option.len(), &mut num, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(num, errcode);
 	}
 	
@@ -270,11 +347,17 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let coption: CString = CString::new(option)?;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_len: usize, unit: &usize, errcode: &mut usize)->()> 
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option.len(), &unit, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -284,11 +367,17 @@ impl Engine {
 	pub fn tqrfil(&self) -> Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 			func(&mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -298,11 +387,17 @@ impl Engine {
 	pub fn tqrbin(&self) -> Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 			func(&mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -312,11 +407,17 @@ impl Engine {
 	pub fn tqrcst(&self) -> Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(errcode: &mut usize)->()>
 			= self.library.get(fname.as_bytes())?;
 			func(&mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -328,11 +429,17 @@ impl Engine {
 		let cfilename: CString = CString::new(filename)?;
 		let cfilename_length = filename.len();
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(cfilename: &u8, filename_length: usize, unit: &usize, errcode: &mut usize)>
 			= self.library.get(fname.as_bytes())?;
 			func(&cfilename.as_bytes()[0], cfilename_length, &unit, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -344,11 +451,17 @@ impl Engine {
 		let coption: CString = CString::new(option)?;
 		let ctext : CString = CString::new(text)?;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_len: usize, text: &u8, text_len: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option.len(), &ctext.as_bytes()[0], text.len(), &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -360,11 +473,17 @@ impl Engine {
 		let cname: CString = CString::new(name)?;
 		let cname_length = name.len();
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(cname: &u8, cfilename_length: usize, unit: &usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cname.as_bytes()[0], cname_length, &unit, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -376,11 +495,17 @@ impl Engine {
 		let cname: CString = CString::new(name)?;
 		let cname_length = name.len();
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(cname: &u8, cname_length: usize, unit: &usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cname.as_bytes()[0], cname_length, &unit, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -392,11 +517,17 @@ impl Engine {
 		let cname: CString = CString::new(name)?;
 		let cname_length = name.len();
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(cname: &u8, cname_length: usize, unit: &usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cname.as_bytes()[0], cname_length, &unit, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -406,11 +537,16 @@ impl Engine {
 	pub fn tqclos(&self, unit: usize) -> Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(unit: &usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(unit: &usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&unit, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -433,10 +569,16 @@ impl Engine {
 		let mut cusr : [u8; SLENGTH1] = [0; SLENGTH1];
 		let mut crem : [u8; SLENGTH1] = [0; SLENGTH1];
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(&mut i32, &mut u8, usize, &mut i32, &mut u8, usize, &mut i32, &mut i32, &mut i32, &mut u8, usize, &mut u8, usize, &mut u8, usize, &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&mut cver, &mut cnwp[0], SLENGTH0, &mut cvnw[0], &mut cnrp[0], SLENGTH0, &mut cvnr[0], &mut cdtc[0], &mut cdte[0], &mut cid[0], SLENGTH2, &mut cusr[0], SLENGTH1, &mut crem[0], SLENGTH1, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		let header : TransparentHeader = TransparentHeader {
 			version : cver,
 			name_writing_program       : cu8array2string(&cnwp),
@@ -461,11 +603,17 @@ impl Engine {
 		let option_length = option.len()-1;
 		let mut cunit: [u8; NAME_LENGTH_MAX] = [0;NAME_LENGTH_MAX];
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, unit: &mut u8, unit_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &mut cunit[0], NAME_LENGTH_MAX, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(from_utf8(&cunit[0..clen(&cunit)])?.to_owned(), errcode);
 	}
 	
@@ -479,11 +627,17 @@ impl Engine {
 		let option_length = option.len();
 		let unit_length = unit.len();
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, unit: &u8, unit_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &cunit.as_bytes()[0], unit_length, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -496,11 +650,17 @@ impl Engine {
 		let name_length = name.len();
 		let mut indexs = 0;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(name: &u8, name_length: usize, indexs: &mut usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cname.as_bytes()[0], name_length, &mut indexs, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(indexs, errcode);
 	}
 	
@@ -511,11 +671,17 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut cname: [u8; NAME_LENGTH_MAX] = [0; NAME_LENGTH_MAX];
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(indexs: &usize, name: &mut u8, name_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexs, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(from_utf8(&cname[0..clen(&cname)])?.replace('\0', "").to_owned(), errcode);
 	}
 	
@@ -527,11 +693,17 @@ impl Engine {
 		let cname: CString = CString::new(name)?;
 		let name_length = name.len();
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(indexs: &usize, name: &u8, name_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexs, &cname.as_bytes()[0], name_length, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -542,11 +714,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut nscom = 0;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(nscom: &mut usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(nscom: &mut usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&mut nscom, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(nscom, errcode);
 	}
 	
@@ -559,11 +736,16 @@ impl Engine {
 		let mut stoi : Vec<f64> = vec![0.0;ncomp];
 		let mut wmass = 0.0f64;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexs: &usize, stoi: &mut f64, wmass: &mut f64, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(indexs: &usize, stoi: &mut f64, wmass: &mut f64, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexs, &mut stoi[0], &mut wmass, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((stoi, wmass), errcode);
 	}
 	
@@ -594,11 +776,16 @@ impl Engine {
 		}
 		//println!("namememory = {:?}", namememory);
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(names: &u8, names_length: usize, errcode: &mut usize)->()>
-			= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(names: &u8, names_length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&namememory[0], length, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -611,11 +798,16 @@ impl Engine {
 		let cname_length = name.len();
 		let mut indexp  = 0;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(cname: &u8, cname_length: usize, indexp: &mut usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(cname: &u8, cname_length: usize, indexp: &mut usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&cname.as_bytes()[0], cname_length, &mut indexp, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(indexp, errcode);
 	}
 	
@@ -626,11 +818,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut cname: [u8; NAME_LENGTH_MAX] = [0;NAME_LENGTH_MAX];
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexp: &usize, cname: &mut u8, cname_length: usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(indexp: &usize, cname: &mut u8, cname_length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(from_utf8(&cname[0..clen(&cname)])?.to_owned(), errcode);
 	}
 	
@@ -641,11 +838,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut cname: [u8; NAME_LENGTH_MAX] = [0;NAME_LENGTH_MAX];
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexp: &usize, cname: &mut u8, cname_length: usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(indexp: &usize, cname: &mut u8, cname_length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(from_utf8(&cname)?.to_owned().trim().to_string(), errcode);
 	}
 	
@@ -655,12 +857,17 @@ impl Engine {
 	pub fn tqnop(&self) -> Result<usize, ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut nphase  = 0;
-			let mut errcode = 0;
+		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(nphase: &mut usize, errcode: &mut usize)>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(nphase: &mut usize, errcode: &mut usize)> = self.library.get(fname.as_bytes())?;
 			func(&mut nphase, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(nphase, errcode);
 	}
 	
@@ -673,11 +880,17 @@ impl Engine {
 		let mut errcode = 0;
 		let cname : CString = CString::new(name)?;
 		let cname_length = name.len();
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(cname: &u8, name_length: usize, indexp: &usize, indexc: &mut usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cname.as_bytes()[0], cname_length, &indexp, &mut indexc, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(indexc, errcode);
 	}
 	
@@ -688,11 +901,17 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut cname: [u8; NAME_LENGTH_MAX] = [0; NAME_LENGTH_MAX];
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, cname: &mut u8, cname_length: usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(from_utf8(&cname)?.to_owned(), errcode);
 	}
 	
@@ -703,11 +922,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut value = 0;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, value: &mut i32, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, value: &mut i32, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &mut value, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(value > 0, errcode);
 	}
 	
@@ -718,11 +942,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut nconst  = 0;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexp: &usize, nconst: &mut usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(indexp: &usize, nconst: &mut usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &mut nconst, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(nconst, errcode);
 	}
 	
@@ -736,10 +965,16 @@ impl Engine {
 		let mut stoi : Vec<f64> = vec![0.0;ncomp];
 		let mut wmass = 0.0f64;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(indexp: &usize, indexc: &usize, stoi: &mut f64, wmass: &mut f64, errcode: &mut usize)> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &mut stoi[0], &mut wmass, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((stoi, wmass), errcode);
 	}
 	
@@ -750,11 +985,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut charge = 0;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, charge: &mut i32, errcode: &mut usize)->()> 
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, charge: &mut i32, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &mut charge, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(charge, errcode);
 	}
 	
@@ -766,11 +1006,17 @@ impl Engine {
 		let cname: CString = CString::new(name)?;
 		let mut errcode = 0;
 		let mut indexc: usize = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(name: &u8, name_len: usize, indexp: &usize, indexl: &usize, indexc: &mut usize, errcode: &mut usize)->()> 
 				= self.library.get(fname.as_bytes())?;
 			func(&cname.as_bytes()[0], name.len(), &indexp, &indexl, &mut indexc, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(indexc, errcode);
 	}
 	
@@ -781,10 +1027,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut cname : [u8; NAME_LENGTH_MAX] = [0; NAME_LENGTH_MAX];
 		let mut errcode = 0usize;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(indexp: &usize, indexl: &usize, indexc: &usize, cname: &mut u8, cname_length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexl, &indexc, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(from_utf8(&cname)?.trim().to_owned(), errcode);
 	}
 	
@@ -795,11 +1047,17 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		let mut nosl: usize = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(indexp: &usize, nosl: &mut usize, errcode: &mut usize)->()> 
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &mut nosl, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(nosl, errcode);
 	}
 	
@@ -810,11 +1068,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		let mut nosc = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexp: &usize, index: &usize, nosc: &mut usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(indexp: &usize, index: &usize, nosc: &mut usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &index, &mut nosc, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(nosc, errcode);
 	}
 	
@@ -825,11 +1088,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut cstatus: [u8;NAME_LENGTH_MAX] = [0;NAME_LENGTH_MAX];
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexp: &usize, cstatus: &mut u8, cstatus_length: usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(indexp: &usize, cstatus: &mut u8, cstatus_length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &mut cstatus[0], NAME_LENGTH_MAX, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(from_utf8(&cstatus)?.to_owned(), errcode);
 	}
 	
@@ -841,11 +1109,16 @@ impl Engine {
 		let cstatus: CString = CString::new(status)?;
 		let cstatus_length = status.len();
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexp: &usize, cstatus: &u8, cstatus_length: usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(indexp: &usize, cstatus: &u8, cstatus_length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &cstatus.as_bytes()[0], cstatus_length, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -856,11 +1129,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut cstatus: [u8;NAME_LENGTH_MAX] = [0;NAME_LENGTH_MAX];
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, cstatus: &u8, cstatus_length: usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, cstatus: &u8, cstatus_length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &mut cstatus[0], NAME_LENGTH_MAX, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(from_utf8(&cstatus)?.to_owned(), errcode);
 	}
 	
@@ -872,11 +1150,16 @@ impl Engine {
 		let cstatus: CString = CString::new(status)?;
 		let cstatus_length = status.len();
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, status: &u8, status_length: usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, status: &u8, status_length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &cstatus.as_bytes()[0], cstatus_length, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -889,11 +1172,17 @@ impl Engine {
 		let option_length = option.len();
 		let mut numcon  = 0;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, val: &f64, numcon: &mut i32, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &val, &mut numcon, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(numcon, errcode);
 	}
 	
@@ -903,11 +1192,16 @@ impl Engine {
 	pub fn tqremc(&self, numcon: i32) -> Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(numcon: &i32, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(numcon: &i32, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&numcon, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -919,11 +1213,16 @@ impl Engine {
 		let mut errcode = 0;
 		let vals_ = [vals.0, vals.1];
 		let cidents: CString = CString::new(idents)?;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(idents: &u8, idents_len: usize, vals: &f64, errcode: &mut usize)->()> 
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(idents: &u8, idents_len: usize, vals: &f64, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&cidents.as_bytes()[0], idents.len(), &vals_[0], &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -934,11 +1233,17 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let cidents: CString = CString::new(idents)?;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(idents: &u8, idents_len: usize, indexp: &usize, indexc: &usize, val: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cidents.as_bytes()[0], idents.len(), &indexp, &indexc, &val, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -949,11 +1254,17 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let coption: CString = CString::new(option)?;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_len: usize, indexp: &usize, val: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option.len(), &indexp, &val, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -965,11 +1276,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let cidents: CString = CString::new(idents)?;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(idents: &u8, idents_len: usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(idents: &u8, idents_len: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&cidents.as_bytes()[0], idents.len(), &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -982,11 +1298,17 @@ impl Engine {
 		let option_length = option.len();
 		let vals_ : [f64;2] = [vals.0, vals.1];
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, vals: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &vals_[0], &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -999,11 +1321,17 @@ impl Engine {
 		let option_length = option.len();
 		let vals_ : [f64;2] = [vals.0, vals.1];
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, vals: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &vals_[0], &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -1015,12 +1343,18 @@ impl Engine {
 		let coption: CString = CString::new(option)?;
 		let option_length = option.len();
 		let vals_ : [f64;2] = [vals.0, vals.1];
-			let mut errcode = 0;
+		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, vals: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &vals_[0], &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -1033,11 +1367,17 @@ impl Engine {
 		let option_length = option.len();
 		let vals_ : [f64;2] = [vals.0, vals.1];
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, vals: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &vals_[0], &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -1050,11 +1390,17 @@ impl Engine {
 		let mut errcode = 0;
 		let mut icont : usize = 0;
 		let vals_: [f64;2] = [vals.0, vals.1];
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_len: usize, indexp: &usize, indexc: &usize, vals: &f64, icont: &mut usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option.len(), &indexp, &indexc, &vals_[0], &mut icont, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(icont, errcode);
 	}
 	
@@ -1067,11 +1413,17 @@ impl Engine {
 		let mut errcode = 0;
 		let mut icont : usize = 0;
 		let vals_: [f64;2] = [vals.0, vals.1];
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_len: usize, indexp: &usize, indexc: &usize, vals: &f64, icont: &mut usize, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option.len(), &indexp, &indexc, &vals_[0], &mut icont, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(icont, errcode);
 	}
 	
@@ -1083,11 +1435,17 @@ impl Engine {
 		let coption: CString = CString::new(option)?;
 		let option_length = option.len();
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, val: &f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &val, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -1097,11 +1455,16 @@ impl Engine {
 	pub fn tqshow(&self) -> Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -1114,11 +1477,17 @@ impl Engine {
 		let option_length = option.len();
 		let mut value = 0.0f64;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_length: usize, indexp: &usize, indexc: &usize, value: &mut f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &mut value, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(value, errcode);
 	}
 	
@@ -1130,13 +1499,18 @@ impl Engine {
 		let coption: CString = CString::new(option)?;
 		let mut fval = 0.0f64;
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(option: &u8, option_len: usize, indexp: &usize, index: &usize, fval: &mut f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&coption.as_bytes()[0], option.len(), &indexp, &index, &mut fval, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(fval, errcode);
-		
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -1148,11 +1522,17 @@ impl Engine {
 		let coption : CString = CString::new(option)?;
 		let mut errcode = 0;
 		let mut fval = 0.0f64;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(idents: &u8, idents_len: usize, option: &u8, option_len: usize, fval: &mut f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&cidents.as_bytes()[0], idents.len(), &coption.as_bytes()[0], option.len(), &mut fval, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(fval, errcode);
 	}
 	
@@ -1163,11 +1543,17 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		let mut fval = 0.0f64;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(indexp: &usize, indexl: &usize, indexc: &usize, fval: &mut f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexl, &indexc, &mut fval, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(fval, errcode);
 	}
 	
@@ -1177,12 +1563,18 @@ impl Engine {
 	pub fn tqbond(&self, indexp: usize, indexa: usize, indexb: usize, indexc: usize, indexd: usize)->Result<f64,ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut value = 0.0;
-			let mut errcode = 0;
+		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(indexp: &usize, indexa: &usize, indexb: &usize, indexc: &usize, indexd: &usize, value: &mut f64, errcode: &mut usize)->()>
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexa, &indexb, &indexc, &indexd, &mut value, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(value, errcode);
 	}
 	
@@ -1193,11 +1585,16 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut cmess : [u8; 80 * 3] = [0; 80 * 3];
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(message: &mut u8, message_len: usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(message: &mut u8, message_len: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&mut cmess[0], 80 * 3, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(from_utf8(&cmess)?.to_owned(), errcode);
 	}
 	
@@ -1207,15 +1604,20 @@ impl Engine {
 	pub fn tqgdat(&self, indexp: usize, indexc: usize, option: &str, indexr: usize)->Result<Vec<f64>,ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
-		//let mut fval = 0.0f64;
 		let mut fval = [0.0;25];
 		let mut nfval = 0usize;
 		let coption: CString = CString::new(option)?;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(indexp: &usize, indexc: &usize, option: &u8, option_len: usize, indexr: &usize, nfval: &mut usize, fval: &mut f64, errcode: &mut usize)->()> 
 				= self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &coption.as_bytes()[0], option.len(), &indexr, &mut nfval, &mut fval[0], &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result(fval[0..nfval].into_iter().copied().collect(), errcode);
 	}
 	
@@ -1229,10 +1631,16 @@ impl Engine {
 		let coption: CString = CString::new(option)?;
 		let mut lgtpar: [usize;1999] = [0usize;1999];
 		let mut chrpar: [[u8;156];1999] = [[0u8;156];1999];
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(indexp: &usize, option: &u8, option_len: usize, nopar: &mut usize, chrpar: &mut u8, chrpar_len: usize, lgtpar: &mut usize, noerr: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &coption.as_bytes()[0],option.len(),&mut nopar, &mut chrpar[0][0], 156, &mut lgtpar[0], &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		let vec : Vec<String> = chrpar.iter().take(nopar).map(|bytes| {String::from_utf8_lossy(bytes).trim().to_string()}).collect();
 		return wrap_result(vec, errcode);
 	}
@@ -1247,10 +1655,16 @@ impl Engine {
 		let mut noexpr = 0usize;
 		let mut nvala = 0usize;
 		let mut vala : [[f64;20];28] = [[0.0;20];28];
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(indexp: &usize, option: &u8, option_len: usize, indexx: &usize, noexpr: &mut usize, nvala: &mut usize, vala: &mut f64, noerr: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &coption.as_bytes()[0], option.len(), &indexx, &mut noexpr, &mut nvala, &mut vala[0][0], &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		let mut vecc : Vec<Vec<f64>> = Vec::new();
 		for k in 0..noexpr {
 			let mut vec : Vec<f64> = Vec::new();
@@ -1268,11 +1682,16 @@ impl Engine {
 	pub fn tqcdat(&self, i1: usize, i2: usize, i3: usize, i4: usize, i5: usize, val: f64)->Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(i1: &usize, i2: &usize, i3: &usize, i4: &usize, i5: &usize, val: &f64, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(i1: &usize, i2: &usize, i3: &usize, i4: &usize, i5: &usize, val: &f64, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&i1, &i2, &i3, &i4, &i5, &val, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 	
@@ -1284,11 +1703,16 @@ impl Engine {
 		let cfile = CString::new(file)?;
 		let cfile_length = file.len();
 		let mut errcode = 0;
+		/******************************************************************************************************/
+		#[cfg(target_family="windows")]
 		unsafe{
-			let func: Symbol<extern "system" fn(cfile: &u8, cfile_length: usize, errcode: &mut usize)->()>
-				= self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(cfile: &u8, cfile_length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&cfile.as_bytes()[0], cfile_length, &mut errcode);
 		}
+		/******************************************************************************************************/
+		#[cfg(target_family="unix")]
+		unsafe {todo!();}
+		/******************************************************************************************************/
 		return wrap_result((), errcode);
 	}
 }
