@@ -1,16 +1,11 @@
-// constituent.rs
-use nalgebra::{DVector};
 
-use crate::calculator::Calculator;
 
 /**********************************************************************************************************************/
 /**********************************************************************************************************************/
 
-#[derive(Debug)]
-pub struct Constituent<'a> {
-	calculator : &'a Calculator,
-	pub(crate) indexp : usize,
-	pub(crate) index  : usize,
+#[derive(Debug,Clone)]
+pub struct SystemComponentSnapshot {
+	
 }
 
 /**********************************************************************************************************************/

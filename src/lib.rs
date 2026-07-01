@@ -32,6 +32,7 @@ pub mod defs;
 pub mod native;
 pub mod iterator;
 pub mod calculator;
+pub mod snapshot;
 pub mod parse;
 pub mod cache;
 pub mod system;
