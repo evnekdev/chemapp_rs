@@ -106,31 +106,31 @@ impl<'a> Constituent<'a> {
 	}
 	
 	pub fn cp(&self)->f64 {
-		todo!();
+		return self.calculator.engine.tqgetr("CP", self.indexp, self.index).unwrap_or(f64::NAN);
 	}
 	
 	pub fn v(&self)->f64 {
-		todo!();
+		return self.calculator.engine.tqgetr("V", self.indexp, self.index).unwrap_or(f64::NAN);
 	}
 	
 	pub fn hm(&self)->f64 {
-		todo!();
+		return self.calculator.engine.tqgetr("HM", self.indexp, self.index).unwrap_or(f64::NAN);
 	}
 	
 	pub fn sm(&self)->f64 {
-		todo!();
+		return self.calculator.engine.tqgetr("SM", self.indexp, self.index).unwrap_or(f64::NAN);
 	}
 	
 	pub fn gm(&self)->f64 {
-		todo!();
+		return self.calculator.engine.tqgetr("GM", self.indexp, self.index).unwrap_or(f64::NAN);
 	}
 	
 	pub fn cpm(&self)->f64 {
-		todo!();
+		return self.calculator.engine.tqgetr("CPM", self.indexp, self.index).unwrap_or(f64::NAN);
 	}
 	
 	pub fn vm(&self)->f64 {
-		todo!();
+		return self.calculator.engine.tqgetr("VM", self.indexp, self.index).unwrap_or(f64::NAN);
 	}
 	
 }
