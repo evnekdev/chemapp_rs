@@ -25,22 +25,23 @@ use libloading::{Library};
 
 pub use crate::error::ChemAppError;
 pub use crate::calculator::{Calculator};
-pub use crate::iterator::{ComponentIterator, PhaseIterator, ConstituentIterator};
+//pub use crate::iterator::{ComponentIterator, PhaseIterator, ConstituentIterator};
 
 pub mod error;
 pub mod defs;
 pub mod native;
+pub mod entities;
 pub mod iterator;
 pub mod calculator;
 pub mod snapshot;
 pub mod parse;
 pub mod cache;
-pub mod system;
-pub mod component;
-pub mod phase;
-pub mod constituent;
-pub mod species;
-pub mod bond;
+//pub mod system;
+//pub mod component;
+//pub mod phase;
+//pub mod constituent;
+//pub mod species;
+//pub mod bond;
 
 static DEFAULT_LIBNAME : &str = r"ca_vc_e_local.dll";
 
@@ -116,11 +117,14 @@ pub struct TransparentHeader {
 /*****************************************************************************************************************************************************************************************************/
 /*****************************************************************************************************************************************************************************************************/
 
+/*
 impl<T> ComponentIterator for T where T : Iterator<Item=usize>{}
 
 impl<T> PhaseIterator for T where T : Iterator<Item=usize>{}
 
 impl<T> ConstituentIterator for T where T : Iterator<Item=(usize,usize)>{}
+
+*/
 
 /*****************************************************************************************************************************************************************************************************/
 /*****************************************************************************************************************************************************************************************************/

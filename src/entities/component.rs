@@ -3,7 +3,7 @@
 use nalgebra::{DVector};
 
 use crate::calculator::Calculator;
-use crate::phase::Phase;
+use crate::entities::phase::Phase;
 use crate::snapshot::SystemComponentSnapshot;
 
 /**********************************************************************************************************************/

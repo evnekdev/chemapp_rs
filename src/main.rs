@@ -1,8 +1,8 @@
 use chemapp_rs::{calculator::*};
 use nalgebra::{dvector};
-use chemapp_rs::ComponentIterator;
-use chemapp_rs::PhaseIterator;
-use chemapp_rs::ConstituentIterator;
+//use chemapp_rs::ComponentIterator;
+//use chemapp_rs::PhaseIterator;
+//use chemapp_rs::ConstituentIterator;
 
 pub fn main(){
 	println!("chemapp module");
@@ -11,6 +11,7 @@ pub fn main(){
 	engine.tqini();
 	engine.load_datafile(r"c:\_WORK\Continuous\diagrams\007_Al2O3-SiO2\MS15_Al-Si-O.dat");
 	*/
+	/*
 	let mut calculator = Calculator::from_library(r"ca_vc_e_local.dll", r"c:\_WORK\Continuous\diagrams\007_Al2O3-SiO2\BETA_Al-Si-O.dat").unwrap();
 	let _ = calculator.set_transform(&["SiO2","Al2O3"]);
 	let _ = calculator.calculate_isothermal(&dvector![0.1, 0.9], 2200.0);
@@ -24,4 +25,5 @@ pub fn main(){
 	for idx in (0..100).phases_valid(&calculator).phases_constituents(&calculator).constituents_hm(&calculator){
 		println!("idx = {:?}", &idx);
 	}
+	*/
 }

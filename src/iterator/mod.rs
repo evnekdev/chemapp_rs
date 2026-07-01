@@ -7,6 +7,6 @@ pub mod phase;
 pub mod constituent;
 
 
-pub use component::ComponentIterator;
-pub use phase::PhaseIterator;
-pub use constituent::ConstituentIterator;
+//pub use component::ComponentIterator;
+//pub use phase::PhaseIterator;
+//pub use constituent::ConstituentIterator;

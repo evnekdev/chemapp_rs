@@ -251,6 +251,8 @@ impl Calculator {
 	}
 	
 	fn calculate_target_x_from_left_(&self, x1: &DVector<f64>, x2: &DVector<f64>, temp: f64, target: usize)->Result<(),ChemAppError>{
+		todo!();
+		/*
 		let n_iter_max = 10;
 		let mut x_initial = x1.clone();
 		let mut x_other = x2;
@@ -266,6 +268,7 @@ impl Calculator {
 			x_other = x1;
 		}
 		return Err(ChemAppError::OtherError("Cannot converge X target".to_string()));
+		*/
 	}
 	/// Perform a composition search starting from `x1` until a required phase is met, use dynamic vectors; TODO check the composition transformations
 	pub fn calculate_target_x_from_left<D: Dim, S: Storage<f64,D>>(&self, x1: &Vector<f64,D,S>, x2: &Vector<f64,D,S>, temp: f64, target: usize)->Result<(),ChemAppError>{
