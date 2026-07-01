@@ -5,6 +5,7 @@
 #[derive(Debug,Clone)]
 pub struct PhaseSnapshot {
 	pub index: usize,
+	pub status : String,
 	pub name : String,
 	pub model: String,
 	pub a    : f64,
@@ -14,10 +15,12 @@ pub struct PhaseSnapshot {
 	pub s    : f64,
 	pub g    : f64,
 	pub cp   : f64,
+	pub v    : f64,
 	pub hm   : f64,
 	pub sm   : f64,
 	pub gm   : f64,
 	pub cpm  : f64,
+	pub vm   : f64,
 }
 
 /**********************************************************************************************************************/
