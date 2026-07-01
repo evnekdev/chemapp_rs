@@ -39,6 +39,8 @@ pub mod system;
 pub mod component;
 pub mod phase;
 pub mod constituent;
+pub mod species;
+pub mod bond;
 
 static DEFAULT_LIBNAME : &str = r"ca_vc_e_local.dll";
 

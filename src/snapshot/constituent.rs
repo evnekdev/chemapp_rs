@@ -3,7 +3,26 @@
 /**********************************************************************************************************************/
 
 #[derive(Debug,Clone)]
-pub struct ConstituentSnapshot {}
+pub struct ConstituentSnapshot {
+	pub indexp : usize,
+	pub index  : usize,
+	pub status : String,
+	pub name   : String,
+	pub ia     : f64,
+	pub a      : f64,
+	pub ac     : f64,
+	pub mu     : f64,
+	pub h      : f64,
+	pub s      : f64,
+	pub g      : f64,
+	pub cp     : f64,
+	pub v      : f64,
+	pub hm     : f64,
+	pub sm     : f64,
+	pub gm     : f64,
+	pub cpm    : f64,
+	pub vm     : f64,
+}
 
 /**********************************************************************************************************************/
 /**********************************************************************************************************************/

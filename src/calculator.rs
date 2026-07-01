@@ -5,7 +5,6 @@
 
 use std::path::Path;
 use std::ffi::OsStr;
-//use std::collections::{HashMap};
 use std::ops::{Range};
 use nalgebra::{DVector, SVector, Vector, Dim, Storage};
 use tempfile::NamedTempFile;
@@ -13,6 +12,7 @@ use chemformula::{Transform};
 
 use crate::{Engine, error::{ChemAppError}};
 use crate::cache::{ParameterCache};
+use crate::snapshot::CalculatorSnapshot;
 use crate::parse::*;
 use crate::iterator::phase::PhaseIterator;
 
@@ -271,84 +271,12 @@ impl Calculator {
 	pub fn calculate_target_x_from_left<D: Dim, S: Storage<f64,D>>(&self, x1: &Vector<f64,D,S>, x2: &Vector<f64,D,S>, temp: f64, target: usize)->Result<(),ChemAppError>{
 		return self.calculate_target_x_from_left_(&self.transform.transform_final2init(x1, false, false, false).column(0).into_owned(), &self.transform.transform_final2init(x2, false, false, false).column(0).into_owned(), temp, target);
 	}
-	/*
-	/// Returns the resulting system temperature
-	pub fn system_temperature(&self)->Result<f64,ChemAppError>{
-		return self.engine.tqgetr("T", 0, 0);
+	
+	/// Create a snapshot of the current state.
+	pub fn snapshot(&self)->CalculatorSnapshot {
+		todo!();
 	}
-	/// Returns the resulting system pressure
-	pub fn system_pressure(&self)->Result<f64,ChemAppError>{
-		return self.engine.tqgetr("P", 0, 0);
-	}
-	/// Returns the enthalpy of a phase
-	pub fn phase_h(&self, indexp: usize)->Result<f64,ChemAppError>{
-		return self.engine.tqgetr("H", indexp, 0);
-	}
-	/// Returns the Gibbs free energy of a phase
-	pub fn phase_g(&self, indexp: usize)->Result<f64,ChemAppError>{
-		return self.engine.tqgetr("G", indexp, 0);
-	}
-	/// Returns the entropy of a phase
-	pub fn phase_s(&self, indexp: usize)->Result<f64,ChemAppError>{
-		return self.engine.tqgetr("S", indexp, 0);
-	}
-	/// Returns the heat capacity of a phase
-	pub fn phase_cp(&self, indexp: usize)->Result<f64,ChemAppError>{
-		return self.engine.tqgetr("CP", indexp, 0);
-	}
-	/// Return the volume of a phase
-	pub fn phase_v(&self, indexp: usize)->Result<f64,ChemAppError>{
-		return self.engine.tqgetr("V", indexp, 0);
-	}
-	/// Returns the enthalpy of a phase per amount unit
-	pub fn phase_hm(&self, indexp: usize)->Result<f64,ChemAppError>{
-		return self.engine.tqgetr("HM", indexp, 0);
-	}
-	/// Returns the Gibbs free energy of a phase per amount unit
-	pub fn phase_gm(&self, indexp: usize)->Result<f64,ChemAppError>{
-		return self.engine.tqgetr("GM", indexp, 0);
-	}
-	/// Returns the entropy of a phase per amount unit
-	pub fn phase_sm(&self, indexp: usize)->Result<f64,ChemAppError>{
-		return self.engine.tqgetr("SM", indexp, 0);
-	}
-	/// Returns the heat capacity of a phase per amount unit
-	pub fn phase_cpm(&self, indexp: usize)->Result<f64,ChemAppError>{
-		return self.engine.tqgetr("CPM", indexp, 0);
-	}
-	/// Returns the volume of a phase per amount unit
-	pub fn phase_vm(&self, indexp: usize)->Result<f64,ChemAppError>{
-		return self.engine.tqgetr("VM", indexp, 0);
-	}
-	/// Composition of a phase (transformed), dynamic vectors
-	pub fn phase_composition(&self, indexp: usize)->Result<DVector<f64>, ChemAppError>{
-		let ncomp = self.engine.tqnosc()?;
-		let mut xp: DVector<f64> = DVector::zeros(ncomp);
-		for k in 0..ncomp {
-			xp[k] = self.engine.tqgetr("XP", indexp, k+1)?;
-		}
-		let xe : DVector<f64> = self.transform.transform_init2final(&xp, false, false, true).column(0).into_owned();
-		return Ok(xe);
-	}
-	/// Returns the stoichiometry of a phase constituent in the input basis
-	pub fn constituent_stoichiometry_full(&self, indexp: usize, indexc: usize)->Result<DVector<f64>, ChemAppError>{
-		let comp_s : DVector<f64> = self.engine.tqstpc(indexp, indexc).unwrap().0.into();
-		let comp_ : DVector<f64> = self.transform.transform_init2final(&comp_s, false, false, false).column(0).into_owned();
-		return Ok(comp_);
-	}
-	/// Number of independent formula units in the input basis
-	pub fn number_endmembers(&self)->usize{
-		return self.transform.number_final();
-	}
-	/// Returns the normalized stoichiometry of a phase constituent in the input basis
-	pub fn constituent_stoichiometry_reduced(&self, indexp: usize, indexc: usize)->Result<(DVector<f64>,f64),ChemAppError>{
-		let comp_s : DVector<f64> = self.engine.tqstpc(indexp, indexc).unwrap().0.into();
-		let mut comp_ : DVector<f64> = self.transform.transform_init2final(&comp_s, false, false, false).column(0).into_owned();
-		let ntotal = comp_.sum();
-		comp_ /= ntotal;
-		return Ok((comp_,ntotal));
-	}
-	*/
+	
 	/// Lists the Gibbs free energy excess interactions in a phase as-is (species indices are used which are subject to change from a datafile to a datafile)
 	pub fn interactions_ge_expanded(&self, indexp: usize)->Result<Vec<String>,ChemAppError>{
 		let interactions0 : Vec<String> = self.engine.tqlpar(indexp, "G")?;
