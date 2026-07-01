@@ -159,7 +159,7 @@ impl Calculator {
 		let parent = Path::new(&self.engine.library_name).parent().expect("Does not have a parent directory").to_path_buf();
 		let temp_file = NamedTempFile::new_in(parent).unwrap();
 		let temp_file_ = temp_file.keep().unwrap().1;
-		let filename :String = temp_file_.to_string_lossy().into_owned();
+		let filename : String = temp_file_.to_string_lossy().into_owned();
 		let unit = 30;
 		self.engine.tqopen(&filename,unit)?;
 		self.engine.tqcio("ERROR",unit)?;
