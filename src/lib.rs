@@ -34,6 +34,10 @@ pub mod iterator;
 pub mod calculator;
 pub mod parse;
 pub mod cache;
+pub mod system;
+pub mod component;
+pub mod phase;
+pub mod constituent;
 
 static DEFAULT_LIBNAME : &str = r"ca_vc_e_local.dll";
 

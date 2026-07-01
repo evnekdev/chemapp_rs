@@ -153,6 +153,7 @@ impl Calculator {
 		self.engine.tqremc(-2)?;
 		return Ok(());
 	}
+	
 	/// Iterates over system component indices.
 	pub fn components(&self)->Result<Range<usize>,ChemAppError>{
 		return Ok(1..self.engine.tqnosc()?+1);
@@ -169,13 +170,30 @@ impl Calculator {
 	pub fn names_phases(&self)->Result<Vec<String>,ChemAppError>{
 		return Ok((0..self.engine.tqnop()?).into_iter().map(|idx| self.engine.tqgnp(idx+1)).filter_map(|r| r.ok()).collect());
 	}
+	
+	
+		/// set (tlower, thigh) limits
+	pub fn set_clim(&self, interval: (f64,f64), inverse_order: bool){
+		if inverse_order {
+			let res = self.engine.tqclim("THIGH", interval.1);
+			match res {
+				Ok(_) => {self.engine.tqclim("TLOW", interval.0).unwrap();}
+				Err(_) => {self.set_clim(interval, false);}
+			}
+		} else {
+			let res = self.engine.tqclim("TLOW", interval.0);
+			match res {
+				Ok(_) => {self.engine.tqclim("THIGH", interval.1).unwrap();}
+				Err(_) => {self.set_clim(interval, true);}
+			}
+		}
+	}
+	
 	/// A simple isothermal calculation (temperature + initial composition in the pre-transformed basis).
 	fn calculate_isothermal_(&self, x_i: &DVector<f64>, temp: f64)->Result<(),ChemAppError>{
 		self.reset()?;
 		self.engine.tqsetc("T", 0, 0, temp)?;
-		for k in 0..x_i.len(){
-			self.engine.tqsetc("IA", 0, k+1, x_i[k])?;
-		}
+		for k in 0..x_i.len(){self.engine.tqsetc("IA", 0, k+1, x_i[k])?;}
 		//self.engine.tqshow();
 		self.engine.tqce(" ", 0, 0, (10.0, 6000.0))?;
 		//self.number_isothermal += 1;
@@ -212,7 +230,7 @@ impl Calculator {
 					if iter > 0 {
 						xvar = (&xvar + &xvarprev)*0.5;
 					}
-					println!("iter = {:?}, tliq = {:?}, xfold = {:?}, xaold = {:?}, xfnew = {:?}, xanew = {:?}, xvarprev = {:?}, xvar = {:?}", &iter, &tliq, &xfold, &xaold, &xfnew, &xanew, &xvarprev, &xvar);
+					//println!("iter = {:?}, tliq = {:?}, xfold = {:?}, xaold = {:?}, xfnew = {:?}, xanew = {:?}, xvarprev = {:?}, xvar = {:?}", &iter, &tliq, &xfold, &xaold, &xfnew, &xanew, &xvarprev, &xvar);
 					if (&xvar-&xvarprev).abs().sum() < 5e-3 {return Ok(());}
 				}
 			}
@@ -226,33 +244,6 @@ impl Calculator {
 		}
 		//self.number_target_t += 1;
 		return Ok(());
-	}
-	/// set (tlower, thigh) limits
-	pub fn set_clim(&self, interval: (f64,f64), inverse_order: bool){
-		if inverse_order {
-		//println!("<THIGH>, TLOW");
-		let res = self.engine.tqclim("THIGH", interval.1);
-		match res {
-			Ok(_) => {
-				self.engine.tqclim("TLOW", interval.0).unwrap();
-			}
-			Err(_) => {
-				self.set_clim(interval, false);
-			}
-		}
-	} else {
-		//println!("<TLOW>, THIGH");
-		let res = self.engine.tqclim("TLOW", interval.0);
-		match res {
-			Ok(_) => {
-				//println!("TLOW, <THIGH>");
-				self.engine.tqclim("THIGH", interval.1).unwrap();
-			}
-			Err(_) => {
-				self.set_clim(interval, true);
-			}
-		}
-	}
 	}
 	/// Perform a T-target calculation for an input composition and a temperature, use dynamic vectors; TODO check the composition transformations
 	pub fn calculate_target_t<D: Dim, S: Storage<f64,D>>(&self, compositions: &Vector<f64,D,S>, masterphase: usize, target: usize, interval: (f64,f64), precipitation: bool, fixed: Option<usize>, adjusting: Option<usize>)->Result<(),ChemAppError>{
@@ -280,7 +271,7 @@ impl Calculator {
 	pub fn calculate_target_x_from_left<D: Dim, S: Storage<f64,D>>(&self, x1: &Vector<f64,D,S>, x2: &Vector<f64,D,S>, temp: f64, target: usize)->Result<(),ChemAppError>{
 		return self.calculate_target_x_from_left_(&self.transform.transform_final2init(x1, false, false, false).column(0).into_owned(), &self.transform.transform_final2init(x2, false, false, false).column(0).into_owned(), temp, target);
 	}
-	
+	/*
 	/// Returns the resulting system temperature
 	pub fn system_temperature(&self)->Result<f64,ChemAppError>{
 		return self.engine.tqgetr("T", 0, 0);
@@ -357,6 +348,7 @@ impl Calculator {
 		comp_ /= ntotal;
 		return Ok((comp_,ntotal));
 	}
+	*/
 	/// Lists the Gibbs free energy excess interactions in a phase as-is (species indices are used which are subject to change from a datafile to a datafile)
 	pub fn interactions_ge_expanded(&self, indexp: usize)->Result<Vec<String>,ChemAppError>{
 		let interactions0 : Vec<String> = self.engine.tqlpar(indexp, "G")?;
