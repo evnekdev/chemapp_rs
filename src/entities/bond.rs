@@ -51,22 +51,22 @@ impl<'a> Bond<'a> {
 	}
 	
 	/// first cation
-	pub fn species1(&self)->Species {
+	pub fn species1(&self)->Species<'_> {
 		return Species::new(self.calculator, self.indexp, 1, self.indexs1);
 	}
 	
 	/// second cation
-	pub fn species2(&self)->Species {
+	pub fn species2(&self)->Species<'_> {
 		return Species::new(self.calculator, self.indexp, 1, self.indexs2);
 	}
 	
 	/// first anion
-	pub fn species3(&self)->Species {
+	pub fn species3(&self)->Species<'_> {
 		return Species::new(self.calculator, self.indexp, 2, self.indexs3);
 	}
 	
 	/// second anion
-	pub fn species4(&self)->Species {
+	pub fn species4(&self)->Species<'_> {
 		return Species::new(self.calculator, self.indexp, 2, self.indexs4);
 	}
 	
