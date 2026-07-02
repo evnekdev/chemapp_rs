@@ -14,7 +14,8 @@ use crate::{Engine, error::{ChemAppError}};
 use crate::cache::{ParameterCache};
 use crate::snapshot::CalculatorSnapshot;
 use crate::parse::*;
-use crate::iterator::phase::PhaseIterator;
+use crate::iterator::SystemComponentIterator;
+use crate::iterator::PhaseIterator;
 
 /*******************************************************************************************************************************************************************************************************************************/
 /*******************************************************************************************************************************************************************************************************************************/
@@ -151,7 +152,7 @@ impl Calculator {
 	}
 	/// Set a formula transform for input compositions
 	pub fn set_transform<T: AsRef<str>>(&mut self, basis: &[T])->Result<(),ChemAppError>{
-		self.transform = Transform::new(&self.names_components().unwrap(), basis, true).unwrap();
+		self.transform = Transform::new(&self.components().map(|c| c.name()).collect::<Vec<String>>(), basis, true).unwrap();
 		return Ok(());
 	}
 	/// Internally, creates a temporary file (deleted once the current `Calculator` instance is dropped) to redirect ChemApp outputs; this is a useful feature in environments where console window is not available.
@@ -180,20 +181,12 @@ impl Calculator {
 	/***************************************************************************************************************************************************************************************************************************/
 	
 	/// Iterates over system component indices.
-	pub fn components(&self)->Result<Range<usize>,ChemAppError>{
-		return Ok(1..self.engine.tqnosc()?+1);
+	pub fn components(&self)->SystemComponentIterator {
+		return SystemComponentIterator::new(self);
 	}
 	/// Iterates over phase indices.
-	pub fn phases(&self)->Result<Range<usize>,ChemAppError>{
-		return Ok(1..self.engine.tqnop()?+1);
-	}
-	/// Iterates over system component names.
-	pub fn names_components(&self)->Result<Vec<String>,ChemAppError>{
-		return Ok((0..self.engine.tqnosc()?).into_iter().map(|idx| self.engine.tqgnsc(idx+1)).filter_map(|r| r.ok()).collect());
-	}
-	/// Iterates over phase names
-	pub fn names_phases(&self)->Result<Vec<String>,ChemAppError>{
-		return Ok((0..self.engine.tqnop()?).into_iter().map(|idx| self.engine.tqgnp(idx+1)).filter_map(|r| r.ok()).collect());
+	pub fn phases(&self)->PhaseIterator {
+		return PhaseIterator::new(self);
 	}
 	
 	/***************************************************************************************************************************************************************************************************************************/
@@ -204,13 +197,13 @@ impl Calculator {
 		if inverse_order {
 			let res = self.engine.tqclim("THIGH", interval.1);
 			match res {
-				Ok(_) => {self.engine.tqclim("TLOW", interval.0).unwrap();}
+				Ok(_)  => {self.engine.tqclim("TLOW", interval.0).unwrap();}
 				Err(_) => {self.set_clim(interval, false);}
 			}
 		} else {
 			let res = self.engine.tqclim("TLOW", interval.0);
 			match res {
-				Ok(_) => {self.engine.tqclim("THIGH", interval.1).unwrap();}
+				Ok(_)  => {self.engine.tqclim("THIGH", interval.1).unwrap();}
 				Err(_) => {self.set_clim(interval, true);}
 			}
 		}
@@ -310,7 +303,7 @@ impl Calculator {
 	
 	/// Create a snapshot of the current state.
 	pub fn snapshot(&self)->CalculatorSnapshot {
-		todo!();
+		return CalculatorSnapshot::new(self);
 	}
 	
 	/***************************************************************************************************************************************************************************************************************************/
