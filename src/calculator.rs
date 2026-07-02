@@ -376,7 +376,7 @@ impl Calculator {
 	
 	/***************************************************************************************************************************************************************************************************************************/
 	/***************************************************************************************************************************************************************************************************************************/
-	/// A higher-level abstaction over `tqmap` and `tqmapl` ChemApp routines
+	/// A higher-level abstraction over `tqmap` and `tqmapl` ChemApp routines
 	pub fn mapping_temperature(&self, tmin: f64, tmax: f64, list: bool)->Result<Vec<CalculatorSnapshot>,ChemAppError>{
 		let func = |option: &str, indexp: usize, indexc: usize, vals: (f64,f64)| { if list {self.engine.tqmap(option, indexp, indexp, vals)} else {self.engine.tqmapl(option, indexp, indexp, vals)}};
 		let icont = func("TF", 0, 0, (tmin,tmax))?;
@@ -386,6 +386,22 @@ impl Calculator {
 		let mut vecc : Vec<CalculatorSnapshot> = vec![snap_first];
 		if icont > 0 {
 			icont = func("TN", 0, 0, (tmin,tmax))?;
+			vecc.push(self.snapshot());
+		}
+		vecc.push(snap_last);
+		return Ok(vecc);
+	}
+	
+	/// A higher-level abstraction over `tqmap` and `tqmapl` ChemApp routines
+	pub fn mapping_pressure(&self, pmin: f64, pmax: f64, list: bool)->Result<Vec<CalculatorSnapshot>,ChemAppError> {
+		let func = |option: &str, indexp: usize, indexc: usize, vals: (f64,f64)| { if list {self.engine.tqmap(option, indexp, indexp, vals)} else {self.engine.tqmapl(option, indexp, indexp, vals)}};
+		let icont = func("PF", 0, 0, (pmin,pmax))?;
+		let snap_first = self.snapshot();
+		let mut icont = func("PN", 0, 0, (pmin,pmax))?;
+		let snap_last  = self.snapshot();
+		let mut vecc : Vec<CalculatorSnapshot> = vec![snap_first];
+		if icont > 0 {
+			icont = func("PN", 0, 0, (pmin,pmax))?;
 			vecc.push(self.snapshot());
 		}
 		vecc.push(snap_last);
