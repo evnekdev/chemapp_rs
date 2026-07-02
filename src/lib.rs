@@ -24,8 +24,9 @@ extern crate libloading;
 use libloading::{Library};
 
 pub use crate::error::ChemAppError;
-pub use crate::calculator::{Calculator};
-//pub use crate::iterator::{ComponentIterator, PhaseIterator, ConstituentIterator};
+pub use crate::native::Engine;
+pub use crate::calculator::Calculator;
+pub use crate::iterator::{SystemComponentIterator, PhaseIterator, ConstituentIterator, SpeciesIterator, BondIterator};
 
 pub mod error;
 pub mod defs;
@@ -36,32 +37,11 @@ pub mod calculator;
 pub mod snapshot;
 pub mod parse;
 pub mod cache;
-//pub mod system;
-//pub mod component;
-//pub mod phase;
-//pub mod constituent;
-//pub mod species;
-//pub mod bond;
 
 static DEFAULT_LIBNAME : &str = r"ca_vc_e_local.dll";
 
 /*****************************************************************************************************************************************************************************************************/
 /*****************************************************************************************************************************************************************************************************/
-
-/// An encapsulation of a single loaded DLL - different instances correspond to different DLLs. ChemApp tq... functions are exported as methods, rather than independent functions to support multiple DLL loading.
-#[derive(Debug)]
-pub struct Engine {
-	pub n_isothermal: usize,
-	pub n_target: usize,
-	library_name: String,
-	library: Library,
-}
-
-impl Default for Engine {
-	fn default()->Engine {
-		return Engine::new(DEFAULT_LIBNAME).unwrap();
-	}
-}
 
 /// An abstraction over system info returned by `tqused` and `tqsize` functions.
 #[derive(Debug)]

@@ -11,7 +11,8 @@ use std::cmp::{min};
 use std::ffi::{CString};
 use function_name::{named};
 
-use crate::{Engine, SystemDimensions, TransparentHeader};
+use crate::DEFAULT_LIBNAME;
+use crate::{SystemDimensions, TransparentHeader};
 use crate::defs::{FUNCSWIN32,FUNCSWIN64,FUNCSUNIX32,FUNCSUNIX64};
 use crate::error::{ChemAppError};
 
@@ -53,6 +54,24 @@ fn wrap_result<T>(result: T, errcode: usize)->Result<T, ChemAppError>{
 	match errcode {
 		0 => Ok(result),
 		_ => Err(ChemAppError::NativeError(errcode)),
+	}
+}
+
+/*********************************************************************************************************************************************************************************************************/
+/*********************************************************************************************************************************************************************************************************/
+
+/// An encapsulation of a single loaded DLL - different instances correspond to different DLLs. ChemApp tq... functions are exported as methods, rather than independent functions to support multiple DLL loading.
+#[derive(Debug)]
+pub struct Engine {
+	pub n_isothermal: usize,
+	pub n_target: usize,
+	pub(crate) library_name: String,
+	library: Library,
+}
+
+impl Default for Engine {
+	fn default()->Engine {
+		return Engine::new(DEFAULT_LIBNAME).unwrap();
 	}
 }
 
