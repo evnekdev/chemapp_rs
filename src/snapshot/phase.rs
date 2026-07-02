@@ -1,4 +1,9 @@
 
+use crate::entities::phase::Phase;
+use crate::snapshot::ConstituentSnapshot;
+use crate::snapshot::SpeciesSnapshot;
+use crate::snapshot::BondSnapshot;
+
 /**********************************************************************************************************************/
 /**********************************************************************************************************************/
 
@@ -21,6 +26,17 @@ pub struct PhaseSnapshot {
 	pub gm   : f64,
 	pub cpm  : f64,
 	pub vm   : f64,
+	pub constituents : Vec<ConstituentSnapshot>,
+	pub species : Vec<SpeciesSnapshot>,
+	pub bonds   : Vec<BondSnapshot>,
+}
+
+impl PhaseSnapshot {
+	
+	pub fn new(phase: &Phase)->Self {
+		todo!();
+	}
+	
 }
 
 /**********************************************************************************************************************/

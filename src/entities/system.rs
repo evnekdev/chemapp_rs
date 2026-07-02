@@ -25,12 +25,7 @@ impl<'a> System<'a> {
 	
 	/// Create a snapshot instance
 	pub fn snapshot(&self)->SystemSnapshot {
-		return SystemSnapshot {
-			t : self.t(),
-			p : self.p(),
-			vt: self.vt(),
-			a : self.a(),
-		};
+		return SystemSnapshot::new(self);
 	}
 	
 	/// system temperature

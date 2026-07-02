@@ -1,4 +1,5 @@
 
+use crate::entities::component::SystemComponent;
 
 /**********************************************************************************************************************/
 /**********************************************************************************************************************/
@@ -10,6 +11,20 @@ pub struct SystemComponentSnapshot {
 	pub a    : f64,
 	pub ac   : f64,
 	pub mu   : f64,
+}
+
+impl SystemComponentSnapshot {
+	
+	pub fn new(component: &SystemComponent)->Self {
+		return SystemComponentSnapshot {
+			name : component.name(),
+			ia   : component.ia(),
+			a    : component.a(),
+			ac   : component.ac(),
+			mu   : component.mu(),
+		};
+	}
+	
 }
 
 /**********************************************************************************************************************/

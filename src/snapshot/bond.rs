@@ -1,6 +1,6 @@
 // chemapp_rs::snapshot::bond.rs
 
-
+#[derive(Debug,Clone)]
 pub struct BondSnapshot {
 	pub indexp   : usize,
 	pub indexs1  : usize,

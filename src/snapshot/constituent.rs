@@ -1,4 +1,6 @@
 
+use crate::entities::constituent::Constituent;
+
 /**********************************************************************************************************************/
 /**********************************************************************************************************************/
 
@@ -22,6 +24,33 @@ pub struct ConstituentSnapshot {
 	pub gm     : f64,
 	pub cpm    : f64,
 	pub vm     : f64,
+}
+
+impl ConstituentSnapshot {
+	
+	pub fn new(constituent: &Constituent)->Self {
+		return Self {
+			indexp : constituent.indexp,
+			index  : constituent.index,
+			status : constituent.status(),
+			name   : constituent.name(),
+			ia     : constituent.ia(),
+			a      : constituent.a(),
+			ac     : constituent.ac(),
+			mu     : constituent.mu(),
+			h      : constituent.h(),
+			s      : constituent.s(),
+			g      : constituent.g(),
+			cp     : constituent.cp(),
+			v      : constituent.v(),
+			hm     : constituent.hm(),
+			sm     : constituent.sm(),
+			gm     : constituent.gm(),
+			cpm    : constituent.cpm(),
+			vm     : constituent.vm(),
+		};
+	}
+	
 }
 
 /**********************************************************************************************************************/

@@ -18,15 +18,22 @@ pub use bond::BondSnapshot;
 /// A snapshot of a calculator state
 #[derive(Debug,Clone)]
 pub struct CalculatorSnapshot {
-	system : SystemSnapshot,
+	system     : SystemSnapshot,
 	components : Vec<SystemComponentSnapshot>,
-	phases : Vec<PhaseSnapshot>,
+	phases     : Vec<PhaseSnapshot>,
 }
 
 impl CalculatorSnapshot {
 	
 	pub fn new(calculator: &Calculator)->Self {
-		todo!();
+		let system = calculator.system().snapshot();
+		let components : Vec<SystemComponentSnapshot> = calculator.components().map(|c| c.snapshot()).collect();
+		let phases : Vec<PhaseSnapshot> = calculator.phases().map(|p| p.snapshot()).collect();
+		return Self {
+			system,
+			components,
+			phases,
+		};
 	}
 	
 }

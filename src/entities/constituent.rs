@@ -31,26 +31,7 @@ impl<'a> Constituent<'a> {
 	
 	/// make a snapshot of the current state
 	pub fn snapshot(&self)->ConstituentSnapshot {
-		return ConstituentSnapshot {
-			indexp : self.indexp,
-			index  : self.index,
-			status : self.status(),
-			name   : self.name(),
-			ia     : self.ia(),
-			a      : self.a(),
-			ac     : self.ac(),
-			mu     : self.mu(),
-			h      : self.h(),
-			s      : self.s(),
-			g      : self.g(),
-			cp     : self.cp(),
-			v      : self.v(),
-			hm     : self.hm(),
-			sm     : self.sm(),
-			gm     : self.gm(),
-			cpm    : self.cpm(),
-			vm     : self.vm(),
-		};
+		return ConstituentSnapshot::new(self);
 	}
 	
 	

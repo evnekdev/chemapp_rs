@@ -33,40 +33,22 @@ impl<'a> Phase<'a> {
 	
 	/// take a snapshot of the current phase state
 	pub fn snapshot(&self)->PhaseSnapshot {
-		return PhaseSnapshot {
-			index : self.index,
-			status: self.status(),
-			name  : self.name(),
-			model : self.model(),
-			a     : self.a(),
-			ac    : self.ac(),
-			mu    : self.mu(),
-			h     : self.h(),
-			s     : self.s(),
-			g     : self.g(),
-			cp    : self.cp(),
-			v     : self.v(),
-			hm    : self.hm(),
-			sm    : self.sm(),
-			gm    : self.gm(),
-			cpm   : self.cpm(),
-			vm    : self.vm(),
-		};
+		return PhaseSnapshot::new(self);
 	}
 	
 	/// Iterate over species in the phase
 	pub fn species(&self)->SpeciesIterator<'_>{
-		todo!();
+		return SpeciesIterator::new(self.calculator, self.index);
 	}
 	
 	/// Iterate over bonds (if any)
 	pub fn bonds(&self)->BondIterator<'_>{
-		todo!();
+		return BondIterator::new(self.calculator, self.index);
 	}
 	
 	/// Iterate over phase constituents in the phase
 	pub fn constituents(&self)->ConstituentIterator<'_>{
-		todo!();
+		return ConstituentIterator::new(self.calculator, self.index);
 	}
 	
 	/// `true` if the phase index is between 1 and number of phases

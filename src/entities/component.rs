@@ -30,13 +30,7 @@ impl<'a> SystemComponent<'a> {
 	}
 	
 	pub fn snapshot(&self)->SystemComponentSnapshot {
-		return SystemComponentSnapshot {
-			name : self.name(),
-			ia   : self.ia(),
-			a    : self.a(),
-			ac   : self.ac(),
-			mu   : self.mu(),
-		};
+		return SystemComponentSnapshot::new(self);
 	}
 	
 	/// `true` if the inner index corresponds to an existing system component
