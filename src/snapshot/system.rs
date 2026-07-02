@@ -1,5 +1,5 @@
 // chemapp_rs::snapshot::system.rs
-// Snapshot of global system properties.
+//! Snapshot of global system properties.
 
 use crate::entities::system::System;
 

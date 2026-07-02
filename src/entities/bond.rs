@@ -1,4 +1,5 @@
 // chemapp_rs::bond.rs
+//! MQM bond representation (not valid for all phases)
 
 use crate::Calculator;
 use crate::snapshot::BondSnapshot;
