@@ -4,6 +4,9 @@ use nalgebra::{DVector};
 
 use crate::calculator::Calculator;
 use crate::snapshot::PhaseSnapshot;
+use crate::iterator::ConstituentIterator;
+use crate::iterator::SpeciesIterator;
+use crate::iterator::BondIterator;
 
 /**********************************************************************************************************************/
 /**********************************************************************************************************************/
@@ -49,6 +52,21 @@ impl<'a> Phase<'a> {
 			cpm   : self.cpm(),
 			vm    : self.vm(),
 		};
+	}
+	
+	/// Iterate over species in the phase
+	pub fn species(&self)->SpeciesIterator<'_>{
+		todo!();
+	}
+	
+	/// Iterate over bonds (if any)
+	pub fn bonds(&self)->BondIterator<'_>{
+		todo!();
+	}
+	
+	/// Iterate over phase constituents in the phase
+	pub fn constituents(&self)->ConstituentIterator<'_>{
+		todo!();
 	}
 	
 	/// `true` if the phase index is between 1 and number of phases
