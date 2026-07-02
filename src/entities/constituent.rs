@@ -58,6 +58,11 @@ impl<'a> Constituent<'a> {
 		todo!();
 	}
 	
+	/// charge of a phase constituent
+	pub fn charge(&self)->i32 {
+		return self.calculator.engine.tqchar(self.indexp, self.index).unwrap_or(0);
+	}
+	
 	/// molar mass
 	pub fn wmass(&self)->f64 {
 		let ncomp = self.calculator.engine.tqnosc().unwrap_or(0);

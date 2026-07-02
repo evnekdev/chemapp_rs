@@ -32,16 +32,28 @@ impl<'a> Species<'a> {
 	
 	/// make a snapshot of the current state
 	pub fn snapshot(&self)->SpeciesSnapshot {
-		todo!();
+		return SpeciesSnapshot {
+			indexp : self.indexp,
+			indexl : self.indexl,
+			indexs : self.indexs,
+			name   : self.name(),
+			x      : self.x(),
+		};
 	}
 	
 	/// species name
 	pub fn name(&self)->String {
-		todo!();
+		return self.calculator.engine.tqgnlc(self.indexp, self.indexl, self.indexs).unwrap_or("<NONE>".to_owned());
 	}
 	
-	pub fn sublattice(&self)->String {
-		todo!();
+	/// sublattice index
+	pub fn sublattice(&self)->usize {
+		return self.indexl;
+	}
+	
+	/// calculated equilibrium sublattice site fraction
+	pub fn x(&self)->f64 {
+		return self.calculator.engine.tqgtlc(self.indexp, self.indexl, self.indexs).unwrap_or(f64::NAN);
 	}
 	
 }
