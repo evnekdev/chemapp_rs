@@ -16,6 +16,7 @@ use crate::snapshot::CalculatorSnapshot;
 use crate::parse::*;
 use crate::iterator::SystemComponentIterator;
 use crate::iterator::PhaseIterator;
+use crate::entities::system::System;
 
 /*******************************************************************************************************************************************************************************************************************************/
 /*******************************************************************************************************************************************************************************************************************************/
@@ -180,12 +181,17 @@ impl Calculator {
 	/***************************************************************************************************************************************************************************************************************************/
 	/***************************************************************************************************************************************************************************************************************************/
 	
+	/// Global system properties accessor.
+	pub fn system(&self)->System<'_>{
+		return System::new(self);
+	}
+	
 	/// Iterates over system component indices.
-	pub fn components(&self)->SystemComponentIterator {
+	pub fn components(&self)->SystemComponentIterator<'_> {
 		return SystemComponentIterator::new(self);
 	}
 	/// Iterates over phase indices.
-	pub fn phases(&self)->PhaseIterator {
+	pub fn phases(&self)->PhaseIterator<'_> {
 		return PhaseIterator::new(self);
 	}
 	

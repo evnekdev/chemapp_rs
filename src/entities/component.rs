@@ -30,7 +30,13 @@ impl<'a> SystemComponent<'a> {
 	}
 	
 	pub fn snapshot(&self)->SystemComponentSnapshot {
-		todo!();
+		return SystemComponentSnapshot {
+			name : self.name(),
+			ia   : self.ia(),
+			a    : self.a(),
+			ac   : self.ac(),
+			mu   : self.mu(),
+		};
 	}
 	
 	/// `true` if the inner index corresponds to an existing system component
@@ -38,18 +44,21 @@ impl<'a> SystemComponent<'a> {
 		return self.index > 0 && self.index <= self.calculator.engine.tqnosc().unwrap_or(0);
 	}
 	
+	/// system component name
 	pub fn name(&self)->String {
-		todo!();
+		return self.calculator.engine.tqgnsc(self.index).unwrap_or("<NONE>".to_owned());
 	}
 	
 	/// Molar mass
 	pub fn wmass(&self)->f64 {
-		todo!();
+		let ncomp = self.calculator.engine.tqnosc().unwrap_or(0);
+		return self.calculator.engine.tqstsc(self.index).unwrap_or((vec![f64::NAN;ncomp],f64::NAN)).1;
 	}
 	
 	/// Stoichiometry vector
-	pub fn stoic(&self)->DVector<f64>{
-		todo!();
+	pub fn stoic(&self)->Vec<f64>{
+		let ncomp = self.calculator.engine.tqnosc().unwrap_or(0);
+		return self.calculator.engine.tqstsc(self.index).unwrap_or((vec![f64::NAN;ncomp],f64::NAN)).0;
 	}
 	
 	/// Input amount
@@ -80,13 +89,13 @@ impl<'a> SystemComponent<'a> {
 	/// Molar/weight fraction in a phase
 	pub fn xp(&self, phase: &Phase)->f64 {
 		// TODO check calculator instance is the same.
-		todo!();
+		return self.calculator.engine.tqgetr("XP", phase.index, self.index).unwrap_or(f64::NAN);
 	}
 	
 	/// Amount in a phase
 	pub fn ap(&self, phase: &Phase)->f64 {
 		// TODO check calculator instance is the same.
-		todo!();
+		return self.calculator.engine.tqgetr("AP", phase.index, self.index).unwrap_or(f64::NAN);
 	}
 	
 }

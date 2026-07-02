@@ -5,7 +5,11 @@
 
 #[derive(Debug,Clone)]
 pub struct SystemComponentSnapshot {
-	
+	pub name : String,
+	pub ia   : f64,
+	pub a    : f64,
+	pub ac   : f64,
+	pub mu   : f64,
 }
 
 /**********************************************************************************************************************/
