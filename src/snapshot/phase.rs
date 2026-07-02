@@ -1,3 +1,5 @@
+// chemapp_rs::snapshot::phase.rs
+//! Phase snapshot : index, name + calculated properties + constituents + species + bonds
 
 use crate::entities::phase::Phase;
 use crate::snapshot::ConstituentSnapshot;

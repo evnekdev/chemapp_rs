@@ -1,4 +1,6 @@
 // chemapp_rs::entities.rs
+//! Higher-order abstractions for system components, phases, etc.
+
 
 pub mod system;
 pub mod component;

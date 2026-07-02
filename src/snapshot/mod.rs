@@ -1,4 +1,5 @@
 // Calculator state snapshot
+//! Implementations of snapshot entities, which are not connected to an `Engine` instance and serve to keep a copy of a calculated state.
 
 pub mod system;
 pub mod component;
@@ -14,6 +15,9 @@ pub use phase::PhaseSnapshot;
 pub use constituent::ConstituentSnapshot;
 pub use species::SpeciesSnapshot;
 pub use bond::BondSnapshot;
+
+/**********************************************************************************************************************/
+/**********************************************************************************************************************/
 
 /// A snapshot of a calculator state
 #[derive(Debug,Clone)]
@@ -37,3 +41,6 @@ impl CalculatorSnapshot {
 	}
 	
 }
+
+/**********************************************************************************************************************/
+/**********************************************************************************************************************/

@@ -1,3 +1,5 @@
+// chemapp_rs::snapshot::component.rs
+//! System component snapshot : index, name + calculated properties
 
 use crate::entities::component::SystemComponent;
 

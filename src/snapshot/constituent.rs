@@ -1,3 +1,5 @@
+// chemapp_rs::snapshot::ConstituentSnapshot
+//! A state snapshot of a phase constituent.
 
 use crate::entities::constituent::Constituent;
 

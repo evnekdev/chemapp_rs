@@ -1,4 +1,7 @@
 // chemapp_rs::snapshot::bond.rs
+//! Chemical bond (quadruplet) snapshot.
+
+use crate::entities::bond::Bond;
 
 #[derive(Debug,Clone)]
 pub struct BondSnapshot {
@@ -12,4 +15,12 @@ pub struct BondSnapshot {
 	pub species3 : String,
 	pub species4 : String,
 	pub x        : f64,
+}
+
+impl BondSnapshot {
+	
+	pub fn new(bond: &Bond)->Self {
+		todo!();
+	}
+	
 }
