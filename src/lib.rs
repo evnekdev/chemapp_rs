@@ -21,6 +21,8 @@
 
 extern crate libloading;
 
+
+use std::fmt;
 use libloading::{Library};
 
 pub use crate::error::ChemAppError;
@@ -44,8 +46,8 @@ static DEFAULT_LIBNAME : &str = r"ca_vc_e_local.dll";
 /*****************************************************************************************************************************************************************************************************/
 
 /// An abstraction over system info returned by `tqused` and `tqsize` functions.
-#[derive(Debug)]
-pub struct SystemDimensions{
+#[derive(Clone)]
+pub struct SystemDimensions {
 	pub nconstituents: i32,       // na
 	pub ncomponents: i32,         // nb
 	pub nmixtures: i32,           // nc
@@ -74,6 +76,24 @@ impl SystemDimensions {
 			nranges:             0,
 			ndependent:          0,
 		}
+	}
+}
+
+impl fmt::Debug for SystemDimensions {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
+		writeln!(f, "SystemDimensions:")?;
+		writeln!(f, "  {:<30} {:?}", "Constituents", &self.nconstituents)?;
+		writeln!(f, "  {:<30} {:?}", "Components", &self.ncomponents)?;
+		writeln!(f, "  {:<30} {:?}", "Mixtures", &self.nmixtures)?;
+		writeln!(f, "  {:<30} {:?}", "Excess Gibbs interactions", &self.nexcess_gibbs)?;
+		writeln!(f, "  {:<30} {:?}", "Excess magnetic interactions", &self.nexcess_magnetic)?;
+		writeln!(f, "  {:<30} {:?}", "Sublattices", &self.nsublattices)?;
+		writeln!(f, "  {:<30} {:?}", "Sublattice species", &self.nspecies)?;
+		writeln!(f, "  {:<30} {:?}", "MQM constituents", &self.nconstituents_mqm)?;
+		writeln!(f, "  {:<30} {:?}", "CP/G ranges per constituents", &self.nranges_constituent)?;
+		writeln!(f, "  {:<30} {:?}", "CP/G ranges", &self.nranges)?;
+		writeln!(f, "  {:<30} {:?}", "PT-dependent constituents", &self.ndependent)?;
+		return Ok(());
 	}
 }
 

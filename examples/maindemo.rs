@@ -54,4 +54,11 @@ pub fn main(){
 	// change "Amount" unit to grams
 	let _ = engine.tqcsu("Amount", "gram").unwrap();
 	/**********************************************************************************************************************/
+	let nscom = engine.tqnosc().unwrap();
+	println!("Number of system components : {:?}", &nscom);
+	/**********************************************************************************************************************/
+	let name = engine.tqgnsc(1).unwrap();
+	let (stoic, wmass) = engine.tqstsc(1).unwrap();
+	println!("System component {:?}, stoic = {:?}, wmass = {:?}", &name, &stoic, &wmass);
+	/**********************************************************************************************************************/
 }
