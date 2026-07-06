@@ -6,6 +6,7 @@ use crate::entities::constituent::Constituent;
 /**********************************************************************************************************************/
 /**********************************************************************************************************************/
 
+/// A state snapshot of a phase constituent
 #[derive(Debug,Clone)]
 pub struct ConstituentSnapshot {
 	pub indexp : usize,
@@ -30,6 +31,7 @@ pub struct ConstituentSnapshot {
 
 impl ConstituentSnapshot {
 	
+	/// create a new instance
 	pub fn new(constituent: &Constituent)->Self {
 		return Self {
 			indexp : constituent.indexp,

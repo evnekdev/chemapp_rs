@@ -8,6 +8,7 @@ use crate::snapshot::SpeciesSnapshot;
 /**********************************************************************************************************************/
 /**********************************************************************************************************************/
 
+/// A high-level entity representing a sublattice species.
 pub struct Species<'a> {
 	calculator: &'a Calculator,
 	pub(crate) indexp : usize,

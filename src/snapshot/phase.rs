@@ -9,6 +9,7 @@ use crate::snapshot::BondSnapshot;
 /**********************************************************************************************************************/
 /**********************************************************************************************************************/
 
+/// A state snapshot of phase.
 #[derive(Debug,Clone)]
 pub struct PhaseSnapshot {
 	pub index: usize,
@@ -29,14 +30,36 @@ pub struct PhaseSnapshot {
 	pub cpm  : f64,
 	pub vm   : f64,
 	pub constituents : Vec<ConstituentSnapshot>,
-	pub species : Vec<SpeciesSnapshot>,
-	pub bonds   : Vec<BondSnapshot>,
+	pub species      : Vec<SpeciesSnapshot>,
+	pub bonds        : Vec<BondSnapshot>,
 }
 
 impl PhaseSnapshot {
 	
+	/// create a new instance (TODO)
 	pub fn new(phase: &Phase)->Self {
-		todo!();
+		return Self {
+			index     : phase.index,
+			status    : phase.status(),
+			name      : phase.name(),
+			model     : phase.model(),
+			a         : phase.a(),
+			ac        : phase.ac(),
+			mu        : phase.mu(),
+			h         : phase.h(),
+			s         : phase.s(),
+			g         : phase.g(),
+			cp        : phase.cp(),
+			v         : phase.v(),
+			hm        : phase.hm(),
+			sm        : phase.sm(),
+			gm        : phase.gm(),
+			cpm       : phase.cpm(),
+			vm        : phase.vm(),
+			constituents : phase.constituents().map(|c| c.snapshot()).collect(),
+			species      : phase.species().map(|s| s.snapshot()).collect(),
+			bonds        : phase.bonds().map(|b| b.snapshot()).collect(),
+		};
 	}
 	
 }

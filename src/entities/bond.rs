@@ -8,11 +8,11 @@ use crate::entities::species::Species;
 /// A structure representing a bond in an MQM model.
 pub struct Bond<'a> {
 	calculator : &'a Calculator,
-	indexp   : usize,
-	indexs1  : usize,
-	indexs2  : usize,
-	indexs3  : usize,
-	indexs4  : usize,
+	pub(crate) indexp   : usize,
+	pub(crate) indexs1  : usize,
+	pub(crate) indexs2  : usize,
+	pub(crate) indexs3  : usize,
+	pub(crate) indexs4  : usize,
 }
 
 impl<'a> Bond<'a> {
@@ -31,18 +31,7 @@ impl<'a> Bond<'a> {
 	
 	/// make a snapshot of the current state
 	pub fn snapshot(&self)->BondSnapshot {
-		return BondSnapshot {
-			indexp : self.indexp,
-			indexs1: self.indexs1,
-			indexs2: self.indexs2,
-			indexs3: self.indexs3,
-			indexs4: self.indexs4,
-			species1: self.species1().name(),
-			species2: self.species2().name(),
-			species3: self.species3().name(),
-			species4: self.species4().name(),
-			x      : self.x(),
-		};
+		return BondSnapshot::new(self);
 	}
 	
 	/// `true` if all indices are valid and it is a correct model type (must be quasichemical)

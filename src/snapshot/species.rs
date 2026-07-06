@@ -3,6 +3,7 @@
 
 use crate::entities::species::Species;
 
+/// A state snapshot of a sublattice species.
 #[derive(Debug,Clone)]
 pub struct SpeciesSnapshot {
 	pub indexp : usize,
@@ -14,8 +15,15 @@ pub struct SpeciesSnapshot {
 
 impl SpeciesSnapshot {
 	
+	/// create a new instance
 	pub fn new(species: &Species)->Self {
-		todo!();
+		return Self {
+			indexp : species.indexp,
+			indexl : species.indexl,
+			indexs : species.indexs,
+			name   : species.name(),
+			x      : species.x(),
+		};
 	}
 	
 }

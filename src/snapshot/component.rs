@@ -6,6 +6,7 @@ use crate::entities::component::SystemComponent;
 /**********************************************************************************************************************/
 /**********************************************************************************************************************/
 
+/// A state snapshot of a system component
 #[derive(Debug,Clone)]
 pub struct SystemComponentSnapshot {
 	pub name : String,
@@ -17,6 +18,7 @@ pub struct SystemComponentSnapshot {
 
 impl SystemComponentSnapshot {
 	
+	/// create a new instance
 	pub fn new(component: &SystemComponent)->Self {
 		return SystemComponentSnapshot {
 			name : component.name(),

@@ -29,6 +29,7 @@ impl<'a> SystemComponent<'a> {
 		};
 	}
 	
+	/// copy the properties into a snapshot structure
 	pub fn snapshot(&self)->SystemComponentSnapshot {
 		return SystemComponentSnapshot::new(self);
 	}

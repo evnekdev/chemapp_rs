@@ -17,6 +17,7 @@ pub struct SystemSnapshot {
 
 impl SystemSnapshot {
 	
+	/// create a new instance.
 	pub fn new(system: &System)->Self {
 		return Self {
 			t : system.t(),

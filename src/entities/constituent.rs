@@ -8,6 +8,7 @@ use crate::snapshot::ConstituentSnapshot;
 /**********************************************************************************************************************/
 /**********************************************************************************************************************/
 
+/// A high-level representation of a phase constituent.
 #[derive(Debug)]
 pub struct Constituent<'a> {
 	calculator : &'a Calculator,
