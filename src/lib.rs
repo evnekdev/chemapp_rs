@@ -80,6 +80,7 @@ impl SystemDimensions {
 }
 
 impl fmt::Debug for SystemDimensions {
+	
 	fn fmt(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
 		writeln!(f, "SystemDimensions:")?;
 		writeln!(f, "  {:<30} {:?}", "Constituents", &self.nconstituents)?;
@@ -95,13 +96,14 @@ impl fmt::Debug for SystemDimensions {
 		writeln!(f, "  {:<30} {:?}", "PT-dependent constituents", &self.ndependent)?;
 		return Ok(());
 	}
+	
 }
 
 /*****************************************************************************************************************************************************************************************************/
 /*****************************************************************************************************************************************************************************************************/
 
 /// Security info contained in a .cst datafile
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct TransparentHeader {
 	pub version : i32,                              // ver
 	pub name_writing_program : String,              // nwp
@@ -113,6 +115,25 @@ pub struct TransparentHeader {
 	pub user_ids_allowed : String,                  // id
 	pub license_holders_allowed : String,           // usr
 	pub remark : String,                            // rem
+}
+
+impl fmt::Debug for TransparentHeader {
+	
+	fn fmt(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
+		writeln!(f, "TransparentHeader:")?;
+		writeln!(f, "  {:<30} {:?}", "Version", &self.version)?;
+		writeln!(f, "  {:<30} {:?}", "Writing program name", &self.name_writing_program)?;
+		writeln!(f, "  {:<30} {:?}", "Writing program version", &self.version_writing_program)?;
+		writeln!(f, "  {:<30} {:?}", "Reading program name", &self.name_reading_program)?;
+		writeln!(f, "  {:<30} {:?}", "Reading program min version", &self.minversion_reading_program)?;
+		writeln!(f, "  {:<30} {:?}", "Creation date", &self.creation_date)?;
+		writeln!(f, "  {:<30} {:?}", "Expiration date", &self.expiry_date)?;
+		writeln!(f, "  {:<30} {:?}", "Allowed user ids", &self.user_ids_allowed)?;
+		writeln!(f, "  {:<30} {:?}", "Allowed license holders", &self.license_holders_allowed)?;
+		writeln!(f, "  {:<30} {:?}", "Remark", &self.remark)?;
+		return Ok(());
+	}
+	
 }
 
 /*****************************************************************************************************************************************************************************************************/
