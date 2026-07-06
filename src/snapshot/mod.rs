@@ -29,6 +29,7 @@ pub struct CalculatorSnapshot {
 
 impl CalculatorSnapshot {
 	
+	/// create a new instance
 	pub fn new(calculator: &Calculator)->Self {
 		let system = calculator.system().snapshot();
 		let components : Vec<SystemComponentSnapshot> = calculator.components().map(|c| c.snapshot()).collect();
