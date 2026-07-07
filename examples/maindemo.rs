@@ -39,6 +39,7 @@ pub fn main(){
 	let used = engine.tqused().unwrap();
 	println!("Used array sizes:\n{:?}", &used);
 	/**********************************************************************************************************************/
+	/**********************************************************************************************************************/
 	// get system units
 	let punit = engine.tqgsu("Pressure").unwrap();
 	let vunit = engine.tqgsu("Volume").unwrap();
@@ -54,11 +55,24 @@ pub fn main(){
 	// change "Amount" unit to grams
 	let _ = engine.tqcsu("Amount", "gram").unwrap();
 	/**********************************************************************************************************************/
+	/**********************************************************************************************************************/
 	let nscom = engine.tqnosc().unwrap();
 	println!("Number of system components : {:?}", &nscom);
 	/**********************************************************************************************************************/
 	let name = engine.tqgnsc(1).unwrap();
 	let (stoic, wmass) = engine.tqstsc(1).unwrap();
 	println!("System component {:?}, stoic = {:?}, wmass = {:?}", &name, &stoic, &wmass);
+	let index = engine.tqinsc(&name).unwrap();
+	println!("Index number of {:?} is {:?}", &name, &index);
+	/**********************************************************************************************************************/
+	let newsyscomp = vec!["SiO", "SiC", "CO"];
+	let _ = engine.tqcsc(&newsyscomp).unwrap();
+	println!("System components changed to {:?}", &newsyscomp);
+	for k in 1..=nscom {
+		let name = engine.tqgnsc(k).unwrap();
+		let (stoic, wmass) = engine.tqstsc(k).unwrap();
+		println!("Name of new system component {:?}: {:?}, stoic = {:?}, wmass = {:?}", &k, &name, &stoic, &wmass);
+	}
+	/**********************************************************************************************************************/
 	/**********************************************************************************************************************/
 }

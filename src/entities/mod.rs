@@ -8,3 +8,4 @@ pub mod phase;
 pub mod constituent;
 pub mod species;
 pub mod bond;
+pub mod stream;
