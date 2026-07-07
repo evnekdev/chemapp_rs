@@ -1,5 +1,6 @@
 // phase.rs
 //! `Phase` structure capturing the related functionality.
+use std::fmt;
 use nalgebra::{DVector};
 
 use crate::calculator::Calculator;
@@ -139,6 +140,14 @@ impl<'a> Phase<'a> {
 	/// phase volume per amount unit
 	pub fn vm(&self)->f64 {
 		return self.calculator.engine.tqgetr("VM", self.index, 0).unwrap_or(f64::NAN);
+	}
+	
+	pub fn print_header(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
+		todo!();
+	}
+	
+	pub fn print_values(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
+		todo!();
 	}
 	
 }

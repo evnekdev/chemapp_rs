@@ -2,7 +2,7 @@
 
 //! A high level submodule for easy operations on ChemApp library - avoid unnecessary boilerplate code. The user is still free to use both `native` and `Calculator` style function in a free manner.
 //! An important feature of `Calculator` is the ability of predefining the composition basis - a useful feature, for example, in oxide systems, where system components are defined as elements, but the compositions should be entered as oxides (CaO, FeO, SiO2, etc). 
-
+use std::fmt;
 use std::path::Path;
 use std::ffi::OsStr;
 use std::ops::{Range};
@@ -193,6 +193,28 @@ impl Calculator {
 	/// Iterates over phase indices.
 	pub fn phases(&self)->PhaseIterator<'_> {
 		return PhaseIterator::new(self);
+	}
+	
+	/***************************************************************************************************************************************************************************************************************************/
+	/***************************************************************************************************************************************************************************************************************************/
+	
+	pub fn print_system(&self){
+		let system = self.system();
+		println!("{:?}", &system);
+	}
+	
+	pub fn print_components(&self){
+		for component in self.components() {
+			print!("{:?}", &component);
+		}
+	}
+	
+	pub fn print_phases(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
+		for phase in self.phases() {
+			if phase.index == 1 {phase.print_header(f)?;}
+			phase.print_values(f)?;
+		}
+		return Ok(());
 	}
 	
 	/***************************************************************************************************************************************************************************************************************************/

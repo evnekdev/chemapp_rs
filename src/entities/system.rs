@@ -56,7 +56,7 @@ impl<'a> System<'a> {
 		return Ok(());
 	}
 	
-	fn print_values(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
+	pub fn print_values(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
 		let tval = self.t();
 		let pval = self.p();
 		let vval = self.vt();

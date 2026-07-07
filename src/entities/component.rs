@@ -1,5 +1,6 @@
 // component.rs
 //! `SystemComponent` structure capturing the related functionality.
+use std::fmt;
 use nalgebra::{DVector};
 
 use crate::calculator::Calculator;
@@ -10,7 +11,6 @@ use crate::snapshot::SystemComponentSnapshot;
 /**********************************************************************************************************************/
 
 /// System component representation
-#[derive(Debug)]
 pub struct SystemComponent<'a> {
 	calculator : &'a Calculator,
 	pub(crate) index : usize,
@@ -91,6 +91,31 @@ impl<'a> SystemComponent<'a> {
 	pub fn ap(&self, phase: &Phase)->f64 {
 		// TODO check calculator instance is the same.
 		return self.calculator.engine.tqgetr("AP", phase.index, self.index).unwrap_or(f64::NAN);
+	}
+	
+	pub fn print_header(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
+		writeln!(f, "Phases: {:>15}", "Name")?;
+		return Ok(());
+	}
+	
+	pub fn print_values(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
+		writeln!(f, " {:>25}", &self.name())?;
+		return Ok(());
+	}
+	
+}
+
+/**********************************************************************************************************************/
+/**********************************************************************************************************************/
+
+impl<'a> fmt::Debug for SystemComponent<'a> {
+	
+	fn fmt(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
+		if self.index == 1 {
+			self.print_header(f)?;
+		};
+		self.print_values(f)?;
+		return Ok(());
 	}
 	
 }
