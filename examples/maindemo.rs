@@ -1,14 +1,20 @@
 // chemapp_rs//examples/maindemo.rs
+use std::path::PathBuf;
 use chemapp_rs::{Engine,ChemAppError};
 
 pub fn main(){
 	/**********************************************************************************************************************/
+	let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 	#[cfg(all(target_family = "windows", target_pointer_width = "32"))]
-	let libname = r"c:\_WORK\Code\ca_vc_e_local.dll";
+	let libpath = project_dir.join("windows").join("ca_vc_e_local.dll");
 	#[cfg(all(target_family = "windows", target_pointer_width = "64"))]
-	let libname = r"c:\_WORK\Code\ca_vc_e_x64.dll";
+	let libpath = project_dir.join("windows").join("ca_vc_e_x64.dll");
+	#[cfg(target_family = "unix")]
+	let libpath = project_dir.join("linux").join("libChemAppCS.so");
 	/**********************************************************************************************************************/
-	let datafile_dat = r"c:\_WORK\Code\Rust\workspace\chemapp_rs\data\cosi.dat";
+	let datafile_path = project_dir.join("data").join("cosi.dat");
+	let libname = libpath.to_str().unwrap();
+	let datafile_dat = datafile_path.to_str().unwrap();
 	/**********************************************************************************************************************/
 	let engine = Engine::new(libname).unwrap();
 	/**********************************************************************************************************************/
