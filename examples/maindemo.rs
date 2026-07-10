@@ -10,7 +10,7 @@ pub fn main(){
 	#[cfg(all(target_family = "windows", target_pointer_width = "64"))]
 	let libpath = project_dir.join("windows").join("ca_vc_e_x64.dll");
 	#[cfg(target_family = "unix")]
-	let libpath = project_dir.join("linux").join("libChemAppCS.so");
+	let libpath = project_dir.join("linux").join("libLChemAppS.so");
 	/**********************************************************************************************************************/
 	let datafile_path = project_dir.join("data").join("cosi.dat");
 	let libname = libpath.to_str().unwrap();
