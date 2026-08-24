@@ -1,23 +1,39 @@
-#![allow(unused_variables)]
-
-//! This crate is an unofficial port of ChemApp Library for thermochemical calculations (GTT Technologies at <https://gtt-technologies.de/software/chemapp/>).
-//!    
-//! From the official site:
-//! "ChemApp provides the powerful calculation capabilities of FactSage in the form of a programmer’s library. It consists of a rich set of subroutines which provides all the necessary tools for the calculation of complex multicomponent, multiphase chemical equilibria and the determination of the associated energy balances."
-//!   
-//! ChemApp library was originally written in Fortran and is distributed as a dll / loadable dynamic library; to run the full version, you need a license (please contact GTT for more information).
-//!   
-//! Officially, ChemApp has programming support in the following languages : C/C++, Delphi, Fortran and Visual Basic. Recently, official support for Matlab and Python has been added.
-//!   
-//! The current crate is not part of the official suite; however, it has been thouroughly tested and used in several proprietary applications.
-//! Rust language offers the benefits of low-level languages as as C in its execution speed as well as a rich ecosystem of mature third-party libraries (crates) regarding many programming aspects, such as numerical computation, GUI development, cross-platform support, etc.
-//!   
-//! Almost every mature programming language offers so called FFI (Foreign Function Interface). Modern software development is not limited to the choice of one language; with the necessary skills, components written in different languages can be combined together. For example, after compilation, Fortran code (such as ChemApp or other scientific numerical computation software) exposes so-called ABI (Application Binary Interface) in form of exported functions in a DLL.
-//!   
-//!A DLL can be linked to a hosting process using either *static* and *dynamic* dispatch mechanism. Static dispatch bakes in the name of the DLL into the application during compilation (C, Delphi), to do that, *.lib files are used (these files contain DLL function stubs which are later found when the process is loaded into the memory).
-//! On the contrary, dynamic dispatch delays locating a DLL until a LoadLibrary function from Windows SDK is explicitly called inside the code. This allows more flexibility, for example, one can pass a dll name (even different versions) as a function parameter in the application; the user has flexibility to switch between different versions of the same DLL without recompilation (nevertheless, the DLL and EXE bitnesses have to match, operating systems do not support loading 32bit DLLs in 64bit applications and otherwise).
-//!   
-//! Dynamic dispatch also offers a way to parallelize a large number of similar calculations. When a shared library is loaded into different applications, the operating system usually keeps only a single copy of its code section for efficiency, since code sections are always read-only. However, for each application, the operating system keeps a separate copy of the library variables (everything that is mutable and changes during the calculations). On Linux, it is possible to load the same library into the same process several times distinctly; Windows officially does not support that, but the author discovered that if a DLL is manually copied with renaming, two idential DLLs CAN be loaded at the same time separately. This allows to split the computational load between different copies of ChemApp.
+//! Unofficial Rust bindings and high-level workflows for the proprietary
+//! [ChemApp](https://gtt-technologies.de/software/chemapp/) thermochemical
+//! equilibrium library.
+//!
+//! ChemApp performs the thermodynamic calculations; this crate dynamically
+//! loads a separately obtained ChemApp DLL or shared library. No ChemApp
+//! binary, licence, or commercial thermodynamic database is distributed in
+//! the crates.io package.
+//!
+//! Most applications should start with [`Calculator`]. [`Engine`] exposes the
+//! lower-level, native-oriented `TQ...` interface when exact ChemApp control is
+//! required. Live entities reflect the current native state, while
+//! [`CalculatorSnapshot`] owns a result that remains usable after later native
+//! calls change that state.
+//!
+//! # Loading and inspecting a system
+//!
+//! ```no_run
+//! use chemapp_rs::{Calculator, ChemAppError};
+//!
+//! fn main() -> Result<(), ChemAppError> {
+//!     let calculator = Calculator::from_library(
+//!         "path/to/chemapp/library",
+//!         "path/to/system.dat",
+//!     )?;
+//!     println!("ChemApp version: {}", calculator.engine.tqvers()?);
+//!     for phase in calculator.phases()? {
+//!         println!("{}: {}", phase.name()?, phase.model()?);
+//!     }
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ChemApp and the Rust process must have matching architectures. Native
+//! execution may also require a valid ChemApp licence. See the repository
+//! README for installation, examples, platform evidence, and troubleshooting.
 
 extern crate libloading;
 
@@ -55,99 +71,126 @@ pub mod parse;
 pub mod snapshot;
 mod table;
 
-static DEFAULT_LIBNAME: &str = r"ca_vc_e_local.dll";
-
-/*****************************************************************************************************************************************************************************************************/
-/*****************************************************************************************************************************************************************************************************/
-
-/// An abstraction over system info returned by `tqused` and `tqsize` functions.
-#[derive(Clone)]
+/// The eleven dimensions returned by [`Engine::tqsize`] and [`Engine::tqused`].
+///
+/// `TQSIZE` reports compiled capacities; `TQUSED` reports the corresponding
+/// maxima required by the currently loaded system.
+#[derive(Clone, Default)]
 pub struct SystemDimensions {
-    pub nconstituents: i32,       // na
-    pub ncomponents: i32,         // nb
-    pub nmixtures: i32,           // nc
-    pub nexcess_gibbs: i32,       // nd
-    pub nexcess_magnetic: i32,    // ne
-    pub nsublattices: i32,        // nf
-    pub nspecies: i32,            // ng
-    pub nconstituents_mqm: i32,   // nh
-    pub nranges_constituent: i32, // ni
-    pub nranges: i32,             // nj
-    pub ndependent: i32,          // nk
+    /// `NA`: total phase constituents.
+    pub constituents: i32,
+    /// `NB`: system components.
+    pub system_components: i32,
+    /// `NC`: mixture phases.
+    pub mixture_phases: i32,
+    /// `ND`: excess Gibbs-energy coefficients for one mixture phase.
+    pub excess_gibbs_coefficients_per_phase: i32,
+    /// `NE`: excess magnetic coefficients for one mixture phase.
+    pub excess_magnetic_coefficients_per_phase: i32,
+    /// `NF`: sublattices for one mixture phase.
+    pub sublattices_per_phase: i32,
+    /// `NG`: constituents on one sublattice.
+    pub constituents_per_sublattice: i32,
+    /// `NH`: oxide constituents in one Gaye–Kapoor–Frohberg or modified
+    /// quasichemical phase.
+    pub gkf_mqm_oxide_constituents_per_phase: i32,
+    /// `NI`: Gibbs-energy/heat-capacity equations for one constituent and the
+    /// native leading dimension of the `TQGPAR` value array.
+    pub equations_per_constituent: i32,
+    /// `NJ`: total Gibbs-energy/heat-capacity equations.
+    pub equations: i32,
+    /// `NK`: constituents with pressure- and temperature-dependent molar volume.
+    pub pt_dependent_volume_constituents: i32,
 }
 
 impl SystemDimensions {
-    pub fn new() -> SystemDimensions {
-        SystemDimensions {
-            nconstituents: 0,
-            ncomponents: 0,
-            nmixtures: 0,
-            nexcess_gibbs: 0,
-            nexcess_magnetic: 0,
-            nsublattices: 0,
-            nspecies: 0,
-            nconstituents_mqm: 0,
-            nranges_constituent: 0,
-            nranges: 0,
-            ndependent: 0,
-        }
+    /// Returns an all-zero dimension set for FFI output initialization.
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 
 impl fmt::Debug for SystemDimensions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "SystemDimensions:")?;
-        writeln!(f, "  {:<30} {:?}", "Constituents", &self.nconstituents)?;
-        writeln!(f, "  {:<30} {:?}", "Components", &self.ncomponents)?;
-        writeln!(f, "  {:<30} {:?}", "Mixtures", &self.nmixtures)?;
+        writeln!(f, "  {:<44} {:?}", "Constituents (NA)", self.constituents)?;
         writeln!(
             f,
-            "  {:<30} {:?}",
-            "Excess Gibbs interactions", &self.nexcess_gibbs
+            "  {:<44} {:?}",
+            "System components (NB)", self.system_components
         )?;
         writeln!(
             f,
-            "  {:<30} {:?}",
-            "Excess magnetic interactions", &self.nexcess_magnetic
-        )?;
-        writeln!(f, "  {:<30} {:?}", "Sublattices", &self.nsublattices)?;
-        writeln!(f, "  {:<30} {:?}", "Sublattice species", &self.nspecies)?;
-        writeln!(
-            f,
-            "  {:<30} {:?}",
-            "MQM constituents", &self.nconstituents_mqm
+            "  {:<44} {:?}",
+            "Mixture phases (NC)", self.mixture_phases
         )?;
         writeln!(
             f,
-            "  {:<30} {:?}",
-            "CP/G ranges per constituents", &self.nranges_constituent
+            "  {:<44} {:?}",
+            "Excess Gibbs coefficients / phase (ND)", self.excess_gibbs_coefficients_per_phase
         )?;
-        writeln!(f, "  {:<30} {:?}", "CP/G ranges", &self.nranges)?;
         writeln!(
             f,
-            "  {:<30} {:?}",
-            "PT-dependent constituents", &self.ndependent
+            "  {:<44} {:?}",
+            "Excess magnetic coefficients / phase (NE)",
+            self.excess_magnetic_coefficients_per_phase
         )?;
-        return Ok(());
+        writeln!(
+            f,
+            "  {:<44} {:?}",
+            "Sublattices / phase (NF)", self.sublattices_per_phase
+        )?;
+        writeln!(
+            f,
+            "  {:<44} {:?}",
+            "Constituents / sublattice (NG)", self.constituents_per_sublattice
+        )?;
+        writeln!(
+            f,
+            "  {:<44} {:?}",
+            "GKF/MQM oxide constituents / phase (NH)", self.gkf_mqm_oxide_constituents_per_phase
+        )?;
+        writeln!(
+            f,
+            "  {:<44} {:?}",
+            "G/CP equations / constituent (NI)", self.equations_per_constituent
+        )?;
+        writeln!(f, "  {:<44} {:?}", "G/CP equations (NJ)", self.equations)?;
+        writeln!(
+            f,
+            "  {:<44} {:?}",
+            "P,T-dependent volume constituents (NK)", self.pt_dependent_volume_constituents
+        )?;
+        Ok(())
     }
 }
 
 /*****************************************************************************************************************************************************************************************************/
 /*****************************************************************************************************************************************************************************************************/
 
-/// Security info contained in a .cst datafile
+/// Licensing and provenance metadata returned from a transparent `.cst` file.
 #[derive(Clone)]
 pub struct TransparentHeader {
-    pub version: i32,                         // ver
-    pub name_writing_program: String,         // nwp
-    pub version_writing_program: [i32; 3],    // vnw
-    pub name_reading_program: String,         // nrp
-    pub minversion_reading_program: [i32; 3], // vnr
-    pub creation_date: [i32; 6],              // dtc
-    pub expiry_date: [i32; 6],                // dte
-    pub user_ids_allowed: String,             // id
-    pub license_holders_allowed: String,      // usr
-    pub remark: String,                       // rem
+    /// Transparent-file format version.
+    pub version: i32,
+    /// Program that wrote the file.
+    pub name_writing_program: String,
+    /// Three-part version of the writing program.
+    pub version_writing_program: [i32; 3],
+    /// Program permitted to read the file.
+    pub name_reading_program: String,
+    /// Minimum permitted three-part reading-program version.
+    pub minversion_reading_program: [i32; 3],
+    /// File creation date/time fields returned by ChemApp.
+    pub creation_date: [i32; 6],
+    /// File expiry date/time fields returned by ChemApp.
+    pub expiry_date: [i32; 6],
+    /// Allowed ChemApp user identifiers.
+    pub user_ids_allowed: String,
+    /// Allowed ChemApp licence-holder names.
+    pub license_holders_allowed: String,
+    /// File remark text.
+    pub remark: String,
 }
 
 impl fmt::Debug for TransparentHeader {
@@ -187,7 +230,7 @@ impl fmt::Debug for TransparentHeader {
             "Allowed license holders", &self.license_holders_allowed
         )?;
         writeln!(f, "  {:<30} {:?}", "Remark", &self.remark)?;
-        return Ok(());
+        Ok(())
     }
 }
 

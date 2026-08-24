@@ -185,13 +185,19 @@ pub struct InteractionParameter {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum InteractionParameterRole {
     /// An ordinary Gibbs coefficient identified by one-based term number.
-    GibbsTerm { term_index: usize },
+    GibbsTerm {
+        /// One-based Gibbs coefficient term.
+        term_index: usize,
+    },
     /// Excess Curie/Neel temperature.
     CurieNeelTemperature,
     /// Excess magnetic moment.
     MagneticMoment,
     /// A returned column whose mutation selector is not yet established.
-    Unclassified { column_index: usize },
+    Unclassified {
+        /// One-based returned TQGPAR column.
+        column_index: usize,
+    },
 }
 
 impl Display for InteractionParameterRole {
@@ -213,7 +219,10 @@ pub enum InteractionMutationSupport {
     /// The contained address was verified by mutate/read/restore round-trip.
     Verified(InteractionParameterAddress),
     /// The value remains inspectable, but mutation is deliberately unavailable.
-    ReadOnly { reason: String },
+    ReadOnly {
+        /// Evidence-backed reason no mutation address is exposed.
+        reason: String,
+    },
 }
 
 /// One cell of the complete logical TQGPAR matrix.

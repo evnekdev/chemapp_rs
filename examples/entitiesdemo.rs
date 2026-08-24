@@ -1,46 +1,16 @@
-// entitiesdemo.rs
-use std::path::{Path, PathBuf};
+//! Dataset-specific entity, stream, snapshot, and mapping demonstration.
+//!
+//! This example expects a C-O-Si system containing `SiO2(quartz)`, `GAS`, and
+//! `CO2`; the general beginner examples do not assume these names.
+
+mod common;
 
 use chemapp_rs::entities::stream::Stream;
 use chemapp_rs::snapshot::STABLE_PHASE_ACTIVITY_THRESHOLD;
 use chemapp_rs::{Calculator, ChemAppError, SnapshotOptions};
 
-/// Resolves an explicit vendor library before considering only binaries whose
-/// architecture is actually checked into this repository. A source-modelled
-/// Rust target is not evidence that a compatible ChemApp binary is bundled.
-fn chemapp_library_path(project_dir: &Path) -> Result<PathBuf, ChemAppError> {
-    if let Some(path) = std::env::var_os("CHEMAPP_LIBRARY") {
-        return Ok(PathBuf::from(path));
-    }
-    #[cfg(all(target_os = "windows", target_arch = "x86"))]
-    return Ok(project_dir.join("windows").join("ca_vc_e_local.dll"));
-    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    return Ok(project_dir.join("windows").join("ca_vc_e_x64.dll"));
-    #[cfg(all(target_os = "linux", target_arch = "x86"))]
-    return Ok(project_dir.join("linux").join("libLChemAppS.so"));
-
-    #[allow(unreachable_code)]
-    Err(ChemAppError::OtherError(format!(
-        "no checked ChemApp native library is bundled for {}-{}; set CHEMAPP_LIBRARY to a compatible vendor library",
-        std::env::consts::OS,
-        std::env::consts::ARCH,
-    )))
-}
-
 fn main() -> Result<(), ChemAppError> {
-    let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let libpath = chemapp_library_path(&project_dir)?;
-    let datafile_path = std::env::var_os("CHEMAPP_DATAFILE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| project_dir.join("data").join("cosi.dat"));
-
-    let libname = libpath.to_str().ok_or_else(|| {
-        ChemAppError::OtherError("ChemApp library path is not valid UTF-8".to_owned())
-    })?;
-    let datafile = datafile_path.to_str().ok_or_else(|| {
-        ChemAppError::OtherError("ChemApp data-file path is not valid UTF-8".to_owned())
-    })?;
-    let calculator = Calculator::from_library(libname, datafile)?;
+    let calculator: Calculator = common::calculator_from_env()?;
 
     let stream = Stream::new(&calculator, "ENTITY-DEMO", 298.15, 1.0)?;
     let quartz = calculator.engine.tqinp("SiO2(quartz)")?;

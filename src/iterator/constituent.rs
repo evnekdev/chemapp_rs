@@ -2,6 +2,7 @@ use crate::calculator::Calculator;
 use crate::entities::constituent::Constituent;
 use crate::error::ChemAppError;
 
+/// Iterates ordinary constituents of one phase in native order.
 pub struct ConstituentIterator<'a> {
     calculator: &'a Calculator,
     next: usize,
@@ -10,6 +11,7 @@ pub struct ConstituentIterator<'a> {
 }
 
 impl<'a> ConstituentIterator<'a> {
+    /// Queries the phase's current constituent count and creates the iterator.
     pub fn new(calculator: &'a Calculator, indexp: usize) -> Result<Self, ChemAppError> {
         Ok(Self {
             calculator,

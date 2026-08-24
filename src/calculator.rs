@@ -1,7 +1,12 @@
 // chemapp::calculator.rs
 
-//! A high level submodule for easy operations on ChemApp library - avoid unnecessary boilerplate code. The user is still free to use both `native` and `Calculator` style function in a free manner.
-//! An important feature of `Calculator` is the ability of predefining the composition basis - a useful feature, for example, in oxide systems, where system components are defined as elements, but the compositions should be entered as oxides (CaO, FeO, SiO2, etc).
+//! High-level, fallible ChemApp loading, calculation, mapping, and reporting.
+//!
+//! [`Calculator`] is the recommended entry point for most applications. It
+//! owns one live [`Engine`], loads one thermodynamic system, and
+//! can transform user composition bases through `chemformula`. ChemApp remains
+//! stateful: calculations, conditions, mappings, and parameter changes all act
+//! on that one native engine instance.
 use chemformula::Transform;
 use nalgebra::{DVector, Dim, Storage, Vector};
 use std::cell::RefCell;
@@ -116,22 +121,27 @@ where
 /*******************************************************************************************************************************************************************************************************************************/
 /*******************************************************************************************************************************************************************************************************************************/
 
-/// A higher-level abtraction entity.
+/// A high-level owner of one loaded, stateful ChemApp engine.
+///
+/// Construction is deliberately fallible because the native library, licence,
+/// architecture, and thermodynamic data-file are external requirements. The
+/// type does not implement [`Default`]; use [`Calculator::from_library`] or
+/// [`Calculator::from_library_unloaded`] so loading failures are reported.
 #[derive(Debug)]
 pub struct Calculator {
-    /// a loaded instance of ChemApp engine
+    /// The loaded low-level ChemApp engine.
     pub engine: Engine,
-    /// a copy of model parameters, allowing to restore delta inputs
+    /// Optional captured baselines for reversible parameter changes.
     pub cache: Option<ParameterCache>,
-    /// datafile
+    /// Data-file path used to initialize this calculator, or empty if unloaded.
     pub file: String,
-    /// a custom file to output errors
+    /// Active temporary error-file path and FORTRAN unit, when redirected.
     pub nondefault_errunit: Option<(String, usize)>,
-    /// isothermal calculation counter
+    /// Reserved count of high-level isothermal calculations.
     pub number_isothermal: usize,
-    /// target calculation counter
+    /// Reserved count of high-level temperature-target calculations.
     pub number_target_t: usize,
-    /// instead of raw input using the system components basis, the user can define a custom formula basis; the transform is handled internally
+    /// Composition transform from the user-selected basis to system components.
     pub transform: Transform,
     /// The ERROR unit active before `redirect_error_to_temp` changed it.
     previous_errunit: Option<usize>,
@@ -140,28 +150,6 @@ pub struct Calculator {
     /// a stream still represented by another Rust value.
     pub(crate) active_stream_names: RefCell<HashSet<String>>,
 }
-
-/*******************************************************************************************************************************************************************************************************************************/
-/*******************************************************************************************************************************************************************************************************************************/
-
-impl Default for Calculator {
-    fn default() -> Calculator {
-        return Calculator {
-            engine: Engine::default(),
-            cache: None,
-            file: r"".to_string(),
-            nondefault_errunit: None,
-            number_isothermal: 0,
-            number_target_t: 0,
-            transform: Transform::default(),
-            previous_errunit: None,
-            active_stream_names: RefCell::new(HashSet::new()),
-        };
-    }
-}
-
-/*******************************************************************************************************************************************************************************************************************************/
-/*******************************************************************************************************************************************************************************************************************************/
 
 impl Calculator {
     /// Read one typed interaction parameter from the current live TQGPAR matrix.
@@ -401,15 +389,18 @@ impl Calculator {
     /***************************************************************************************************************************************************************************************************************************/
     /***************************************************************************************************************************************************************************************************************************/
 
+    /// Formats the live calculated state as a multi-section report.
     pub fn table_string(&self) -> Result<String, ChemAppError> {
         crate::table::live_report(self)
     }
 
+    /// Prints the current whole-system table to standard output.
     pub fn print_system(&self) -> Result<(), ChemAppError> {
         println!("{}", self.system().table_string()?);
         Ok(())
     }
 
+    /// Prints one table for every system component.
     pub fn print_components(&self) -> Result<(), ChemAppError> {
         for component in self.components()? {
             println!("{}", component.table_string()?);
@@ -495,11 +486,8 @@ impl Calculator {
                     //self.engine.tqshow()?;
                     self.engine.tqce("T", 0, 0, interval)?;
                     xvarprev = xvar.clone();
-                    let xfold = xvar[sidxf - 1];
-                    let xaold = xvar[sidxa - 1];
                     let xfnew = self.engine.tqgetr("XP", masterphase, sidxf)?;
                     let xanew = self.engine.tqgetr("XP", masterphase, sidxa)?;
-                    let tliq = self.engine.tqgetr("T", 0, 0)?;
                     xvar[sidxa - 1] = xvar[sidxf - 1] * xanew / xfnew;
                     if iter > 0 {
                         xvar = (&xvar + &xvarprev) * 0.5;
@@ -554,56 +542,6 @@ impl Calculator {
         );
     }
 
-    fn calculate_target_x_from_left_(
-        &self,
-        x1: &DVector<f64>,
-        x2: &DVector<f64>,
-        temp: f64,
-        target: usize,
-    ) -> Result<(), ChemAppError> {
-        todo!();
-        /*
-        let n_iter_max = 10;
-        let mut x_initial = x1.clone();
-        let mut x_other = x2;
-        for k in 0..n_iter_max{
-            x_initial = (&x_initial + x_other) * 0.5;
-            self.calculate_isothermal(&x_initial, temp)?;
-            if self.phases()?.phases_stable(&self).any(|pid| pid == target) {
-                if self.phases()?.phases_stable(&self).count() > 1 {
-                    return Ok(());
-                }
-                //x_other = x2;
-            }
-            x_other = x1;
-        }
-        return Err(ChemAppError::OtherError("Cannot converge X target".to_string()));
-        */
-    }
-    /// Perform a composition search starting from `x1` until a required phase is met, use dynamic vectors; TODO check the composition transformations
-    pub fn calculate_target_x_from_left<D: Dim, S: Storage<f64, D>>(
-        &self,
-        x1: &Vector<f64, D, S>,
-        x2: &Vector<f64, D, S>,
-        temp: f64,
-        target: usize,
-    ) -> Result<(), ChemAppError> {
-        return self.calculate_target_x_from_left_(
-            &self
-                .transform
-                .transform_final2init(x1, false, false, false)
-                .column(0)
-                .into_owned(),
-            &self
-                .transform
-                .transform_final2init(x2, false, false, false)
-                .column(0)
-                .into_owned(),
-            temp,
-            target,
-        );
-    }
-
     /***************************************************************************************************************************************************************************************************************************/
     /***************************************************************************************************************************************************************************************************************************/
 
@@ -612,6 +550,7 @@ impl Calculator {
         CalculatorSnapshot::new(self)
     }
 
+    /// Creates a deep snapshot using explicit phase-retention options.
     pub fn snapshot_with_options(
         &self,
         options: SnapshotOptions,
@@ -751,6 +690,9 @@ impl Calculator {
         })
     }
 
+    /// Maps temperature and snapshots every successful state before advancing.
+    ///
+    /// `list` selects the listing variant of the native mapping routine.
     pub fn mapping_temperature(
         &self,
         tmin: f64,
@@ -760,6 +702,7 @@ impl Calculator {
         self.mapping_temperature_with_options(tmin, tmax, list, SnapshotOptions::all())
     }
 
+    /// Maps temperature with explicit snapshot phase-retention options.
     pub fn mapping_temperature_with_options(
         &self,
         tmin: f64,
@@ -770,6 +713,9 @@ impl Calculator {
         self.mapping("TF", "TN", 0, 0, (tmin, tmax), list, options)
     }
 
+    /// Maps pressure and snapshots every successful state before advancing.
+    ///
+    /// `list` selects the listing variant of the native mapping routine.
     pub fn mapping_pressure(
         &self,
         pmin: f64,
@@ -779,6 +725,7 @@ impl Calculator {
         self.mapping_pressure_with_options(pmin, pmax, list, SnapshotOptions::all())
     }
 
+    /// Maps pressure with explicit snapshot phase-retention options.
     pub fn mapping_pressure_with_options(
         &self,
         pmin: f64,

@@ -1,25 +1,33 @@
 [package]
 name = "chemapp_rs"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
+rust-version = "1.85"
 license = "MIT"
-author = "Evgenii Nekhoroshev e.nekhoroshev@uq.edu.au, evgnekhoroshev@gmail.com"
+authors = ["Evgenii Nekhoroshev <e.nekhoroshev@uq.edu.au>"]
 repository = "https://github.com/evnekdev/chemapp_rs"
-description = "Port of ChemApp library (GTT-technologies) for thermodynamic calculations to Rust environment; includes native ChemApp functions starting with 'tq' and a higher-level interface for easier access to calculations."
+documentation = "https://docs.rs/chemapp_rs"
+homepage = "https://github.com/evnekdev/chemapp_rs"
+readme = "README.md"
+description = "Unofficial Rust bindings and high-level interface for the ChemApp thermochemical equilibrium library"
 keywords = ["chemistry", "thermodynamics", "ffi", "equilibrium", "chemapp"]
 categories = ["science", "api-bindings"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+include = [
+    "/src/**",
+    "/examples/**/*.rs",
+    "/docs/chemapp-manual/**",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/README.md",
+]
 
 [dependencies]
-nom = "7.0"
 tempfile = "3.27"
 lazy_static = "1.5"
-libloading="0.8"
+libloading = "0.8"
 function_name = "0.3"
 nalgebra = "0.32"
-serde = {version = "1.0", features = ["derive"]}
-bincode = {version = "2.0", features=["serde","alloc"]}
-chemformula = {git = "https://github.com/evnekdev/chemformula.git"}
-comfy-table = { version = "8.0.0", default-features = false }
-#chemformula = {version = "0.1"}
+serde = { version = "1.0", features = ["derive"] }
+bincode = { version = "2.0", features = ["serde", "alloc"] }
+chemformula = "0.2"
+comfy-table = { version = "=7.1.4", default-features = false }

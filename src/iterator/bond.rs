@@ -10,6 +10,7 @@ pub(crate) enum BondIterationMode {
     None,
 }
 
+/// Iterates canonical TQBOND pair or quadruplet identities for one phase.
 pub struct BondIterator<'a> {
     calculator: &'a Calculator,
     indexp: usize,
@@ -17,6 +18,7 @@ pub struct BondIterator<'a> {
 }
 
 impl<'a> BondIterator<'a> {
+    /// Dispatches by TQMODL and enumerates only structurally applicable identities.
     pub fn new(calculator: &'a Calculator, indexp: usize) -> Result<Self, ChemAppError> {
         let mode = bond_iteration_mode(&calculator.engine.tqmodl(indexp)?);
         let identities = match mode {

@@ -74,6 +74,10 @@ pub struct CachedInteractionParameter {
 }
 
 #[derive(Clone, Debug)]
+/// Captured standard-state baseline for one solution-phase endmember.
+///
+/// Fields remain private because endmember mutation is an implementation
+/// detail of cache reset, not a stable public addressing interface.
 pub struct EndmemberParameter {
     phase_index: usize,
     constituent_index: usize,
@@ -91,6 +95,10 @@ impl EndmemberParameter {
 }
 
 #[derive(Clone, Debug)]
+/// Captured standard-state baseline for one stoichiometric compound phase.
+///
+/// Fields remain private because compound mutation is an implementation
+/// detail of cache reset, not a stable public addressing interface.
 pub struct CompoundParameter {
     phase_index: usize,
     phase_name: String,

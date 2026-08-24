@@ -21,6 +21,11 @@ Depending on a ChemApp distribution, an equivalent precompiled C transition libr
 
 The C interface is useful to this project because it documents how GTT itself translates between C and the Fortran implementation. It is **reference evidence**, not the ABI actually invoked by `native.rs`.
 
+The checked transition sources and proprietary native binaries are development
+evidence only. They are deliberately excluded from the crates.io package; the
+published Rust crate dynamically loads a separately obtained ChemApp library
+and does not require these reference files to build.
+
 ## Four separate layers must not be conflated
 
 ### 1. Programmer's Manual: semantic contract

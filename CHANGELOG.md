@@ -1,6 +1,9 @@
-# Change log
+# Changelog
 
-## [0.2.0]? -
+## [1.0.0] - Unreleased
+
+First stable release of the current direct-Fortran binding and high-level API.
+ChemApp itself remains a separately obtained proprietary dependency.
 
 ### Added
   - Support for Unix-like platforms
@@ -20,6 +23,10 @@
   - a model-neutral interaction parameter cache retaining complete
     multi-expression Gibbs and SUBLM magnetic matrices, read-only support
     status, structural keys, baseline-relative deltas, and verified resets
+  - beginner quickstart, equilibrium, snapshot, interaction, and reversible
+    parameter-mutation examples driven by `CHEMAPP_LIBRARY` and
+    `CHEMAPP_DATAFILE`
+  - standard `std::error::Error` integration for `ChemAppError`
 
 ### Changed
   - `usize` in `tqgthi` output to `i32`
@@ -49,6 +56,25 @@
   - the experimental interaction cache no longer exposes the former MQM-only
     `InteractionGEMQM`/`InteractionMagnMQM` and six-term, first-expression
     mutation methods; callers use typed structural parameter addresses.
+  - `SystemDimensions` fields now use the exact NA–NK dimension meanings rather
+    than historical ambiguous names; notably NI is documented as the number of
+    Gibbs-energy/heat-capacity equations per constituent and TQGPAR's leading
+    dimension.
+  - the crates.io package now uses registry `chemformula` 0.2 and an explicit
+    distribution allowlist. Proprietary ChemApp DLL/SO files, GTT C reference
+    sources, and thermodynamic data-files remain in the development repository
+    where applicable but are excluded from the published crate.
+  - the table dependency is pinned to its Rust-1.85-compatible 7.1.4 release so
+    the declared minimum supported Rust version is reproducible.
+
+### Removed
+
+  - fallible `Engine::default()` and `Calculator::default()` implementations
+    which panicked when the external ChemApp library could not be loaded; use
+    `Engine::new`, `Calculator::from_library`, or
+    `Calculator::from_library_unloaded`.
+  - the unimplemented `Calculator::calculate_target_x_from_left` placeholder,
+    whose public method body panicked with `todo!()`.
 
 ### Fixed
 

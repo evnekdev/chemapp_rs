@@ -10,14 +10,22 @@ use crate::snapshot::BondSnapshot;
 /// quadruplets. A pair is never represented by fake third/fourth members.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum BondKind {
+    /// A canonical QUAS/QSOL pair of ordinary phase constituents.
     Pair {
+        /// One-based first constituent index.
         constituent_a: usize,
+        /// One-based second constituent index, not less than `constituent_a`.
         constituent_b: usize,
     },
+    /// A canonical SUBG quadruplet with two species from each sublattice.
     Quadruplet {
+        /// First member on sublattice one.
         species_a: SpeciesRef,
+        /// Second member on sublattice one.
         species_b: SpeciesRef,
+        /// First member on sublattice two.
         species_c: SpeciesRef,
+        /// Second member on sublattice two.
         species_d: SpeciesRef,
     },
 }
@@ -31,6 +39,7 @@ pub struct Bond<'a> {
 }
 
 impl<'a> Bond<'a> {
+    /// Creates a canonical QUAS/QSOL pair; reversed members are reordered.
     pub fn new_pair(
         calculator: &'a Calculator,
         indexp: usize,
@@ -48,6 +57,7 @@ impl<'a> Bond<'a> {
         }
     }
 
+    /// Creates a canonical SUBG quadruplet from local indices on each sublattice.
     pub fn new_quadruplet(
         calculator: &'a Calculator,
         indexp: usize,
@@ -82,21 +92,26 @@ impl<'a> Bond<'a> {
         }
     }
 
+    /// Returns the one-based parent phase index.
     pub fn phase_index(&self) -> usize {
         self.indexp
     }
+    /// Returns the model-dependent pair or quadruplet identity.
     pub fn kind(&self) -> &BondKind {
         &self.kind
     }
 
+    /// Copies the complete identity and current fraction into an owned snapshot.
     pub fn snapshot(&self) -> Result<BondSnapshot, ChemAppError> {
         BondSnapshot::new(self)
     }
 
+    /// Formats this result using the shared live/snapshot bond schema.
     pub fn table_string(&self) -> Result<String, ChemAppError> {
         crate::table::live_bond_table(self)
     }
 
+    /// Validates the identity against the phase's current model and dimensions.
     pub fn is_valid(&self) -> Result<bool, ChemAppError> {
         if self.indexp == 0 || self.indexp > self.calculator.engine.tqnop()? {
             return Ok(false);
@@ -138,6 +153,7 @@ impl<'a> Bond<'a> {
         }
     }
 
+    /// Returns live constituent views for a pair, or `None` for a quadruplet.
     pub fn pair_members(&self) -> Option<(Constituent<'a>, Constituent<'a>)> {
         match self.kind {
             BondKind::Pair {
@@ -151,6 +167,7 @@ impl<'a> Bond<'a> {
         }
     }
 
+    /// Returns live species views for a quadruplet, or `None` for a pair.
     pub fn quadruplet_members(&self) -> Option<[Species<'a>; 4]> {
         match self.kind {
             BondKind::Pair { .. } => None,

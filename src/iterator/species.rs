@@ -3,6 +3,7 @@ use crate::entities::bond::normalized_model;
 use crate::entities::species::{Species, SpeciesRef};
 use crate::error::ChemAppError;
 
+/// Iterates local sublattice identities without exposing native offset encoding.
 pub struct SpeciesIterator<'a> {
     calculator: &'a Calculator,
     indexp: usize,
@@ -10,6 +11,7 @@ pub struct SpeciesIterator<'a> {
 }
 
 impl<'a> SpeciesIterator<'a> {
+    /// Creates a model-aware iterator for a one-based phase index.
     pub fn new(calculator: &'a Calculator, indexp: usize) -> Result<Self, ChemAppError> {
         let model = calculator.engine.tqmodl(indexp)?;
         // TQMODL documents PURE as the result for a non-mixture phase. The

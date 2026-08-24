@@ -15,11 +15,15 @@ Status vocabulary:
 
 `Engine` owns a `libloading::Library`, allowing the ChemApp library path to be chosen at run time. This fits the project's need to support multiple platform/library variants and independent loaded copies.
 
-### Platform-specific symbol aliases — aligned in concept, ABI audit required
+### Platform-specific symbol aliases — aligned for the recorded builds
 
 `defs.rs` maintains mappings for Win32, Win64, Unix32, and Unix64 symbol naming. This is the correct architectural location for compiler/platform export-name differences.
 
-However, symbol name correctness is only half of ABI conformance. Each routine's integer width, calling convention, argument order, pointer/array semantics, and hidden string-length arguments still need a systematic verification pass against the actual libraries we support.
+Symbol spelling is only one part of ABI conformance. The systematic audit now
+records each routine's calling convention, argument order, numeric storage,
+pointer/array semantics, and hidden CHARACTER lengths for the checked binaries.
+Unrepresented builds remain explicitly unverified rather than inheriting a
+platform-family conclusion.
 
 ### Native error conversion — aligned in concept
 
@@ -210,6 +214,11 @@ unchanged. Generic SUBQ selectors for
 terms 7 and 18 were rejected with error 1024 without changing the matrix, so
 columns 7–18 remain read-only. See
 [Interaction parameter addressing and reversible mutation](parameter-mutation.md).
+
+Duplicate phase copies remain phase-local addressable views, not independent
+parameter owners: the documented TQCDAT write propagates to every copy. No
+generic native copy-family identity was found, so the API deliberately does not
+infer aliases from `#1`/`#2` display-name suffixes.
 
 ### Interaction inspection — runtime-observed for the EN22 model set
 

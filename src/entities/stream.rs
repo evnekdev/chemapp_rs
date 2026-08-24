@@ -67,6 +67,10 @@ pub struct Stream<'a> {
 }
 
 impl<'a> Stream<'a> {
+    /// Creates and uniquely leases a named native stream.
+    ///
+    /// `temp` and `pres` use the engine's active units. If native creation
+    /// fails, the Rust name lease is released before returning the error.
     pub fn new(
         calculator: &'a Calculator,
         name: &str,
@@ -87,20 +91,25 @@ impl<'a> Stream<'a> {
         })
     }
 
+    /// Returns the native stream name.
     pub fn name(&self) -> &str {
         &self.name
     }
+    /// Returns the temperature supplied when this handle was created.
     pub fn temperature(&self) -> f64 {
         self.temp
     }
+    /// Returns the pressure supplied when this handle was created.
     pub fn pressure(&self) -> f64 {
         self.pres
     }
 
+    /// Copies the current stream properties into an owned snapshot.
     pub fn snapshot(&self) -> Result<StreamSnapshot, ChemAppError> {
         StreamSnapshot::new(self)
     }
 
+    /// Formats this stream using the shared live/snapshot table schema.
     pub fn table_string(&self) -> Result<String, ChemAppError> {
         crate::table::live_stream_table(self)
     }
@@ -123,6 +132,7 @@ impl<'a> Stream<'a> {
         }
     }
 
+    /// Adds a phase constituent amount using one-based native indices.
     pub fn add_with_indices(
         &self,
         indexp: usize,
@@ -134,6 +144,7 @@ impl<'a> Stream<'a> {
             .tqstca(&self.name, indexp, indexc, val)
     }
 
+    /// Adds a phase constituent amount after resolving its phase and name.
     pub fn add_with_names(
         &self,
         phase: &str,
@@ -149,18 +160,23 @@ impl<'a> Stream<'a> {
         self.calculator.engine.tqstxp(&self.name, option)
     }
 
+    /// Returns stream heat capacity (`CP`) in the active unit.
     pub fn cp(&self) -> Result<f64, ChemAppError> {
         self.property("CP")
     }
+    /// Returns stream enthalpy (`H`) in the active unit.
     pub fn h(&self) -> Result<f64, ChemAppError> {
         self.property("H")
     }
+    /// Returns stream entropy (`S`) in the active unit.
     pub fn s(&self) -> Result<f64, ChemAppError> {
         self.property("S")
     }
+    /// Returns stream Gibbs energy (`G`) in the active unit.
     pub fn g(&self) -> Result<f64, ChemAppError> {
         self.property("G")
     }
+    /// Returns stream volume (`V`) in the active unit.
     pub fn v(&self) -> Result<f64, ChemAppError> {
         self.property("V")
     }

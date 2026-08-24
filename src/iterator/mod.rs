@@ -1,15 +1,19 @@
 // chemapp_rs::iterator.rs
 //! Useful iterators over system components, phases, and phase constituents in a datafile.
 
-
-pub mod component;
-pub mod phase;
-pub mod constituent;
-pub mod species;
+/// Model-aware TQBOND pair/quadruplet iteration.
 pub mod bond;
+/// System-component iteration.
+pub mod component;
+/// Ordinary phase-constituent iteration.
+pub mod constituent;
+/// Phase iteration.
+pub mod phase;
+/// Sublattice-species iteration.
+pub mod species;
 
-pub use component::SystemComponentIterator;
-pub use phase::PhaseIterator;
-pub use constituent::ConstituentIterator;
-pub use species::SpeciesIterator;
 pub use bond::BondIterator;
+pub use component::SystemComponentIterator;
+pub use constituent::ConstituentIterator;
+pub use phase::PhaseIterator;
+pub use species::SpeciesIterator;

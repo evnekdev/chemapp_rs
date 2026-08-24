@@ -2,6 +2,7 @@ use crate::calculator::Calculator;
 use crate::entities::phase::Phase;
 use crate::error::ChemAppError;
 
+/// Iterates one-based phases in native order.
 pub struct PhaseIterator<'a> {
     calculator: &'a Calculator,
     next: usize,
@@ -9,6 +10,7 @@ pub struct PhaseIterator<'a> {
 }
 
 impl<'a> PhaseIterator<'a> {
+    /// Queries the current count and creates a finite live iterator.
     pub fn new(calculator: &'a Calculator) -> Result<Self, ChemAppError> {
         Ok(Self {
             calculator,

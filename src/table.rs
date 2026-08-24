@@ -34,7 +34,7 @@ fn vector(values: &[f64]) -> String {
 
 pub(crate) fn render(title: &str, headers: &[String], rows: Vec<Vec<String>>) -> String {
     let mut table = Table::new();
-    table.load_style(UTF8_FULL_CONDENSED);
+    table.load_preset(UTF8_FULL_CONDENSED);
     table.set_header(headers.to_vec());
     for row in rows {
         table.add_row(row);
@@ -556,8 +556,8 @@ pub(crate) fn snapshot_report(snapshot: &CalculatorSnapshot) -> String {
                     .components()
                     .iter()
                     .find(|candidate| candidate.index == component.component_index)
-                    .map(|candidate| candidate.name.as_str())
-                    .expect("snapshot phase-component identity exists globally");
+                    .map(|candidate| candidate.name.clone())
+                    .unwrap_or_else(|| format!("component #{}", component.component_index));
                 vec![
                     format!("{} [{}]", phase.name, phase.index),
                     format!("{} [{}]", component_name, component.component_index),

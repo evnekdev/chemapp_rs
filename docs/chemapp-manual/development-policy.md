@@ -280,3 +280,13 @@ but the crate has no in-repository persisted-error protocol or compatibility
 promise. Enum variant order and payload evolution may change encoded bytes.
 Applications needing cross-version persistence must define and version an
 explicit wire DTO rather than treating the Rust enum encoding as stable.
+
+## 24. The public crate contains only redistributable project material
+
+The crates.io package is an interface library, not a ChemApp distribution.
+Keep its Cargo package allowlist explicit and exclude proprietary ChemApp
+DLL/SO binaries, GTT transition/reference C sources, commercial or uncertain
+thermodynamic data-files, licences, tokens, and machine-specific identifiers.
+Those artifacts may remain available to authorized maintainers in the
+development repository, but they are neither build dependencies nor package
+content. Examples must obtain native-library and data-file paths at runtime.

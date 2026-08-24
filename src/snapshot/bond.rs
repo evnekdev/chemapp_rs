@@ -6,27 +6,42 @@ use crate::entities::species::{Species, SpeciesRef};
 use crate::error::ChemAppError;
 
 #[derive(Debug, Clone, PartialEq)]
+/// One ordinary phase constituent retained in a pair snapshot.
 pub struct PairMemberSnapshot {
+    /// One-based constituent index within the phase.
     pub constituent_index: usize,
+    /// Constituent name captured from the live engine.
     pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// One local sublattice species retained in a quadruplet snapshot.
 pub struct QuadrupletMemberSnapshot {
+    /// Conceptual local sublattice identity.
     pub identity: SpeciesRef,
+    /// Species name captured from the live engine.
     pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// Model-dependent identity of a captured TQBOND result.
 pub enum BondSnapshotKind {
+    /// A QUAS/QSOL pair of ordinary phase constituents.
     Pair {
+        /// Canonical first pair member.
         constituent_a: PairMemberSnapshot,
+        /// Canonical second pair member.
         constituent_b: PairMemberSnapshot,
     },
+    /// A SUBG quadruplet with two members from each sublattice.
     Quadruplet {
+        /// First member on sublattice one.
         species_a: QuadrupletMemberSnapshot,
+        /// Second member on sublattice one.
         species_b: QuadrupletMemberSnapshot,
+        /// First member on sublattice two.
         species_c: QuadrupletMemberSnapshot,
+        /// Second member on sublattice two.
         species_d: QuadrupletMemberSnapshot,
     },
 }
@@ -34,14 +49,20 @@ pub enum BondSnapshotKind {
 /// Complete identity and fraction for one pair or quadruplet result.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BondSnapshot {
+    /// One-based parent phase index.
     pub phase_index: usize,
+    /// Parent phase name.
     pub phase_name: String,
+    /// ChemApp phase-model identifier.
     pub model: String,
+    /// Complete pair or quadruplet member identity and names.
     pub kind: BondSnapshotKind,
+    /// Calculated pair or quadruplet fraction.
     pub x: f64,
 }
 
 impl BondSnapshot {
+    /// Captures the complete model-aware identity and current TQBOND fraction.
     pub fn new(bond: &Bond<'_>) -> Result<Self, ChemAppError> {
         let kind = match bond.kind() {
             BondKind::Pair {

@@ -94,6 +94,14 @@ through copy #1. The selected value changed identically in copy #2; restoring
 through copy #1 restored both complete matrices exactly. This is documented
 native propagation, not accidental cache cross-talk.
 
+The high-level API therefore treats duplicate phase copies as separately
+addressable phase-local views over native parameters whose writes can propagate
+to every copy. The inspected native metadata does not expose a durable copy-
+family identifier, and a display-name suffix such as `#1` or `#2` is not strong
+enough evidence to manufacture one. `ParameterCache` consequently neither
+claims that copies own independent parameters nor invents an alias-group API;
+callers must assume the documented TQCDAT propagation rule.
+
 One representative parameter from each of the six observed model/channel
 families was also mutated across an equilibrium calculation, restored, and
 recalculated successfully. A separate active-phase Gibbs probe recorded system

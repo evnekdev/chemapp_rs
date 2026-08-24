@@ -2,6 +2,7 @@ use crate::calculator::Calculator;
 use crate::entities::component::SystemComponent;
 use crate::error::ChemAppError;
 
+/// Iterates one-based system components in native order.
 pub struct SystemComponentIterator<'a> {
     calculator: &'a Calculator,
     next: usize,
@@ -9,6 +10,7 @@ pub struct SystemComponentIterator<'a> {
 }
 
 impl<'a> SystemComponentIterator<'a> {
+    /// Queries the current count and creates a finite live iterator.
     pub fn new(calculator: &'a Calculator) -> Result<Self, ChemAppError> {
         Ok(Self {
             calculator,
