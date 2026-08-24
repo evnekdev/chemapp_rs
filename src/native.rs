@@ -2053,9 +2053,15 @@ mod tests {
 	#[test]
 	fn tqerr_is_three_fixed_width_records() {
 		let mut buffer = [b' '; TQERR_RECORD_LENGTH * TQERR_RECORD_COUNT];
-		buffer[..5].copy_from_slice(b"first");
-		buffer[TQERR_RECORD_LENGTH..TQERR_RECORD_LENGTH + 6].copy_from_slice(b"second");
-		assert_eq!(tqerr_message(&buffer).unwrap(), "first\nsecond");
+		buffer[..15].copy_from_slice(b"Example Program");
+		let second = b"Copyright Example Organization, 100 Research Road, Example City";
+		buffer[TQERR_RECORD_LENGTH..TQERR_RECORD_LENGTH + second.len()].copy_from_slice(second);
+		let third = b"https://example.invalid";
+		buffer[2 * TQERR_RECORD_LENGTH..2 * TQERR_RECORD_LENGTH + third.len()].copy_from_slice(third);
+		assert_eq!(
+			tqerr_message(&buffer).unwrap(),
+			"Example Program\nCopyright Example Organization, 100 Research Road, Example City\nhttps://example.invalid"
+		);
 	}
 
 	#[test]

@@ -1,6 +1,6 @@
 // chemapp_rs//examples/maindemo.rs
 use std::path::PathBuf;
-use chemapp_rs::{Engine,ChemAppError};
+use chemapp_rs::Engine;
 
 pub fn main(){
 	/**********************************************************************************************************************/
@@ -21,9 +21,11 @@ pub fn main(){
 	// Initialize the library
 	let _    = engine.tqini().unwrap();
 	/**********************************************************************************************************************/
-	// Print the copyright message
-	//let _    = engine.tqcprt().unwrap();
-	//let cprt = engine.tqerr().unwrap();
+	// TQERR reads ChemApp's current message buffer, so retrieve the copyright
+	// records immediately after TQCPRT, as the GTT C demo does.
+	engine.tqcprt().unwrap();
+	let cprt = engine.tqerr().unwrap();
+	println!("ChemApp copyright message:\n{}", cprt);
 	/**********************************************************************************************************************/
 	// ChemApp library version
 	let vers = engine.tqvers().unwrap();
@@ -136,7 +138,8 @@ pub fn main(){
 	}
 	println!("Dimensionless G: {:?}", engine.tqgdpc("G", 1, 1).unwrap());
 
-	if engine.tqlite().unwrap() {
+	let is_light = engine.tqlite().unwrap();
+	if is_light {
 		println!("Target calculations omitted for the ChemApp light version.");
 	} else {
 		let liquid = engine.tqinp("SiO2(liq").unwrap();
@@ -199,11 +202,20 @@ pub fn main(){
 		println!("Skipping sublattice functions because subl-ex.dat is unavailable.");
 	}
 
-	println!("Licensee user ID: {:?}", engine.tqgtid().unwrap());
-	println!("Licensee name: {:?}; program ID: {:?}", engine.tqgtnm().unwrap(), engine.tqgtpi().unwrap());
-	let (dongle_type, dongle_id) = engine.tqgthi().unwrap();
+	// Exercise license/interface getters without printing installation-specific
+	// identifiers, holder names, or dongle values in ordinary demo logs.
+	let license_id = engine.tqgtid().unwrap();
+	let license_holder = engine.tqgtnm().unwrap();
+	let program_id = engine.tqgtpi().unwrap();
+	let (dongle_type, _dongle_id) = engine.tqgthi().unwrap();
 	let (expiry_month, expiry_year) = engine.tqgted().unwrap();
-	println!("Dongle: {:?} {:?}; expiry: {:?}/{:?}", dongle_type, dongle_id, expiry_month, expiry_year);
+	println!("ChemApp Light mode: {:?}", is_light);
+	println!("License ID returned: {}", !license_id.is_empty());
+	println!("License holder returned: {}", !license_holder.is_empty());
+	println!("License holder contains internal spaces: {}", license_holder.contains(' '));
+	println!("Program ID returned: {}", !program_id.is_empty());
+	println!("Dongle mechanism returned: {}", !dongle_type.is_empty());
+	println!("Expiration information returned: {}", expiry_month > 0 || expiry_year > 0);
 	let error_unit = engine.tqgio("ERROR").unwrap();
 	engine.tqcio("ERROR", 0).unwrap();
 	let transparent_file = project_dir.join("data").join("cosiex.cst");

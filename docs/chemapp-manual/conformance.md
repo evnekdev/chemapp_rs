@@ -104,25 +104,34 @@ decoding from `TQGTNM`, `TQGNSC`, `TQGNP`, `TQMODL`, `TQGNPC`, `TQGNLC`, and
 `TQGSP`. In particular, `TQGTNM` now preserves complete multi-word
 license-holder text and removes only trailing Fortran padding; its raw ABI was
 already correct. Win32/x86 therefore has 74 verified wrappers and one
-incomplete API (`TQGETR`) after this correction. All 75 Win64 wrappers remain UNVERIFIED because the checked 2017
-DLL lacks a version-matched raw-ABI source; Linux/i386 has 68 UNVERIFIED
-wrappers and 7 absent exports; Unix64 has no checked binary.
+incomplete API (`TQGETR`) after this correction. Direct disassembly of the
+checked 2017 Win64 DLL now establishes 32-bit raw `LI`/`LIP`/`NOERR` storage
+and 64-bit non-UNIX `LNT` values. Because current Rust declares every Win64
+`NOERR` as `&mut usize`, all 75 Win64 rows now have a confirmed common
+ABI-ISSUE; no wrapper is promoted to Win64 VERIFIED by that result.
+Linux/i386 has 68 UNVERIFIED wrappers and 7 absent exports; Unix64 has no
+checked binary.
 
 The checked Win64 `maindemo` run observed a non-empty TQGTNM result containing
-internal spaces with no trailing padding. The installation-specific text was
-not retained in repository documentation or tests.
+internal spaces with no trailing padding. It also executed the canonical
+`TQCPRT -> immediate TQERR` sequence and obtained three structurally complete
+records. Installation-specific text and identifiers were not retained in
+repository documentation or tests.
 
 The former CRITICAL and HIGH defects above are **FIXED IN CURRENT MASTER** for
 the source rules supported by the checked Win32 bridge. This does not resolve
-the Win64 `LI`/`LIP`/hidden-length-width question. The next recommended
-production milestone is evidence-based Win64 integer/length ABI verification;
-the `TQGETR` scalar/array redesign remains separate.
+the Win64 `LI`/`LIP`/hidden-length-width question. The next production
+milestone is a systematic Win64 raw-integer conversion: use explicit `i32`
+raw storage and checked public `usize` conversions while retaining `usize`
+for proven 64-bit `LNT` values. The `TQGETR` scalar/array redesign remains
+separate.
 
-The checked Win32, Win64, and Linux/i386 exports were inspected.  A Win64
-`maindemo` smoke run succeeded, but it does not resolve the 32-bit C
-`LI`/`LIP` versus Rust `usize` question.  The full matrix, explicit character
-analysis, Unix return-convention conclusion, exact binary evidence, and C/Rust
-demo coverage are in [native-abi-audit.md](native-abi-audit.md).
+The checked Win32, Win64, and Linux/i386 exports were inspected. On Win64,
+`movl` reads/writes through representative index, count, and error pointers
+resolve the `LI`/`LIP` question independently of the successful demo. The
+full matrix, explicit character analysis, Unix return-convention conclusion,
+exact binary evidence, and C/Rust demo coverage are in
+[native-abi-audit.md](native-abi-audit.md).
 
 ## Advanced functionality
 

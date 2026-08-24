@@ -139,10 +139,22 @@ data-manipulation routines.
 
 The checked `cacint.h` uses 32-bit `LI`/`LIP` on its x64 branch (`int` and
 `int *`), while Rust currently uses `usize` for most native integers and for
-all error outputs.  Never use pointer width as evidence that `usize` is the
-right ChemApp integer type.  The matching 2013 bridge establishes
-interleaved lengths for non-UNIX and appended `ftnlen` values for UNIX; it
-does not by itself prove the ABI of the 2017 Win64 binary.
+all error outputs. Never use pointer width as evidence that `usize` is the
+right ChemApp integer type. Direct disassembly of the checked 2017 Win64 DLL
+now independently confirms the 32-bit rule: `TQINI`, `TQVERS`, `TQLITE`,
+`TQNOSC`, `TQNOPC`, `TQGNP`, `TQGTED`, and license routines make DWORD
+loads/stores through `LI`/`LIP`/`NOERR` pointers. The existing Win64
+`&usize` declarations are therefore a confirmed ABI issue pending systematic
+conversion.
+
+The same x64 disassembly supports a different rule for non-UNIX CHARACTER
+lengths: representative `TQGTID`, `TQGTNM`, `TQGTPI`, `TQGTHI`, `TQGIO`,
+`TQGSU`, `TQCSU`, and `TQWSTR` entries preserve their adjacent length values
+in 64-bit slots, consistent with the header's `LNT size_t`. Thus Win64 raw
+integer and raw string-length types must remain separate: use explicit
+32-bit storage for `LI`/`LIP`/`NOERR`, but a 64-bit value representation for
+`LNT`. The bridge establishes interleaved lengths for non-UNIX and appended
+`ftnlen` values for UNIX. Unix64 remains unverified.
 
 For fixed Fortran CHARACTER outputs, buffer capacity and the hidden declared
 length are independent facts: an oversized Rust buffer does not authorize an
@@ -156,6 +168,13 @@ outputs only within their declared record length, then removing trailing
 Fortran blanks. A Rust allocation may be larger for convenience, but neither
 its capacity nor an incidental NUL byte may be used as the native CHARACTER
 length or as permission to scan past the declared record.
+
+`TQERR` is additionally stateful: `TQCPRT` writes ChemApp's current message
+buffer, and the canonical conformance sequence retrieves its three
+`CHARACTER*80` records immediately with `TQERR`. The Rust wrapper allocates
+three records (240 bytes total), passes the per-record native length 80, and
+trims/converts each record separately. Do not insert unrelated ChemApp calls
+between `TQCPRT` and that `TQERR` read when validating the copyright path.
 
 The UNIX bridge's `CMT` spelling is `extern int`, while the manual describes
 subroutines and the bridge ignores any return value. On the checked i386 C

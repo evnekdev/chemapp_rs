@@ -25,9 +25,17 @@ for each represented build.  At routine level, the confirmed findings are
 **2 semantic/API defects**. All nine are now **FIXED IN CURRENT MASTER** for
 the source-level rules established by the checked Win32 bridge. `tqgetr`
 remains the sole **INCOMPLETE** Win32 wrapper. The checked Linux/i386 library
-also lacks **7** represented exports. Win64 has **75 UNVERIFIED** wrappers
-because the 2014 transition source does not prove the 2017 x64 ABI; Unix64
-has no checked binary.
+also lacks **7** represented exports. A later direct x64 disassembly pass
+established that Win64 `LI`/`LIP`/`NOERR` storage is 32-bit, so the existing
+`&usize` declarations are a confirmed common **ABI-ISSUE** for all 75 Win64
+wrappers (every wrapper supplies `NOERR`). That does not promote the other
+raw details to verified. Unix64 has no checked binary.
+
+Current routine-level status is therefore: **75 Win64 ABI-ISSUE rows** caused
+by one common raw-integer/`NOERR` declaration defect, **1 Win32 INCOMPLETE**
+row (`TQGETR`), **0 current confirmed Win32 semantic defects**, and **7
+Linux/i386 platform-unavailable rows**. The previous nine Win32 defects are
+historical fixed findings, not outstanding issues.
 
 **ORIGINAL AUDIT FINDING / FIXED IN CURRENT MASTER:** `Engine::tqchar`
 previously declared the native `DBP` (`double *`) output as `&mut i32`, which
@@ -38,9 +46,10 @@ also corrected and have focused structural tests. `tqgtnm`, `tqgnsc`,
 `tqgnp`, `tqmodl`, `tqgnpc`, `tqgnlc`, and `tqgsp` now preserve internal
 spaces and remove only trailing fixed-record padding. These changes do not
 verify the unresolved Win64 integer/length ABI.
-The Windows x64 `LI`/`LIP` question remains HIGH-RISK **UNVERIFIED**, not a
-confirmed defect, because the available bridge is from 2013 and the checked
-x64 DLL is from 2017.
+The Windows x64 `LI`/`LIP` question is no longer merely high-risk: the 2017
+DLL itself performs 32-bit reads and writes through representative INTEGER
+pointers. A systematic raw-ABI conversion is still required; it was not
+bundled into this evidence-and-conformance milestone.
 
 ## Scope, methodology, and evidence boundary
 
@@ -60,8 +69,10 @@ Raw-ABI evidence was kept separate from manual semantics:
 
 1. `examples/cacint.h`, revision 2571, 2014-05-14;
 2. `examples/cacint.c`, revision 2499, 2013-09-25;
-3. non-destructive export/header inspection of the checked-in libraries; and
-4. one Win64 behavioral smoke run of `cargo run --example maindemo`.
+3. non-destructive export/header inspection of the checked-in libraries;
+4. Win64 `llvm-objdump` disassembly of simple exports and representative
+   CHARACTER-taking exports; and
+5. Win64 behavioral smoke runs of `cargo run --example maindemo`.
 
 The C files are reference evidence only.  Rust calls the exported Fortran ABI
 directly, not the C functions in those files.
@@ -71,11 +82,11 @@ directly, not the C functions in those files.
 | Build | Evidence obtained | Result |
 |---|---|---|
 | `windows/ca_vc_e_local.dll` | PE header: x86; timestamp in export directory 2013-10-11; `dumpbin /exports` | All 75 wrapped names are exported both as uppercase names and as `_TQ...@NN`; the `FUNCSWIN32` decorated aliases match. |
-| `windows/ca_vc_e_x64.dll` | PE header: x64; `dumpbin /exports` | All 75 wrapper names are exported as undecorated uppercase `TQ...`.  Export names do not reveal integer or hidden-length widths. |
+| `windows/ca_vc_e_x64.dll` | PE header: x64; timestamp 2017-11-30 02:12:47 UTC; `dumpbin /exports`; `llvm-objdump` | All 75 wrapper names are exported as undecorated uppercase `TQ...`. Disassembly establishes 32-bit `LI`/`LIP`/`NOERR` pointee storage and supports 64-bit non-UNIX `LNT` values; export names alone do not reveal those facts. |
 | `linux/libLChemAppS.so` | ELF header: ELF32/i386; `objdump -T` | Lowercase trailing-underscore exports are present for the older surface.  `tqchar_`, `tqgdat_`, `tqlpar_`, `tqgpar_`, `tqcdat_`, `tqwasc_`, and `tqconf_` are absent. |
 | Win32 calling convention | Win32 decorated `@NN` plus `cacint.c` non-UNIX declarations | Supports `extern "system"`/stdcall and the interleaved lengths shown below, but decoration alone is not a complete signature proof. |
 | Unix/i386 calling convention | ELF symbols plus `cacint.c` UNIX declarations | Supports lowercase `_` symbols and appended `ftnlen` values.  The host is Windows, so no runtime execution was possible. |
-| Win64 calling convention | export inspection plus successful demo run | `extern "system"` loads/runs for the exercised path.  Widths and raw string-length types remain unverified against a version-matched bridge or disassembly/conformance harness. |
+| Win64 calling convention | export inspection, disassembly, and successful demo run | Windows x64 register/stack calling convention is used. `TQINI`, `TQVERS`, `TQLITE`, `TQNOSC`, `TQNOPC`, `TQGNP`, `TQGTED`, and the license getters show 32-bit INTEGER pointees. Representative string exports preserve the interleaved non-UNIX ordering and pass the length value in a 64-bit slot. |
 | Unix64 | represented by `defs.rs` only | Not represented by a checked-in binary and not verified. |
 
 The correction milestone repeated the Win64 smoke run after the source
@@ -89,7 +100,11 @@ call sequence is **not** proof of the raw ABI.
 
 The fixed-output conversion correction also ran this demo. `tqgtnm` returned
 a non-empty license-holder value containing internal spaces and no trailing
-padding; the installation-specific text was intentionally not recorded.
+padding; the installation-specific text was intentionally not recorded. The
+current demo additionally executes `TQCPRT` followed immediately by `TQERR`;
+it observed three non-empty copyright records with their record boundaries
+and internal text intact. The routine now reports only structural license
+facts, not local identifiers or holder text.
 
 ## Shared ABI notation
 
@@ -100,8 +115,9 @@ padding; the installation-specific text was intentionally not recorded.
   on the header's x64 branch it uses `int`/`int *` (32-bit).
 - `DB`/`DBP`: `double`/`double *`.
 - `LNT`: non-UNIX CHARACTER length (`long` on Win32, `size_t` in the header's
-  x64 branch).  The bridge declarations/calls spell the supplied values as
-  `int`; this discrepancy itself needs version-matched Win64 confirmation.
+  x64 branch). On the checked x64 DLL, representative entry points preserve
+  the supplied length in a 64-bit register/descriptor field, supporting the
+  header's `size_t` rule. This is distinct from `LI`/`LIP`.
 - `ftnlen`: UNIX CHARACTER length (`long` on Unix/i386, `int` in the header's
   x64 UNIX/Cygwin branch).
 - `CMT`: `void __stdcall` on non-UNIX, `extern int` on UNIX.  The Rust code
@@ -112,12 +128,14 @@ padding; the installation-specific text was intentionally not recorded.
 - `I`: input, `O`: output, `IO`: in/out.  Native indices are one-based unless
   the semantic column states a documented zero/negative special case.
 
-All `native.rs` wrappers use `usize` for `NOERR` and most native integer
-arguments.  That has the right storage width for the verified Win32 and
-Unix/i386 source evidence, but is not automatically correct on Win64: the
-header's x64 `LIP` is `int *`, while `&mut usize` points to eight bytes.  The
-low four bytes happen to make common small values work on little-endian x64;
-that is not sufficient ABI proof.
+All `native.rs` wrappers currently use `usize` for `NOERR` and most native
+integer arguments. That has the right storage width for the verified Win32
+and Unix/i386 source evidence, but is incorrect for the confirmed Win64
+`LIP` ABI: the DLL writes four bytes, while `&mut usize` supplies eight-byte
+storage. The low four bytes happen to make zero-initialized common values
+appear to work on little-endian x64; the actual machine declaration is still
+wrong. In contrast, Win64 CHARACTER lengths are 64-bit value arguments, so
+the existing `usize` length representation is supported for that one role.
 
 ## Platform-status model and complete status record
 
@@ -130,7 +148,7 @@ named build only. `ABI-ISSUE` denotes a machine declaration conflict;
 | Build | VERIFIED | ABI-ISSUE | FFI-SOUNDNESS | SEMANTICS-ISSUE | INCOMPLETE | UNVERIFIED | PLATFORM-UNAVAILABLE | NOT-REPRESENTED |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | checked Win32/x86 DLL | 74 | 0 | 0 | 0 | 1 | 0 | 0 | 0 |
-| checked Win64/x64 DLL | 0 | 0 | 0 | 0 | 0 | 75 | 0 | 0 |
+| checked Win64/x64 DLL | 0 | 75 | 0 | 0 | 0 | 0 | 0 | 0 |
 | checked Linux/i386 SO | 0 | 0 | 0 | 0 | 0 | 68 | 7 | 0 |
 | Unix64 mapping in `defs.rs` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 75 |
 
@@ -143,10 +161,10 @@ verified because the checked SO is older (2003) than the 2013 bridge source.
 
 | Wrapper(s) | Win32/x86 checked DLL | Win64/x64 checked DLL | Linux/i386 checked SO | Unix64 mapping |
 |---|---|---|---|---|
-| `tqgtid`, `tqgtpi`, `tqgthi`, `tqgtrh`, `tqchar`, `tqerr`, `tqgspc`, `tqgsu`, `tqgpar` | VERIFIED (corrected source; checked Win32 bridge evidence) | UNVERIFIED | UNVERIFIED except unavailable `tqchar`/`tqgpar` | NOT-REPRESENTED |
-| `tqgetr` | INCOMPLETE | UNVERIFIED | UNVERIFIED | NOT-REPRESENTED |
-| `tqconf`, `tqgdat`, `tqlpar`, `tqcdat`, `tqwasc` | VERIFIED | UNVERIFIED | PLATFORM-UNAVAILABLE | NOT-REPRESENTED |
-| all remaining 60 wrappers | VERIFIED | UNVERIFIED | UNVERIFIED | NOT-REPRESENTED |
+| `tqgtid`, `tqgtpi`, `tqgthi`, `tqgtrh`, `tqchar`, `tqerr`, `tqgspc`, `tqgsu`, `tqgpar` | VERIFIED (corrected source; checked Win32 bridge evidence) | ABI-ISSUE (`NOERR` is `int *`; other details not promoted) | UNVERIFIED except unavailable `tqchar`/`tqgpar` | NOT-REPRESENTED |
+| `tqgetr` | INCOMPLETE | ABI-ISSUE (`NOERR`), plus its separately incomplete scalar API | UNVERIFIED | NOT-REPRESENTED |
+| `tqconf`, `tqgdat`, `tqlpar`, `tqcdat`, `tqwasc` | VERIFIED | ABI-ISSUE (`NOERR`), other integer parameters remain to be converted | PLATFORM-UNAVAILABLE | NOT-REPRESENTED |
+| all remaining 60 wrappers | VERIFIED | ABI-ISSUE (`NOERR`), other raw details not promoted | UNVERIFIED | NOT-REPRESENTED |
 
 The “all remaining 60” set is the 75-wrapper inventory below minus the 15
 wrappers named in the preceding rows; it is intentionally a set expression,
@@ -154,9 +172,13 @@ not a claim that an unnamed platform was checked.  Together with the complete
 inventory it gives one and only one status per wrapper/build.
 
 For unambiguous machine processing and review, the same record is expanded
-here one wrapper per row.  Key: `V` VERIFIED, `A` ABI-ISSUE, `F` FFI-SOUNDNESS,
-`S` SEMANTICS-ISSUE, `I` INCOMPLETE, `U` UNVERIFIED, `P`
-PLATFORM-UNAVAILABLE, `N` NOT-REPRESENTED.
+here one wrapper per row. The historical `U` cells in its W64 column are
+superseded uniformly by `A`: direct x64 evidence proves every wrapper's
+`&mut usize` `NOERR` declaration wrong. They are retained below only to
+preserve the pre-disassembly audit record; the compact matrix above is the
+authoritative current status. Key: `V` VERIFIED, `A` ABI-ISSUE,
+`F` FFI-SOUNDNESS, `S` SEMANTICS-ISSUE, `I` INCOMPLETE, `U` UNVERIFIED,
+`P` PLATFORM-UNAVAILABLE, `N` NOT-REPRESENTED.
 
 | Wrapper | W32 | W64 | Linux/i386 | Unix64 |
 |---|---|---|---|---|
@@ -245,7 +267,10 @@ Unix64 entry is represented in `defs.rs` but has no checked-in binary.
 `Demo` is `C/R` for `cademo1.c`/`maindemo.rs`, `-` for neither; `crate` means
 another library module calls the wrapper.  `Runtime` means the Win64 smoke
 run exercised it; `indirect` means the demo's path used a helper, and `-`
-means it was not exercised.
+means it was not exercised. The per-routine Win64 notes below preserve the
+pre-disassembly detail; their "UNVERIFIED" wording is superseded uniformly by
+the confirmed common `NOERR` ABI-ISSUE recorded in the authoritative status
+matrix above. They do not claim the remaining arguments are verified.
 
 ### Initialization, licensing, files, and units (manual 2.x)
 
@@ -253,7 +278,7 @@ means it was not exercised.
 |---|---|---|---|---|---|
 | TQINI `tqini` | §2.1; O `NOERR`; must precede normal calls; resets defaults/units. | `tqini(LIP)`; F-W/U `(LIP)`. | none; Rust `usize*`. | `_TQINI@4` / `TQINI` / `tqini_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQVERS `tqvers` | §2.3; O version, O error; after init. | `tqvers(LIP,LIP)`; F-W/U same. | none; Rust `i32*,usize*`. | `_TQVERS@8` / `TQVERS` / `tqvers_`; C/R; yes. | Win32/x86: VERIFIED / — (Win32 version output is 32-bit). |
-| TQCPRT `tqcprt` | §2.2; writes copyright into native message buffer. | `tqcprt(LIP)`; F-W/U same. | none. | `_TQCPRT@4` / `TQCPRT` / `tqcprt_`; C/R (commented in Rust); no. | Win32/x86: VERIFIED / —. |
+| TQCPRT `tqcprt` | §2.2; writes copyright into native message buffer. | `tqcprt(LIP)`; F-W/U same. | none. | `_TQCPRT@4` / `TQCPRT` / `tqcprt_`; C/R; Win64 runtime yes. | Win32/x86: VERIFIED / —. Win64 `NOERR` remains an ABI-ISSUE pending the systematic raw-type conversion. |
 | TQLITE `tqlite` | §2.4; O Light flag; phase targets/maps unavailable in Light. | `tqlite(LIP,LIP)`; F-W/U same. | none; Rust bool from `i32`. | `_TQLITE@8` / `TQLITE` / `tqlite_`; C/R; yes. | Win32/x86: VERIFIED / —. |
 | TQGTID `tqgtid` | §2.5; O license user ID; after init. | `tqgtid(CHP,LIP)`; F-W `(ID,255,NOERR)`, F-U `(ID,NOERR,ftnlen=255)`. | C(255); Rust now allocates and passes 255. | `_TQGTID@12` / `TQGTID` / `tqgtid_`; C/R; yes. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; original hidden length was 256. Other builds UNVERIFIED. |
 | TQGTNM `tqgtnm` | §2.6; O license-holder name. | `tqgtnm(CHP,LIP)`; F-W `(NAME,80,NOERR)`, F-U appended 80. | C(80); raw ABI was already correct; Rust now decodes exactly the 80-byte record. | `_TQGTNM@12` / `TQGTNM` / `tqgtnm_`; C/R; yes. | **FIXED IN CURRENT MASTER:** original `clen()` stopped at the first space. Complete internal-space-preserving license-holder text is now returned with trailing padding removed. |
@@ -351,8 +376,8 @@ means it was not exercised.
 
 1. **FIXED IN CURRENT MASTER:** `tqgsu` now derives its input length from
    `CString::as_bytes()`, matching the bridge's `strlen(OPTION)` and allowing
-   an empty option without arithmetic underflow. The Win64 and Unix64 length
-   types remain unverified.
+   an empty option without arithmetic underflow. Win64 direct-binary evidence
+   supports its 64-bit interleaved length values; Unix64 remains unverified.
 2. `tqgetr` at `src/native.rs` takes `usize` indices, allocates one
    `f64`, and returns one scalar, but manual §5.9 requires `VAL` to be an
    array for `(INDEXP>0, INDEX<0)` (all constituents of a phase, or all
@@ -391,16 +416,17 @@ The bridge has one raw rule per represented ABI:
 |---|---|---|
 | non-UNIX / checked Win32 | immediately after each explicit CHARACTER argument | `LNT`/the bridge's `int` call values; Win32 decoration corroborates each total stack size |
 | UNIX / checked Linux i386 | appended after all explicit arguments, in CHARACTER argument order | `ftnlen`, which is `long` on i386 in `cacint.h` |
-| Win64 and Unix64 | project has mappings, but no matching raw bridge/binary pair | unverified; do not infer from pointer width |
+| checked Win64 | immediately after each explicit CHARACTER argument | 64-bit by-value `LNT`/`size_t` is supported by representative x64 disassembly; do not confuse this with 32-bit `LI`/`LIP` |
+| Unix64 | project has mappings, but no checked binary | unverified; do not infer from pointer width |
 
 ### Complete CHARACTER revalidation
 
-This is a re-check of all **50** character-taking wrappers.  For the Win32
+This is a re-check of all **50** character-taking wrappers. For the Win32
 bridge, `W:` means every length immediately follows its character pointer;
 for UNIX/i386, `U:` means all lengths are appended, in explicit-character
-order.  The Rust declarations use `usize` for both length forms.  That width
-matches the checked Win32 stack evidence but does not establish Win64 or
-Unix64 length types.
+order. The Rust declarations use `usize` for both length forms. That width
+matches the checked Win32 stack evidence and is now supported for Win64
+non-UNIX `LNT`; Unix64 remains unverified.
 
 | Character wrapper(s) | Direction and native declared length | Rust buffer / length actually passed | Result |
 |---|---|---|---|
@@ -431,6 +457,35 @@ verified wrappers was therefore overstated while `tqgtnm`'s first-space
 conversion remained. After this correction, 74 is the current Win32/x86 count:
 the seven output-adaptation defects are fixed and `tqgetr` remains incomplete.
 
+## Win64 direct-binary evidence (2026-08-24)
+
+The examined file was `windows/ca_vc_e_x64.dll`, PE x64, image base
+`0x180000000`, timestamp `2017-11-30 02:12:47 UTC`. The reproducible command
+used `C:\\gcc64\\bin\\llvm-objdump.exe -d` with the following entry addresses:
+`TQINI` `0x180008cc0`, `TQCPRT` `0x180009030`, `TQVERS` `0x180009220`,
+`TQLITE` `0x1800092d0`, `TQGIO` `0x18000a5a0`, `TQGSU` `0x18000aa00`,
+`TQCSU` `0x18000abe0`, `TQNOSC` `0x18000c9c0`, `TQGNP` `0x18000d7f0`,
+`TQNOP` `0x18000da00`, `TQNOPC` `0x18000e220`, `TQWSTR` `0x180009940`,
+`TQGTID` `0x180048280`, `TQGTED` `0x180048660`, `TQGTHI` `0x180048d80`,
+`TQGTNM` `0x1800494e0`, `TQGTPI` `0x18004a780`, and `TQGTRH`
+`0x18004e620`.
+
+| Question | Evidence and conclusion |
+|---|---|
+| Native INTEGER / `LI` / `LIP` | **32-bit signed storage.** `TQINI` zeroes `NOERR` with `movl`; `TQVERS` writes both version and `NOERR` with `movl`; `TQNOSC` and `TQNOPC` use 32-bit loads/stores for counts and indices; `TQGNP` uses 32-bit arithmetic through its index pointer; `TQGTED` writes its date outputs with `movl`. This agrees with the x64 `cacint.h` `int`/`int *` branch. |
+| `NOERR` | **32-bit signed storage.** `TQINI`, `TQCPRT`, `TQVERS`, `TQLITE`, all inspected license getters, and `TQGSU` write exactly a DWORD through the error pointer. Because every wrapper passes `NOERR`, all current Win64 `&mut usize` declarations have this confirmed machine ABI conflict. |
+| CHARACTER length / `LNT` | **64-bit by-value slot, supported by direct evidence.** `TQGTID`, `TQGTNM`, `TQGTPI`, `TQGTHI`, `TQGIO`, `TQGSU`, `TQCSU`, and `TQWSTR` preserve the supplied length in 64-bit registers and descriptor fields before use. This matches the x64 header's `LNT size_t`; it is not evidence that `LI` is pointer-sized. |
+| CHARACTER placement | **Interleaved non-UNIX ordering.** `TQGNP` receives `(index*, buffer, length, noerr*)` in `RCX/RDX/R8/R9`; `TQGSU` receives `(option, option_length, unit, unit_length, noerr*)`, with the fifth pointer on the Win64 stack; `TQCSU`/`TQWSTR` preserve the same adjacent-length order. `TQGTRH` consumes the corresponding register/stack argument slots consistently with the bridge's five-pair order; all of its per-field values remain governed by the recorded bridge evidence. |
+| Calling / return convention | **Windows x64 / `extern "system"`.** The exports are undecorated jump stubs to ordinary x64 bodies and return with `retq`; scalar results are written via pointer arguments. The manual calls them subroutines and no selected routine establishes a meaningful return register value, so Rust `-> ()` remains the correct non-observing declaration. |
+
+This does not make every non-integer parameter or every routine semantically
+verified. It does establish a common raw type rule for the subsequent code
+correction: on Win64, raw `LI`/`LIP`/`NOERR` must be explicit `i32` storage,
+while raw non-UNIX CHARACTER lengths are `usize`/`size_t` value arguments.
+Public `usize` indices may remain ergonomic only after checked conversion to
+the raw `i32`; documented negative sentinel indices must not be prematurely
+converted to unsigned values.
+
 ## Integer width and calling-convention findings
 
 On the verified Win32 source/binary, `usize` has the same *width* as the
@@ -439,12 +494,13 @@ the library, including `_TQERR@12`.  `f64` matches `DB`; `i32` matches the
 Win32 32-bit integer storage used for dimensions and IDs where applied.
 
 The Win64 header branch defines `LI int` and `LIP int *`, not 64-bit `long`
-or pointer-sized integers.  `native.rs` passes most integers and all errors
-as `usize`.  Since no version-matched 2017 bridge or ABI-level Win64 test
-exists, this audit does **not** promote that concern to a confirmed ABI issue;
-it is the first correction/research milestone.  In particular, never use
-successful x64 calls as justification for treating `usize` as ChemApp's
-integer type.
+or pointer-sized integers. The direct 2017 DLL evidence above now confirms
+that rule for representative input, output, count, index, and `NOERR`
+pointers. `native.rs` still passes most of them as `usize`; that is a
+confirmed Win64 ABI-ISSUE, not a result of successful-demo inference. The
+source is intentionally left unchanged in this evidence milestone because a
+safe correction needs a systematic raw `i32` alias and checked public-value
+conversions across the entire binding surface.
 
 The Linux library is ELF32/i386, so its exported trailing-underscore names
 support `FUNCSUNIX32`, not `FUNCSUNIX64`.  It is older than the full wrapper
@@ -470,15 +526,43 @@ by itself change a Rust call to `-> ()` into a proven defect; the broader U32
 rows remain UNVERIFIED because no version-matched bridge/runtime conformance
 evidence was available.
 
+## License and interface conformance
+
+`TQERR` retrieves ChemApp's current internal message buffer, not an immutable
+per-call result. The conformance sequence is therefore exactly
+`TQINI -> TQCPRT -> immediate TQERR`, matching `cademo1.c`; intervening calls
+must not be inserted before reading the three `CHARACTER*80` records. The
+Rust wrapper allocates 240 bytes, passes the native per-record length 80, and
+converts the three records independently before joining non-empty records
+with exactly one newline. A pure regression test uses synthetic copyright-like
+text to prove that record boundaries, internal spaces, a long second record,
+and trailing blank removal are all preserved without committing vendor text.
+
+The checked Win64 `maindemo` run successfully initialized the x64 DLL,
+executed that sequence, and observed a structurally complete three-record
+copyright result. It also successfully exercised `TQVERS`, `TQLITE`,
+`TQGTID`, `TQGTNM`, `TQGTPI`, `TQGTHI`, and `TQGTED`. `TQGTNM` was non-empty,
+contained internal spaces, and had no trailing fixed-record padding. The
+demo intentionally reports only those facts, never the local holder name,
+user ID, dongle ID, token, or absolute path.
+
+No direct C-vs-Rust record comparison was committed for this pass. The host
+is Windows and the repository has no matching Win64 C import library/build
+path for the older transition source; the checked Linux reference is ELF32
+i386 and cannot run under this host's Windows loader. No Linux/i386 C
+reference executable was therefore built or executed. These environment
+limits do not change the Rust runtime result or establish a Linux ABI result.
+A controlled non-copyright native-error probe was intentionally deferred: it
+would need a documented harmless option and an isolated engine state.
+
 ## C demo versus Rust translation
 
-`cademo1.c` invokes **64** distinct native routines.  `maindemo.rs` contains
-corresponding invocation expressions for the same **64** routine names, but
-its `tqcprt` and `tqerr` lines are commented out; its active translated path
-therefore exercises **62** distinct wrappers before optional files are
-considered.  The differences are intentional: copyright/error-buffer display
-is suppressed, and optional `subl-ex.dat`/`cosiex.cst` paths are skipped when
-the files are absent.  The translation otherwise mirrors the important order:
+`cademo1.c` invokes **64** distinct native routines. `maindemo.rs` now has
+active corresponding invocation expressions for the same **64** routine
+names, including the canonical `TQINI`, `TQCPRT`, immediate `TQERR`, and
+`TQVERS` opening sequence. Optional `subl-ex.dat`/`cosiex.cst` paths remain
+skippable when their files are absent. The translation otherwise mirrors the
+important order:
 query FILE unit; open/read/close; unit changes; global conditions; TQCE/TQCEN;
 target and mapping continuation; streams; sublattices; and transparent-file
 metadata.
@@ -494,10 +578,11 @@ of comprehensive native coverage.
 
 1. **FIXED IN CURRENT MASTER:** `tqchar`, the five fixed CHARACTER calls,
    `tqgsu`, `tqgpar`, and `tqgspc` have focused structural tests. No production
-   correction has yet established a new non-Win32 ABI.
-2. Establish the actual Win64 Fortran integer/length ABI from a version-
-   matched GTT transition source, compiler documentation, disassembly, or a
-   narrowly scoped conformance harness.  Replace `usize` only with evidence.
+   code correction has yet implemented the newly established non-Win32 ABI.
+2. Systematically correct Win64 raw `LI`/`LIP`/`NOERR` declarations to `i32`.
+   Keep raw `LNT` as `usize`/`size_t`, add checked `usize -> i32` conversions
+   at the public boundary, and preserve signed zero/negative ChemApp index
+   semantics in raw/internal APIs.
 3. Split `tqgetr` into scalar and correctly sized array forms, retaining its
    documented negative indices; bound-check data-manipulation buffers.
 4. Add capability/symbol detection for the older Linux/i386 binary, then
