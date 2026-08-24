@@ -101,4 +101,3 @@ On success, the final converged native trial remains the live ChemApp state. On
 failure there is no hidden rollback: the last successful or partial native
 trial and previously written conditions may remain live. Callers that require
 a known state after an error must explicitly establish it.
-
