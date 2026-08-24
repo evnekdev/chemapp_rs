@@ -45,6 +45,7 @@ This material is a paraphrased engineering reference. Do not copy substantial po
 - [Official best practices translated to Rust](best-practices.md)
 - [Direct Fortran ABI and the ChemApp C transition layer](abi-and-c-interface.md)
 - [Subroutine index](subroutine-index.md)
+- [Entities, snapshots, tables, and mapping](entities-and-snapshots.md)
 - [Development policy](development-policy.md)
 - [Current conformance notes](conformance.md)
 

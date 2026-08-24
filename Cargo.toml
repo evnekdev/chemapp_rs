@@ -21,4 +21,5 @@ nalgebra = "0.32"
 serde = {version = "1.0", features = ["derive"]}
 bincode = {version = "2.0", features=["serde","alloc"]}
 chemformula = {git = "https://github.com/evnekdev/chemformula.git"}
+comfy-table = { version = "8.0.0", default-features = false }
 #chemformula = {version = "0.1"}

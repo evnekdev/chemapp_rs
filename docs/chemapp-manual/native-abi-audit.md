@@ -433,7 +433,7 @@ claim the other arguments are verified.
 | TQGDPC `tqgdpc` | §5.10; I property option/phase/constituent, O value; documented dimensionless/unit rules depend on option and active units. | `(CHP,LI,LI,DBP,LIP)`. | C(OPTION). | `_TQGDPC@24` / `TQGDPC` / `tqgdpc_`; C/R; yes. | Win32/x86: VERIFIED / —. |
 | TQSTXP `tqstxp` | §5.11; I stream ID/property option, O property; stream state/units apply. | `(CHP,CHP,DBP,LIP)`. | C(IDENTS,OPTION), F-U appends both lengths. | `_TQSTXP@24` / `TQSTXP` / `tqstxp_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQGTLC `tqgtlc` | §5.12; I phase/sublattice/constituent, O current calculated site fraction. | `(LI,LI,LI,DBP,LIP)`. | none. | `_TQGTLC@20` / `TQGTLC` / `tqgtlc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
-| TQBOND `tqbond` | §5.13; I phase and pair/quadruplet indexes, O current fraction; applicable models only. | `(LI,LI,LI,LI,LI,DBP,LIP)`. | none. | `_TQBOND@28` / `TQBOND` / `tqbond_`; -/-/crate; no. | Win32/x86: VERIFIED / LOW. |
+| TQBOND `tqbond` | §5.13; I phase and model-dependent indexes, O current fraction. SUBG uses four sublattice members with the second-sublattice offset; QUAS/QSOL use two phase constituents; other models are inapplicable. | `(LI,LI,LI,LI,LI,DBP,LIP)`. | none. | `_TQBOND@28` / `TQBOND` / `tqbond_`; -/-/crate; no native model-data run. | Win32/x86 raw ABI VERIFIED / LOW. The high-level Pair/Quadruplet representation is structurally tested. |
 | TQERR `tqerr` | §5.14; O current three-line message; must be checked close to origin. | `(CHP,LIP)`; bridge raw calls length **80**, with a 3×80 buffer. | C(80) record length; Rust now retains 240-byte storage but passes 80 and joins trimmed records. | `_TQERR@12` / `TQERR` / `tqerr_`; C/R active; Win64 runtime yes. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; the checked Win64 run observed three complete records. Original hidden length was 240; other builds remain unverified. |
 
 ### Thermodynamic data manipulation (manual 6.x)
@@ -467,20 +467,17 @@ claim the other arguments are verified.
    configured `FILE` unit through `TQGIO`, and uses that unit for open/read/
    close. It attempts `TQCLOS` after every successful open, including a read
    failure; if read and close both fail, the primary native read error is
-   retained together with cleanup context. `Calculator` mapping helpers still
-   do not exhaust continuation results, and some entity/cache code remains
-   deliberately lossy/experimental. These are higher-level workflow findings,
-   not proof of an `Engine` raw-ABI defect.
-5. Entity accessors and iterators in `src/entities/` and `src/iterator/`
-   commonly replace native failures with `NaN`, `false`, `<NONE>`, or zero.
-   This conflicts with the manual's check-every-error guidance.  The snapshot
-   layer correctly copies live entities before subsequent calculations, but it
-   copies those lossy values if a query fails.
-6. `src/entities/stream.rs` defines an inherent `fn drop` rather than an
-   `impl Drop for Stream`; it is therefore not automatically invoked and does
-   not remove the native stream on Rust drop.  The stream's documented units
-   are also only comments, not an established unit policy.
-7. The cache/parse layers use the data-manipulation surface with fixed
+   retained together with cleanup context.
+5. **FIXED IN CURRENT MASTER:** Calculator mapping exhausts the native
+   continuation protocol and snapshots every successful current result before
+   advancing. It forwards `indexc` correctly and maps `list=true` to TQMAPL.
+6. **FIXED IN CURRENT MASTER:** authoritative entity, iterator, snapshot, and
+   table paths propagate `ChemAppError`; native failures no longer become
+   `NaN`, false, placeholder names, or silently empty sets.
+7. **FIXED IN CURRENT MASTER:** `Stream` implements `Drop`, and
+   `StreamSnapshot` captures current values and units. Destructor cleanup is
+   necessarily best-effort because Rust `Drop` cannot return a native error.
+8. The cache/parse layers use the data-manipulation surface with fixed
    assumptions and several `unwrap()`/`todo!()` paths.  They should remain
    classified as experimental until their ASCII-file/model preconditions and
    parameter bounds are independently tested.
@@ -673,15 +670,11 @@ of comprehensive native coverage.
    INTEGER/`NOERR` mismatch have focused structural coverage. `ChemAppInt`
    and `ChemAppLen` remain explicitly separate; UNIX `ftnlen` conversion and
    empty-`CString` raw-pointer handling are also now covered structurally.
-2. Repair `Calculator` mapping continuation so it exhausts `TQMAP`/`TQMAPL`
-   results and snapshots every point before advancing native state.
-3. Add capability/symbol detection for the older Linux/i386 binary, then
+2. Add capability/symbol detection for the older Linux/i386 binary, then
    decide its supported minimum ChemApp version.  Obtain a real Unix64 binary
    before claiming Unix64 support.
-4. Address remaining higher-level entity error swallowing and state/unit
-   documentation. An aggregate `tqgetr` API may be designed separately when
-   users need it; it is not a correction prerequisite.
+3. Design an aggregate `tqgetr` API separately when signed selectors and
+   array-returning modes are required; do not alter the scalar ABI.
 
-The recommended next production milestone is **mapping continuation and
-snapshot semantics**. It must call `TQMAP`/`TQMAPL` until the continuation
-indicator is exhausted and snapshot each native result before the next call.
+The recommended next production milestone is the **signed-selector and
+scalar/array TQGETR API**, without altering the verified scalar ABI.

@@ -92,23 +92,20 @@ by this Rust signature, so they cannot reach the one-`f64` native output
 buffer. Aggregate result retrieval is deliberately unexposed optional API
 surface, not a current scalar ABI/safety defect.
 
-### 4. Live entity accessors often suppress native errors — gap
+### 4. Live entity errors — corrected
 
-For example, current `Phase` accessors use patterns such as `unwrap_or("<NONE>")` and `unwrap_or(f64::NAN)` for native queries.
+The authoritative live entity accessors and count-dependent iterator
+constructors now return `Result`. Native failures are no longer converted to
+`NaN`, false, placeholder names, or silently empty sets. Optional diagnostic
+or lossy APIs, if added later, must remain explicitly named and separate.
 
-This conflicts with the ChemApp manual's strongest best-practice recommendation: check every native error because an apparently later failure may have originated in an earlier call.
+### 5. `mapping_temperature` / `mapping_pressure` — corrected
 
-**Direction:** establish a consistent API split, for example fallible `Result` accessors as the primary API and optional explicitly named lossy/debug helpers if desired.
-
-### 5. `mapping_temperature` / `mapping_pressure` do not exhaust mapping results — gap
-
-The manual defines one-dimensional phase mapping as a multi-result operation where successive `TQMAP`/`TQMAPL` calls are required until the continuation indicator reports no more results.
-
-The current high-level mapping helpers perform only a fixed small number of calls rather than looping until completion. They therefore cannot be assumed to return every phase transition in an interval.
-
-There is also a closure parameter named `indexc` that is currently ignored in favor of passing `indexp` twice. It is harmless in the current calls because both are zero, but is unsafe if the helper is generalized.
-
-**Direction:** redesign mapping as a proper iterator/state machine or exhaust it in a loop, snapshotting after every result before advancing.
+The high-level mapping helpers now exhaust the documented FIRST/NEXT
+continuation sequence, snapshot every successful current result before the
+next native call, retain the final result with a non-positive continuation
+indicator, and preserve native order. `indexp` and `indexc` are forwarded
+independently, and `list` selects `TQMAPL` only when requested.
 
 ### 6. Calculation reset/pressure assumptions need documentation — audit
 
@@ -122,11 +119,14 @@ ChemApp is stateful. The crate's architecture explicitly anticipates parallelism
 
 **Direction:** document the rule now; later audit auto-traits and consider an explicit synchronization/ownership design if necessary.
 
-### 8. Integer/string ABI requires systematic verification — audit
+### 8. Integer/string ABI verification — audited, platform limits retained
 
-The current native layer contains a mixture of `usize`, `i32`, fixed `u8` buffers, and platform-specific ordering of string-length arguments. Some signatures have already required historical fixes (for example `tqgthi`, `tqgdat`, and `tqerr` according to the changelog).
-
-**Direction:** perform a routine-by-routine ABI audit against native headers/example interfaces and exported symbols for each supported library build. Record the result in a machine-readable or tabular matrix.
+The routine-by-routine audit is complete in
+[native-abi-audit.md](native-abi-audit.md). The current raw layer distinguishes
+signed 32-bit ChemApp INTEGER storage from platform-specific CHARACTER length
+types and models CString inputs as pointers plus checked byte lengths. The
+checked Win64 binary and Win32/Linux source evidence are recorded there;
+Unix64 remains unverified because no matching binary is checked in.
 
 ## Native ABI audit summary (2026-08-24)
 
@@ -193,9 +193,17 @@ Gibbs interaction text parsing is implemented for several forms, but magnetic in
 
 Parsing ChemApp's human-readable interaction output is inherently version/model sensitive. Tests should be based on representative official/known data-files and preserve the original unparsed string when interpretation fails.
 
-### Output formatting — incomplete
+### Entity, snapshot, table, and mapping layer — implemented
 
-Some entity formatting helpers such as `Phase::print_header` / `print_values` remain `todo!()`. This is not a native conformance problem by itself, but these methods should not be considered stable API until completed.
+The authoritative live entity path now propagates native errors, snapshots
+own the complete retained hierarchy and active units, and `stable_only` uses
+the strict project rule `AC > 0.9999`. Shared `comfy-table` row schemas render
+live and immutable state without separate formatting implementations.
+
+High-level mapping now follows the full FIRST/NEXT continuation protocol,
+snapshots every successful result before advancing, forwards `indexp` and
+`indexc` separately, and selects `TQMAPL` only when listing was requested.
+See [entities-and-snapshots.md](entities-and-snapshots.md).
 
 ## Test/conformance infrastructure
 
@@ -236,12 +244,10 @@ Do not mix these into one compatibility assumption.
 
 ## Next recommended milestone
 
-The next focused task should repair **mapping continuation and snapshot
-semantics**. `Calculator::mapping_temperature` and
-`Calculator::mapping_pressure` must continue `TQMAP`/`TQMAPL` until ChemApp's
-continuation indicator is exhausted and create a snapshot before each further
-native mapping call. It must also correct the dormant closure bug that passes
-`indexp` in place of its `indexc` argument if the helpers are generalized.
+The next focused task should add a typed aggregate `TQGETR` API for signed
+selectors and array-returning modes without weakening the existing verified
+scalar boundary. Model-specific native TQBOND runtime conformance also awaits
+a suitable non-proprietary SUBG/QUAS/QSOL data set.
 
 The routine-by-routine native ABI audit is already complete for the current
 75-wrapper surface; platform-specific binary verification remains a separate,

@@ -1,29 +1,23 @@
-// chemapp_rs::snapshot::species.rs
-//! Chemical species snapshot
+use crate::entities::species::{Species, SpeciesRef};
+use crate::error::ChemAppError;
 
-use crate::entities::species::Species;
-
-/// A state snapshot of a sublattice species.
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SpeciesSnapshot {
-	pub indexp : usize,
-	pub indexl : usize,
-	pub indexs : usize,
-	pub name   : String,
-	pub x      : f64,
+    pub phase_index: usize,
+    pub phase_name: String,
+    pub identity: SpeciesRef,
+    pub name: String,
+    pub x: f64,
 }
 
 impl SpeciesSnapshot {
-	
-	/// create a new instance
-	pub fn new(species: &Species)->Self {
-		return Self {
-			indexp : species.indexp,
-			indexl : species.indexl,
-			indexs : species.indexs,
-			name   : species.name(),
-			x      : species.x(),
-		};
-	}
-	
+    pub fn new(species: &Species<'_>) -> Result<Self, ChemAppError> {
+        Ok(Self {
+            phase_index: species.phase_index(),
+            phase_name: species.calculator.engine.tqgnp(species.phase_index())?,
+            identity: species.identity(),
+            name: species.name()?,
+            x: species.x()?,
+        })
+    }
 }

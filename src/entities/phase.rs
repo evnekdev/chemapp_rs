@@ -1,157 +1,112 @@
-// phase.rs
-//! `Phase` structure capturing the related functionality.
-use std::fmt;
-use nalgebra::{DVector};
+//! Fallible live access to a ChemApp phase.
 
 use crate::calculator::Calculator;
+use crate::error::ChemAppError;
+use crate::iterator::{BondIterator, ConstituentIterator, SpeciesIterator};
 use crate::snapshot::PhaseSnapshot;
-use crate::iterator::ConstituentIterator;
-use crate::iterator::SpeciesIterator;
-use crate::iterator::BondIterator;
 
-/**********************************************************************************************************************/
-/**********************************************************************************************************************/
-
-/// Phase representation
+/// One-based ChemApp phase identity tied to a live calculator.
 #[derive(Debug)]
 pub struct Phase<'a> {
-	calculator: &'a Calculator,
-	pub(crate) index : usize,
+    pub(crate) calculator: &'a Calculator,
+    pub(crate) index: usize,
 }
-
-/**********************************************************************************************************************/
-/**********************************************************************************************************************/
 
 impl<'a> Phase<'a> {
-	
-	/// Make a new instance
-	pub fn new(calculator: &'a Calculator, index: usize)->Self {
-		return Self {
-			calculator,
-			index,
-		};
-	}
-	
-	/// take a snapshot of the current phase state
-	pub fn snapshot(&self)->PhaseSnapshot {
-		return PhaseSnapshot::new(self);
-	}
-	
-	/// Iterate over species in the phase
-	pub fn species(&self)->SpeciesIterator<'_>{
-		return SpeciesIterator::new(self.calculator, self.index);
-	}
-	
-	/// Iterate over bonds (if any)
-	pub fn bonds(&self)->BondIterator<'_>{
-		return BondIterator::new(self.calculator, self.index);
-	}
-	
-	/// Iterate over phase constituents in the phase
-	pub fn constituents(&self)->ConstituentIterator<'_>{
-		return ConstituentIterator::new(self.calculator, self.index);
-	}
-	
-	/// `true` if the phase index is between 1 and number of phases
-	pub fn is_valid(&self)->bool {
-		return self.index > 0 && self.index <= self.calculator.engine.tqnop().unwrap_or(0);
-	}
-	
-	/// `true` if it is a stoichiometric phase
-	pub fn is_stoic(&self)->bool {
-		return self.model() == "PURE";
-	}
-	
-	/// phase status ('ENTERED', 'DORMANT', 'ELIMINATED')
-	pub fn status(&self)->String {
-		return self.calculator.engine.tqgsp(self.index).unwrap_or("<NONE>".to_owned());
-	}
-	
-	/// phase name
-	pub fn name(&self)->String {
-		return self.calculator.engine.tqgnp(self.index).unwrap_or("<NONE>".to_owned());
-	}
-	
-	/// phase model
-	pub fn model(&self)->String {
-		return self.calculator.engine.tqmodl(self.index).unwrap_or("<NONE>".to_owned());
-	}
-	
-	/// phase amount
-	pub fn a(&self)->f64 {
-		return self.calculator.engine.tqgetr("A", self.index, 0).unwrap_or(f64::NAN);
-	}
-	
-	/// phase activity
-	pub fn ac(&self)->f64 {
-		return self.calculator.engine.tqgetr("AC", self.index, 0).unwrap_or(f64::NAN);
-	}
-	
-	/// chemical potential
-	pub fn mu(&self)->f64 {
-		return self.calculator.engine.tqgetr("MU", self.index, 0).unwrap_or(f64::NAN);
-	}
-	
-	/// enthalpy
-	pub fn h(&self)->f64 {
-		return self.calculator.engine.tqgetr("H", self.index, 0).unwrap_or(f64::NAN);
-	}
-	
-	/// entropy
-	pub fn s(&self)->f64 {
-		return self.calculator.engine.tqgetr("S", self.index, 0).unwrap_or(f64::NAN);
-	}
-	
-	/// gibbs energy
-	pub fn g(&self)->f64 {
-		return self.calculator.engine.tqgetr("G", self.index, 0).unwrap_or(f64::NAN);
-	}
-	
-	/// heat capacity
-	pub fn cp(&self)->f64 {
-		return self.calculator.engine.tqgetr("CP", self.index, 0).unwrap_or(f64::NAN);
-	}
-	
-	/// phase volume
-	pub fn v(&self)->f64 {
-		return self.calculator.engine.tqgetr("V", self.index, 0).unwrap_or(f64::NAN);
-	}
-	
-	/// enthalpy per amount unit
-	pub fn hm(&self)->f64 {
-		return self.calculator.engine.tqgetr("HM", self.index, 0).unwrap_or(f64::NAN);
-	}
-	
-	/// entropy per amount unit
-	pub fn sm(&self)->f64 {
-		return self.calculator.engine.tqgetr("SM", self.index, 0).unwrap_or(f64::NAN);
-	}
-	
-	/// gibbs energy per amount unit
-	pub fn gm(&self)->f64 {
-		return self.calculator.engine.tqgetr("GM", self.index, 0).unwrap_or(f64::NAN);
-	}
-	
-	/// heat capacity per amount unit
-	pub fn cpm(&self)->f64 {
-		return self.calculator.engine.tqgetr("CPM", self.index, 0).unwrap_or(f64::NAN);
-	}
-	
-	/// phase volume per amount unit
-	pub fn vm(&self)->f64 {
-		return self.calculator.engine.tqgetr("VM", self.index, 0).unwrap_or(f64::NAN);
-	}
-	
-	pub fn print_header(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
-		todo!();
-	}
-	
-	pub fn print_values(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
-		todo!();
-	}
-	
+    pub fn new(calculator: &'a Calculator, index: usize) -> Self {
+        Self { calculator, index }
+    }
+
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    pub fn snapshot(&self) -> Result<PhaseSnapshot, ChemAppError> {
+        PhaseSnapshot::new(self)
+    }
+
+    pub fn table_string(&self) -> Result<String, ChemAppError> {
+        crate::table::live_phase_table(self)
+    }
+
+    pub fn is_stable(&self) -> Result<bool, ChemAppError> {
+        Ok(crate::snapshot::is_stable_phase_activity(self.ac()?))
+    }
+
+    pub fn species(&self) -> Result<SpeciesIterator<'a>, ChemAppError> {
+        SpeciesIterator::new(self.calculator, self.index)
+    }
+
+    /// Enumerates TQBOND entities only for models to which TQBOND applies.
+    pub fn bonds(&self) -> Result<BondIterator<'a>, ChemAppError> {
+        BondIterator::new(self.calculator, self.index)
+    }
+
+    pub fn constituents(&self) -> Result<ConstituentIterator<'a>, ChemAppError> {
+        ConstituentIterator::new(self.calculator, self.index)
+    }
+
+    pub fn is_valid(&self) -> Result<bool, ChemAppError> {
+        Ok(self.index > 0 && self.index <= self.calculator.engine.tqnop()?)
+    }
+
+    pub fn is_stoic(&self) -> Result<bool, ChemAppError> {
+        Ok(self.model()? == "PURE")
+    }
+
+    pub fn status(&self) -> Result<String, ChemAppError> {
+        self.calculator.engine.tqgsp(self.index)
+    }
+
+    pub fn name(&self) -> Result<String, ChemAppError> {
+        self.calculator.engine.tqgnp(self.index)
+    }
+
+    pub fn model(&self) -> Result<String, ChemAppError> {
+        self.calculator.engine.tqmodl(self.index)
+    }
+
+    fn result(&self, option: &str) -> Result<f64, ChemAppError> {
+        self.calculator.engine.tqgetr(option, self.index, 0)
+    }
+
+    pub fn a(&self) -> Result<f64, ChemAppError> {
+        self.result("A")
+    }
+    pub fn ac(&self) -> Result<f64, ChemAppError> {
+        self.result("AC")
+    }
+    pub fn mu(&self) -> Result<f64, ChemAppError> {
+        self.result("MU")
+    }
+    pub fn h(&self) -> Result<f64, ChemAppError> {
+        self.result("H")
+    }
+    pub fn s(&self) -> Result<f64, ChemAppError> {
+        self.result("S")
+    }
+    pub fn g(&self) -> Result<f64, ChemAppError> {
+        self.result("G")
+    }
+    pub fn cp(&self) -> Result<f64, ChemAppError> {
+        self.result("CP")
+    }
+    pub fn v(&self) -> Result<f64, ChemAppError> {
+        self.result("V")
+    }
+    pub fn hm(&self) -> Result<f64, ChemAppError> {
+        self.result("HM")
+    }
+    pub fn sm(&self) -> Result<f64, ChemAppError> {
+        self.result("SM")
+    }
+    pub fn gm(&self) -> Result<f64, ChemAppError> {
+        self.result("GM")
+    }
+    pub fn cpm(&self) -> Result<f64, ChemAppError> {
+        self.result("CPM")
+    }
+    pub fn vm(&self) -> Result<f64, ChemAppError> {
+        self.result("VM")
+    }
 }
-
-/**********************************************************************************************************************/
-/**********************************************************************************************************************/
-

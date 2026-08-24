@@ -1,48 +1,32 @@
-// chemapp_rs::iterator::phase.rs
-//! `PhaseIterator` trait facilitating iteration and property retrieval for phases.
-use std::iter::{Filter, Map, FlatMap};
-use std::ops::Range;
-use nalgebra::{DVector};
-use crate::Calculator;
+use crate::calculator::Calculator;
 use crate::entities::phase::Phase;
-
-/*******************************************************************************************************************************************************************************************************************************/
-/*******************************************************************************************************************************************************************************************************************************/
+use crate::error::ChemAppError;
 
 pub struct PhaseIterator<'a> {
-	calculator : &'a Calculator,
-	current : usize,
-	nphases : usize,
+    calculator: &'a Calculator,
+    next: usize,
+    count: usize,
 }
 
 impl<'a> PhaseIterator<'a> {
-	
-	pub fn new(calculator : &'a Calculator)->Self {
-		let nphases = calculator.engine.tqnop().unwrap_or(0);
-		let current = 1;
-		return Self {
-			calculator,
-			current,
-			nphases,
-		};
-	}
-	
+    pub fn new(calculator: &'a Calculator) -> Result<Self, ChemAppError> {
+        Ok(Self {
+            calculator,
+            next: 1,
+            count: calculator.engine.tqnop()?,
+        })
+    }
 }
 
 impl<'a> Iterator for PhaseIterator<'a> {
-	type Item = Phase<'a>;
-	
-	fn next(&mut self)->Option<Self::Item>{
-		if self.current > self.nphases {
-			return None;
-		}
-		let current = self.current;
-		self.current += 1;
-		return Some(Phase::new(self.calculator, current));
-	}
-	
+    type Item = Phase<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next > self.count {
+            return None;
+        }
+        let index = self.next;
+        self.next += 1;
+        Some(Phase::new(self.calculator, index))
+    }
 }
-
-
-/*******************************************************************************************************************************************************************************************************************************/
-/*******************************************************************************************************************************************************************************************************************************/

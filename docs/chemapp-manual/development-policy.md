@@ -212,3 +212,16 @@ must not silently become a large unsigned Rust value. A successful call is
 supporting evidence, not a substitute for this target/build-specific record.
 
 The current complete evidence record is [native-abi-audit.md](native-abi-audit.md). It retains the historical critical `TQCHAR` output-type finding, now fixed in current master, and must be consulted before changing a native declaration.
+
+## 19. Snapshot and TQBOND state must remain explicit
+
+Authoritative entity getters, iterator construction, snapshots, and tables
+must propagate native errors. Mapping and other multi-state workflows must
+snapshot the current result before the next native call. The project-level
+stable filter is exactly `AC > 0.9999` and must be evaluated before deep phase
+snapshot work.
+
+Never model TQBOND as an unconditional four-member record. Dispatch by TQMODL:
+SUBG is a sublattice quadruplet, QUAS/QSOL are phase-constituent pairs, and
+other models expose no TQBOND entity. Preserve local sublattice identity and
+apply SUBG's combined second-sublattice offset only at the native boundary.

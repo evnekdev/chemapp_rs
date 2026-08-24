@@ -21,27 +21,30 @@
 
 extern crate libloading;
 
-
-use std::fmt;
-use libloading::{Library};
-
-pub use crate::error::ChemAppError;
-pub use crate::native::Engine;
 pub use crate::calculator::Calculator;
-pub use crate::iterator::{SystemComponentIterator, PhaseIterator, ConstituentIterator, SpeciesIterator, BondIterator};
+pub use crate::entities::bond::{Bond, BondKind};
+pub use crate::entities::species::{Species, SpeciesRef};
+pub use crate::error::ChemAppError;
+pub use crate::iterator::{
+    BondIterator, ConstituentIterator, PhaseIterator, SpeciesIterator, SystemComponentIterator,
+};
+pub use crate::native::Engine;
+pub use crate::snapshot::{CalculatorSnapshot, SnapshotOptions, StreamSnapshot};
+use std::fmt;
 
-pub mod error;
 mod abi;
-pub mod defs;
-pub mod native;
-pub mod entities;
-pub mod iterator;
-pub mod calculator;
-pub mod snapshot;
-pub mod parse;
 pub mod cache;
+pub mod calculator;
+pub mod defs;
+pub mod entities;
+pub mod error;
+pub mod iterator;
+pub mod native;
+pub mod parse;
+pub mod snapshot;
+mod table;
 
-static DEFAULT_LIBNAME : &str = r"ca_vc_e_local.dll";
+static DEFAULT_LIBNAME: &str = r"ca_vc_e_local.dll";
 
 /*****************************************************************************************************************************************************************************************************/
 /*****************************************************************************************************************************************************************************************************/
@@ -49,55 +52,73 @@ static DEFAULT_LIBNAME : &str = r"ca_vc_e_local.dll";
 /// An abstraction over system info returned by `tqused` and `tqsize` functions.
 #[derive(Clone)]
 pub struct SystemDimensions {
-	pub nconstituents: i32,       // na
-	pub ncomponents: i32,         // nb
-	pub nmixtures: i32,           // nc
-	pub nexcess_gibbs: i32,       // nd
-	pub nexcess_magnetic: i32,    // ne
-	pub nsublattices: i32,        // nf
-	pub nspecies: i32,            // ng
-	pub nconstituents_mqm: i32,   // nh
-	pub nranges_constituent: i32, // ni
-	pub nranges: i32,             // nj
-	pub ndependent: i32,          // nk
+    pub nconstituents: i32,       // na
+    pub ncomponents: i32,         // nb
+    pub nmixtures: i32,           // nc
+    pub nexcess_gibbs: i32,       // nd
+    pub nexcess_magnetic: i32,    // ne
+    pub nsublattices: i32,        // nf
+    pub nspecies: i32,            // ng
+    pub nconstituents_mqm: i32,   // nh
+    pub nranges_constituent: i32, // ni
+    pub nranges: i32,             // nj
+    pub ndependent: i32,          // nk
 }
 
 impl SystemDimensions {
-	pub fn new()->SystemDimensions{
-		SystemDimensions{
-			nconstituents:       0,
-			ncomponents:         0,
-			nmixtures:           0,
-			nexcess_gibbs:       0,
-			nexcess_magnetic:    0,
-			nsublattices:        0,
-			nspecies:            0,
-			nconstituents_mqm:   0,
-			nranges_constituent: 0,
-			nranges:             0,
-			ndependent:          0,
-		}
-	}
+    pub fn new() -> SystemDimensions {
+        SystemDimensions {
+            nconstituents: 0,
+            ncomponents: 0,
+            nmixtures: 0,
+            nexcess_gibbs: 0,
+            nexcess_magnetic: 0,
+            nsublattices: 0,
+            nspecies: 0,
+            nconstituents_mqm: 0,
+            nranges_constituent: 0,
+            nranges: 0,
+            ndependent: 0,
+        }
+    }
 }
 
 impl fmt::Debug for SystemDimensions {
-	
-	fn fmt(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
-		writeln!(f, "SystemDimensions:")?;
-		writeln!(f, "  {:<30} {:?}", "Constituents", &self.nconstituents)?;
-		writeln!(f, "  {:<30} {:?}", "Components", &self.ncomponents)?;
-		writeln!(f, "  {:<30} {:?}", "Mixtures", &self.nmixtures)?;
-		writeln!(f, "  {:<30} {:?}", "Excess Gibbs interactions", &self.nexcess_gibbs)?;
-		writeln!(f, "  {:<30} {:?}", "Excess magnetic interactions", &self.nexcess_magnetic)?;
-		writeln!(f, "  {:<30} {:?}", "Sublattices", &self.nsublattices)?;
-		writeln!(f, "  {:<30} {:?}", "Sublattice species", &self.nspecies)?;
-		writeln!(f, "  {:<30} {:?}", "MQM constituents", &self.nconstituents_mqm)?;
-		writeln!(f, "  {:<30} {:?}", "CP/G ranges per constituents", &self.nranges_constituent)?;
-		writeln!(f, "  {:<30} {:?}", "CP/G ranges", &self.nranges)?;
-		writeln!(f, "  {:<30} {:?}", "PT-dependent constituents", &self.ndependent)?;
-		return Ok(());
-	}
-	
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "SystemDimensions:")?;
+        writeln!(f, "  {:<30} {:?}", "Constituents", &self.nconstituents)?;
+        writeln!(f, "  {:<30} {:?}", "Components", &self.ncomponents)?;
+        writeln!(f, "  {:<30} {:?}", "Mixtures", &self.nmixtures)?;
+        writeln!(
+            f,
+            "  {:<30} {:?}",
+            "Excess Gibbs interactions", &self.nexcess_gibbs
+        )?;
+        writeln!(
+            f,
+            "  {:<30} {:?}",
+            "Excess magnetic interactions", &self.nexcess_magnetic
+        )?;
+        writeln!(f, "  {:<30} {:?}", "Sublattices", &self.nsublattices)?;
+        writeln!(f, "  {:<30} {:?}", "Sublattice species", &self.nspecies)?;
+        writeln!(
+            f,
+            "  {:<30} {:?}",
+            "MQM constituents", &self.nconstituents_mqm
+        )?;
+        writeln!(
+            f,
+            "  {:<30} {:?}",
+            "CP/G ranges per constituents", &self.nranges_constituent
+        )?;
+        writeln!(f, "  {:<30} {:?}", "CP/G ranges", &self.nranges)?;
+        writeln!(
+            f,
+            "  {:<30} {:?}",
+            "PT-dependent constituents", &self.ndependent
+        )?;
+        return Ok(());
+    }
 }
 
 /*****************************************************************************************************************************************************************************************************/
@@ -106,35 +127,57 @@ impl fmt::Debug for SystemDimensions {
 /// Security info contained in a .cst datafile
 #[derive(Clone)]
 pub struct TransparentHeader {
-	pub version : i32,                              // ver
-	pub name_writing_program : String,              // nwp
-	pub version_writing_program : [i32;3],          // vnw
-	pub name_reading_program : String,              // nrp
-	pub minversion_reading_program : [i32;3],       // vnr
-	pub creation_date : [i32;6],                    // dtc
-	pub expiry_date : [i32;6],                      // dte
-	pub user_ids_allowed : String,                  // id
-	pub license_holders_allowed : String,           // usr
-	pub remark : String,                            // rem
+    pub version: i32,                         // ver
+    pub name_writing_program: String,         // nwp
+    pub version_writing_program: [i32; 3],    // vnw
+    pub name_reading_program: String,         // nrp
+    pub minversion_reading_program: [i32; 3], // vnr
+    pub creation_date: [i32; 6],              // dtc
+    pub expiry_date: [i32; 6],                // dte
+    pub user_ids_allowed: String,             // id
+    pub license_holders_allowed: String,      // usr
+    pub remark: String,                       // rem
 }
 
 impl fmt::Debug for TransparentHeader {
-	
-	fn fmt(&self, f: &mut fmt::Formatter<'_>)->fmt::Result {
-		writeln!(f, "TransparentHeader:")?;
-		writeln!(f, "  {:<30} {:?}", "Version", &self.version)?;
-		writeln!(f, "  {:<30} {:?}", "Writing program name", &self.name_writing_program)?;
-		writeln!(f, "  {:<30} {:?}", "Writing program version", &self.version_writing_program)?;
-		writeln!(f, "  {:<30} {:?}", "Reading program name", &self.name_reading_program)?;
-		writeln!(f, "  {:<30} {:?}", "Reading program min version", &self.minversion_reading_program)?;
-		writeln!(f, "  {:<30} {:?}", "Creation date", &self.creation_date)?;
-		writeln!(f, "  {:<30} {:?}", "Expiration date", &self.expiry_date)?;
-		writeln!(f, "  {:<30} {:?}", "Allowed user ids", &self.user_ids_allowed)?;
-		writeln!(f, "  {:<30} {:?}", "Allowed license holders", &self.license_holders_allowed)?;
-		writeln!(f, "  {:<30} {:?}", "Remark", &self.remark)?;
-		return Ok(());
-	}
-	
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "TransparentHeader:")?;
+        writeln!(f, "  {:<30} {:?}", "Version", &self.version)?;
+        writeln!(
+            f,
+            "  {:<30} {:?}",
+            "Writing program name", &self.name_writing_program
+        )?;
+        writeln!(
+            f,
+            "  {:<30} {:?}",
+            "Writing program version", &self.version_writing_program
+        )?;
+        writeln!(
+            f,
+            "  {:<30} {:?}",
+            "Reading program name", &self.name_reading_program
+        )?;
+        writeln!(
+            f,
+            "  {:<30} {:?}",
+            "Reading program min version", &self.minversion_reading_program
+        )?;
+        writeln!(f, "  {:<30} {:?}", "Creation date", &self.creation_date)?;
+        writeln!(f, "  {:<30} {:?}", "Expiration date", &self.expiry_date)?;
+        writeln!(
+            f,
+            "  {:<30} {:?}",
+            "Allowed user ids", &self.user_ids_allowed
+        )?;
+        writeln!(
+            f,
+            "  {:<30} {:?}",
+            "Allowed license holders", &self.license_holders_allowed
+        )?;
+        writeln!(f, "  {:<30} {:?}", "Remark", &self.remark)?;
+        return Ok(());
+    }
 }
 
 /*****************************************************************************************************************************************************************************************************/

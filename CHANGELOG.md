@@ -7,6 +7,10 @@
   - `TransparentHeader` structure
   - Support for magnetic interactions
   - added `from_library_unloaded` to `Calculator`
+  - fallible live entities and self-contained calculator/stream snapshots,
+    including active units and full phase descendants
+  - deterministic shared live/snapshot tables using `comfy-table`
+  - model-aware TQBOND pair/quadruplet entities and combinatorial iterators
 
 ### Changed
   - `usize` in `tqgthi` output to `i32`
@@ -19,6 +23,10 @@
   - `Engine::tqgetr` is documented as the deliberately scalar-only result
     subset. Negative array selectors remain unexposed rather than being
     incorrectly treated as scalar calls.
+  - `Calculator::snapshot` now returns `Result`; snapshot filtering is explicit
+    through `SnapshotOptions` and uses the strict `AC > 0.9999` rule.
+  - live entity getters and count-dependent iterator constructors now propagate
+    `ChemAppError` rather than silently returning placeholders or empty sets.
 
 ### Fixed
 
@@ -46,3 +54,9 @@
   - made `redirect_error_to_temp` fallible without `expect`/`unwrap`, including
     a normal temporary-directory fallback for library names with no parent.
   - made the Calculator/entity example project-relative and `Result`-based.
+  - completed high-level TQMAP/TQMAPL continuation, corrected listed-routine
+    selection and `indexc` forwarding, and snapshot every native mapping state.
+  - replaced the old quadruplet-only `Bond` concept with explicit QUAS/QSOL
+    pair and SUBG quadruplet identities, including canonical enumeration.
+  - implemented real stream ownership cleanup through `Drop` and fallible
+    stream property/snapshot access.

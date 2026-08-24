@@ -167,3 +167,15 @@ Preserve string-compatible native methods for fidelity, but consider typed enums
 - configuration options.
 
 Typed wrappers must have a transparent, documented mapping to the native ChemApp mnemonic and must not invent semantics absent from the native API.
+
+## Snapshot before advancing state
+
+ChemApp result getters describe the current native calculation only. Any
+workflow that will calculate again—especially `TQMAP`/`TQMAPL` continuation—
+must create an owned snapshot before the next native call. Use
+`SnapshotOptions::stable_only()` only when deliberately retaining phases with
+`AC > 0.9999`; do not substitute phase amount for that project-level rule.
+
+TQBOND requires model dispatch before enumeration: `SUBG` is a quadruplet,
+`QUAS`/`QSOL` are pairs, and other models are not applicable. Keep local
+sublattice identity separate from SUBG's combined native index encoding.
