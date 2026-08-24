@@ -28,14 +28,17 @@ remains the sole **INCOMPLETE** Win32 wrapper. The checked Linux/i386 library
 also lacks **7** represented exports. Direct x64 disassembly established that
 Win64 `LI`/`LIP`/`NOERR` storage is signed 32-bit and non-UNIX `LNT` is a
 64-bit value. The subsequent raw-boundary correction now implements those
-rules: `ChemAppInt = i32` is used for all raw INTEGER, `LIP`, and `NOERR`
-pointees, while the target-specific `ChemAppLen` remains separate for
-CHARACTER lengths. That correction removes the common Win64 ABI defect, but
-does not promote uninspected per-routine details to verified. Unix64 has no
-checked binary. The subsequent CHARACTER-boundary hardening pass represents
-UNIX `ftnlen` as a checked signed 32-bit value from the transition source and
-passes input `CString` values as raw pointers plus matching byte lengths; it
-does not establish Unix64 runtime compatibility.
+rules through target-specific `ChemAppInt` and `ChemAppLen` aliases, while
+keeping raw INTEGER, `LIP`, `NOERR`, and CHARACTER-length categories
+separate. It removes the common Win64 ABI defect but does not promote
+uninspected per-routine details to verified. The later platform-model pass
+follows the literal checked `cacint.h` branches rather than treating the
+Win64 `i32` result as universal: Win32 uses `c_long`; Win64 and source-modelled
+Windows ARM64 use `c_int` plus `usize` `LNT`; UNIX/x86-64 uses `c_int`; and
+the literal non-x86-64 UNIX fallback uses `c_long`. Unix64 still has no
+checked binary. Input `CString` values cross the ABI as raw pointers plus
+matching checked byte lengths; this does not establish Unix64 runtime
+compatibility.
 
 Current routine-level status is therefore: **0 current confirmed Win64
 raw-integer ABI-ISSUE rows**, **1 INCOMPLETE** `TQGETR` API row on each
@@ -106,6 +109,11 @@ getters, file/data loading, component/phase queries, conditions,
 calculations, mapping, and supported streams. It skipped optional files when
 unavailable; `tqgtrh` and `tqchar` still lacked their required safe demo
 conditions. A successful call sequence is **not** proof of the raw ABI.
+The source-modelled platform-alias refactor repeated the same checked Win64
+demo successfully. It confirmed that moving raw output storage for `TQSIZE`,
+`TQUSED`, `TQGTRH`, and selected public `i32` adapters did not alter the
+observed Win64 behavior. The generated `result` file was removed and no
+license-specific value was retained.
 
 The fixed-output conversion correction also ran this demo. `tqgtnm` returned
 a non-empty license-holder value containing internal spaces and no trailing
@@ -137,12 +145,61 @@ facts, not local identifiers or holder text.
 - `I`: input, `O`: output, `IO`: in/out.  Native indices are one-based unless
   the semantic column states a documented zero/negative special case.
 
-`native.rs` now represents every raw `LI`/`LIP`/`NOERR` pointee as signed
-`ChemAppInt` (`i32`) and every raw CHARACTER length as a separate
-target-specific `ChemAppLen`. Public positive `usize` indices/counts are
-checked before entering the raw boundary; a negative native value is rejected
-before it could become a large Rust `usize`. On checked Win64, `ChemAppLen`
-is 64-bit `usize`/`size_t`; it must not be confused with `ChemAppInt`.
+`src/abi.rs` now owns the raw aliases and checked conversions. It selects
+`ChemAppInt`/`ChemAppLen` from the exact checked-source branch for the active
+target rather than exposing a raw C type publicly. Public positive `usize`
+indices/counts are checked before entering the raw boundary; a negative native
+value is rejected before it could become a large Rust `usize`. On checked
+Win64, `ChemAppLen` is 64-bit `usize`/`size_t`; it must not be confused with
+the 32-bit `ChemAppInt`.
+
+## Source-modelled platform ABI scope (2026-08-24)
+
+This section describes how `src/abi.rs` maps the checked `cacint.h` revision
+2571 preprocessor branches. It is intentionally separate from the per-wrapper
+status table: a source model may make a target compile, but it does not
+verify a library that the repository does not contain.
+
+Evidence vocabulary used here:
+
+- **BINARY-VERIFIED** — raw detail established for the named checked binary
+  by direct binary evidence plus the documented bridge evidence.
+- **BINARY-INSPECTED** — a checked binary establishes exports/build identity,
+  but not full per-wrapper ABI verification.
+- **SOURCE-MODELLED** — the exact `cacint.h` branch selects the model; no
+  matching binary is checked in.
+- **SOURCE-FALLBACK** — the target reaches the source's literal non-specific
+  fallback; compiler/build compatibility remains unverified.
+- **CONDITIONAL-SOURCE** — header declarations apply, but the raw `cacint.c`
+  UNIX path also requires `UNIX` and excludes `CRAY`.
+- **NOT-MODELLED** — the checked transition source does not provide a
+  consistent raw-call model for this target.
+
+| Target / build | `ChemAppInt` (`LI`/`LIP`/`NOERR`) | `ChemAppLen` | CHARACTER placement and symbols | Evidence / checked binary |
+|---|---|---|---|---|
+| Windows x86 | `c_long` | `c_long` (`LNT`) | non-UNIX interleaved; decorated `FUNCSWIN32` stdcall aliases | **BINARY-VERIFIED** for checked `ca_vc_e_local.dll` |
+| Windows x86-64 | `c_int` | `usize` (`LNT = size_t`) | non-UNIX interleaved; uppercase `FUNCSWIN64` | **BINARY-VERIFIED** for the common integer/length rules in checked `ca_vc_e_x64.dll`; per-wrapper status remains separate |
+| Windows ARM64 | `c_int` | `usize` (`LNT = size_t`) | non-UNIX interleaved; `FUNCSWIN64` uppercase model | **SOURCE-MODELLED**: `_WIN64` selects this branch; no ARM64 DLL |
+| Linux i386 | `c_long` | `c_long` (`ftnlen`) | UNIX appended; lowercase trailing-underscore `FUNCSUNIX32` | **BINARY-INSPECTED**: checked old ELF32/i386 SO, no runtime/reference bridge run |
+| Linux x86-64 | `c_int` | `c_int` (`ftnlen`) | UNIX appended when `UNIX` is defined; `FUNCSUNIX64` model | **SOURCE-MODELLED**: no x86-64 SO |
+| Linux ARM64 / other non-x86-64 UNIX | `c_long` | `c_long` (`ftnlen`) | UNIX appended when `UNIX` is defined; `FUNCSUNIX64` map on 64-bit targets | **SOURCE-FALLBACK**: no ARM64 SO |
+| macOS x86-64 | `c_int` | `c_int` (`ftnlen`) | UNIX symbol/ordering model only if the bridge's `UNIX` macro is selected | **CONDITIONAL-SOURCE**: no macOS binary; `strcpy_s` in the old bridge is not portability proof |
+| macOS ARM64 | `c_long` | `c_long` (`ftnlen`) | literal non-x86-64 fallback, conditional UNIX raw path | **SOURCE-FALLBACK** and **CONDITIONAL-SOURCE**: no macOS binary |
+| Cygwin x86-64 | `c_int` | `c_int` (`ftnlen`) | header has a Cygwin branch, but raw `cacint.c` uses UNIX only | **CONDITIONAL-SOURCE**: no Cygwin binary or bridge-preprocess result |
+| CRAY | — | — | the reference `cacint.c` excludes CRAY from its normal UNIX raw-call path | **NOT-MODELLED** |
+
+The old source says `LIP`/`LI`/`LNT` use `int`/`int *`/`size_t` when one of
+`_WIN64`, `WIN64`, `_X86_64`, `__x86_64__`, or `x86_64` is set; otherwise it
+uses `long` forms. Independently, its UNIX/Cygwin `ftnlen` branch selects
+`int` for x86-64 and `long` otherwise. The code models those separate rules
+with `std::ffi::{c_int, c_long}` rather than a blanket pointer-width rule.
+
+`TQSIZE`, `TQUSED`, and `TQGTRH` now receive raw `ChemAppInt` storage first
+and adapt it to their stable public `i32` fields only after `NOERR` succeeds.
+Likewise, `TQVERS`, `TQGTHI`, `TQGTED`, `TQSETC`, and `TQREMC` explicitly
+adapt public `i32` values at the raw boundary. `ChemAppError::NativeError`
+remains public `i32`; a wider source-fallback native error that cannot be
+represented produces an adaptation error rather than a lossy cast.
 
 ## Platform-status model and complete status record
 
@@ -431,19 +488,20 @@ The bridge has one raw rule per represented ABI:
 This is a re-check of all **50** character-taking wrappers. For the Win32
 bridge, `W:` means every length immediately follows its character pointer;
 for UNIX/i386, `U:` means all lengths are appended, in explicit-character
-order. Current Rust declarations use target-specific raw length types:
-Windows `LNT` is `usize` (32-bit on Win32 and 64-bit on checked Win64), while
-UNIX `ftnlen` is checked signed 32-bit from the transition source. Unix64
-remains unverified despite that source-level representation.
+order. Current Rust declarations use the source-modelled raw length aliases:
+Windows x86 uses `c_long`; Win64 uses `usize`; UNIX/x86-64 uses `c_int`; and
+other UNIX architectures use the source's `c_long` fallback. Only the checked
+Windows and Linux/i386 builds have binary evidence; Unix64 remains
+unverified.
 
 | Character wrapper(s) | Direction and native declared length | Rust buffer / length actually passed | Result |
 |---|---|---|---|
 | `tqconf`, `tqgio`, `tqcio`, `tqopen`, `tqopna`, `tqopnb`, `tqopnt`, `tqwasc` | one input option/file; W: after it, U: final; `strlen(input)` | `CString` raw pointer and checked `as_bytes().len()` excluding terminator; no blank padding | Win32 length value/order matches bridge. |
-| `tqinsc`, `tqcnsc`, `tqinp`, `tqinpc`, `tqinlc` | one input name; W interleaved/U appended; `strlen(input)` | `CString`, `str.len()` | Win32 match. |
-| `tqcsp`, `tqcspc`, `tqsetc`, `tqsttp`, `tqstca`, `tqstec`, `tqstrm`, `tqce`, `tqcel`, `tqcen`, `tqcenl`, `tqmap`, `tqmapl`, `tqclim`, `tqgetr`, `tqgdpc`, `tqgdat`, `tqlpar`, `tqgpar` | one input status/identifier/option; W interleaved/U appended; `strlen(input)` | `CString`, `str.len()` | Win32 match. `tqgetr` remains incomplete; `tqgpar` capacity bounds remain a separate audit. |
+| `tqinsc`, `tqcnsc`, `tqinp`, `tqinpc`, `tqinlc` | one input name; W interleaved/U appended; `strlen(input)` | `CString` pointer plus checked `as_bytes().len()` | Win32 match. |
+| `tqcsp`, `tqcspc`, `tqsetc`, `tqsttp`, `tqstca`, `tqstec`, `tqstrm`, `tqce`, `tqcel`, `tqcen`, `tqcenl`, `tqmap`, `tqmapl`, `tqclim`, `tqgetr`, `tqgdpc`, `tqgdat`, `tqlpar`, `tqgpar` | one input status/identifier/option; W interleaved/U appended; `strlen(input)` | `CString` pointer plus checked `as_bytes().len()` | Win32 match. `tqgetr` remains incomplete; `tqgpar` capacity bounds remain a separate audit. |
 | `tqcsc` | input 2-D character records; W length after pointer/U final; fixed 24 per record, bridge blank-pads C rows | Rust packs and space-pads 24-byte records, passes 24 | Win32 match; this unusual packing correctly follows raw ABI rather than public C shape. |
-| `tqwstr`, `tqstxp` | two inputs; W lengths interleaved in argument order/U both appended in argument order; `strlen` for each | two `CString`s; lengths use the corresponding `str.len()` | Win32 order/value match. |
-| `tqcsu` | two inputs (class, unit), W interleaved/U appended; both `strlen` | two `CString`s; both `str.len()` | Win32 match. |
+| `tqwstr`, `tqstxp` | two inputs; W lengths interleaved in argument order/U both appended in argument order; `strlen` for each | two `CString`s; each uses its corresponding checked `as_bytes().len()` | Win32 order/value match. |
+| `tqcsu` | two inputs (class, unit), W interleaved/U appended; both `strlen` | two `CString`s; each uses its corresponding checked `as_bytes().len()` | Win32 match. |
 | `tqgsu` | input option (`strlen`) and output unit (fixed 25); W `(option,len,unit,25,noerr)`, U appends `(strlen,25)` | `CString` byte length for option; mutable 25-byte unit buffer, passes 25 | **FIXED IN CURRENT MASTER:** Win32 length/order match; original code used `option.len()-1`. |
 | `tqgtid` | fixed output ID, 255; W `(id,255,noerr)`, U appended 255 | mutable 255-byte buffer; hidden length 255 | **FIXED IN CURRENT MASTER:** Win32 length/order match; original hidden length was 256. |
 | `tqgtnm` | fixed output name, 80 | mutable 80-byte buffer; hidden 80 | **FIXED IN CURRENT MASTER:** raw ABI was already correct; `clen()` first-space truncation was replaced with record-bounded decoding. |

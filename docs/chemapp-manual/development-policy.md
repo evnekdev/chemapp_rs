@@ -196,18 +196,19 @@ Future contributors and AI agents should not have to rediscover important ChemAp
 ## 18. Do not use Rust pointer-sized integers as a default ABI type
 
 `usize` and `isize` describe Rust pointer width, not necessarily a ChemApp
-Fortran/C-transition integer or a hidden CHARACTER length. The checked 2017
-Win64 DLL and checked C header establish signed 32-bit `LI`/`LIP`/`NOERR`,
-while Win64 non-UNIX `LNT` is a 64-bit `size_t` value. Native declarations
-must therefore use distinct raw ABI types: `ChemAppInt = i32` for native
-integers and a target-specific CHARACTER-length alias for `LNT`/`ftnlen`.
-The checked UNIX transition source gives `ftnlen` a signed 32-bit
-representation on both represented UNIX architecture branches; that is not
-evidence of Unix64 runtime support. Input `CString` CHARACTER arguments must
-cross the raw boundary as pointers plus a length from the same C string, never
-by indexing `as_bytes()[0]` (which panics for an empty input).
+Fortran/C-transition integer or a hidden CHARACTER length. Raw aliases belong
+in `src/abi.rs` and must follow the literal checked `cacint.h` branches:
+Win64 (including source-modelled Windows ARM64) uses `c_int` for
+`LI`/`LIP`/`NOERR` and `usize` for `LNT`; Win32 uses `c_long` for both; UNIX
+x86-64 uses `c_int` for both `LI` and `ftnlen`; and the literal other-UNIX
+fallback uses `c_long` for both. A source model is not evidence of a native
+binary or runtime support. In particular, do not generalize the checked
+Win64 `i32` result or the UNIX/x86-64 `int ftnlen` branch to every target.
+Input `CString` CHARACTER arguments must cross the raw boundary as pointers
+plus a length from the same C string, never by indexing `as_bytes()[0]` (which
+panics for an empty input).
 Public `usize` inputs require checked conversion; a native negative selector
 must not silently become a large unsigned Rust value. A successful call is
 supporting evidence, not a substitute for this target/build-specific record.
 
-The current complete evidence record is [native-abi-audit.md](native-abi-audit.md).  It includes a critical `TQCHAR` output-type defect and must be consulted before changing a native declaration.
+The current complete evidence record is [native-abi-audit.md](native-abi-audit.md). It retains the historical critical `TQCHAR` output-type finding, now fixed in current master, and must be consulted before changing a native declaration.

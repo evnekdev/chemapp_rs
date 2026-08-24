@@ -31,6 +31,7 @@ pub use crate::calculator::Calculator;
 pub use crate::iterator::{SystemComponentIterator, PhaseIterator, ConstituentIterator, SpeciesIterator, BondIterator};
 
 pub mod error;
+mod abi;
 pub mod defs;
 pub mod native;
 pub mod entities;

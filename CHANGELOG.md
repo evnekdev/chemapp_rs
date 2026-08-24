@@ -29,7 +29,8 @@
     trailing Fortran padding is removed.
   - corrected Win64 raw `LI`/`LIP`/`NOERR` storage to signed 32-bit values,
     independently of 64-bit Windows CHARACTER lengths.
-  - represented UNIX hidden Fortran CHARACTER lengths as checked signed
-    32-bit `ftnlen` values according to the checked transition source.
+  - modelled the checked `cacint.h` integer and hidden CHARACTER-length
+    branches explicitly: Win32 `long`, Win64 `_WIN64` `int`/`size_t`,
+    UNIX/x86-64 `int`, and the literal non-x86-64 UNIX `long` fallback.
   - pass input `CString` values to native CHARACTER parameters as raw pointers,
     including safely representable zero-length inputs.

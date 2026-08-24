@@ -1,0 +1,64 @@
+name: ABI platform model
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  host-quality:
+    name: host quality (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # The existing repository has broad historical rustfmt debt. Keep this
+      # visible without making unrelated formatting block ABI checks.
+      - name: Check formatting (informational)
+        run: cargo fmt --check
+        continue-on-error: true
+      - name: Check host build
+        run: cargo check
+      - name: Run host tests
+        run: cargo test
+
+  target-check:
+    name: cargo check (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: i686-pc-windows-msvc
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+          - os: ubuntu-latest
+            target: i686-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install target standard library
+        run: rustup target add ${{ matrix.target }}
+      - name: Type-check source-modelled ABI
+        run: cargo check --target ${{ matrix.target }}
+
+# This workflow intentionally performs no native ChemApp execution. CI has no
+# checked proprietary DLL/SO, license, data file, or C transition build path;
+# a successful target check validates Rust type selection only, not runtime ABI
+# compatibility.

@@ -137,27 +137,36 @@ Linux/i386 exports.  It found that the 2013 Win32 DLL exports the same
 the expected lowercase trailing-underscore names but lacks several later
 data-manipulation routines.
 
-The checked `cacint.h` uses 32-bit `LI`/`LIP` on its x64 branch (`int` and
-`int *`). Never use pointer width as evidence that `usize` is the right
-ChemApp integer type. Direct disassembly of the checked 2017 Win64 DLL
-now independently confirms the 32-bit rule: `TQINI`, `TQVERS`, `TQLITE`,
-`TQNOSC`, `TQNOPC`, `TQGNP`, `TQGTED`, and license routines make DWORD
-loads/stores through `LI`/`LIP`/`NOERR` pointers. Current `native.rs` uses
-the raw alias `ChemAppInt = i32` for every such pointer and exposes public
-positive indices/counts through checked conversions.
+The checked `cacint.h` is a **platform source model**, not a universal
+`i32` declaration. Its literal selection rules are implemented centrally in
+`src/abi.rs` using `std::ffi::{c_int, c_long}`:
 
-The same x64 disassembly supports a different rule for non-UNIX CHARACTER
-lengths: representative `TQGTID`, `TQGTNM`, `TQGTPI`, `TQGTHI`, `TQGIO`,
-`TQGSU`, `TQCSU`, and `TQWSTR` entries preserve their adjacent length values
-in 64-bit slots, consistent with the header's `LNT size_t`. Thus Win64 raw
-integer and raw string-length types remain separate in current code:
-`ChemAppInt` is 32-bit for `LI`/`LIP`/`NOERR`, while `ChemAppLen` is the
-64-bit value representation for Windows `LNT`. The bridge establishes
-interleaved lengths for non-UNIX and appended `ftnlen` values for UNIX.
-The checked transition header declares UNIX/i386 `ftnlen` as 32-bit `long`
-and its UNIX/x86-64 branch as 32-bit `int`; current code therefore uses a
-checked signed 32-bit Unix `ChemAppLen`. That source declaration is not a
-Unix64 runtime verification, because no checked Unix64 ChemApp binary exists.
+| Target model | `LI` / `LIP` raw storage | CHARACTER length | Evidence category |
+|---|---|---|---|
+| Win32/x86 | `c_long` | `c_long` (`LNT`) | checked binary plus source |
+| Win64/x64 | `c_int` | `usize` (`LNT = size_t`) | checked binary and disassembly |
+| Windows ARM64 | `c_int` | `usize` | source-modelled `_WIN64` branch; no binary |
+| UNIX x86-64 | `c_int` | `c_int` (`ftnlen`) | source-modelled; no binary |
+| other UNIX architectures | `c_long` | `c_long` (`ftnlen`) | literal source fallback; no binary unless separately recorded |
+
+Never use pointer width by itself as evidence that `usize` is a ChemApp
+integer. Direct disassembly of the checked 2017 Win64 DLL confirms the
+`c_int` rule for `TQINI`, `TQVERS`, `TQLITE`, `TQNOSC`, `TQNOPC`, `TQGNP`,
+`TQGTED`, and license routines, which make DWORD loads/stores through
+`LI`/`LIP`/`NOERR` pointers. The same disassembly supports a distinct
+non-UNIX `LNT = size_t` rule: representative `TQGTID`, `TQGTNM`, `TQGTPI`,
+`TQGTHI`, `TQGIO`, `TQGSU`, `TQCSU`, and `TQWSTR` preserve adjacent lengths
+in 64-bit slots.
+
+The bridge establishes interleaved lengths for non-UNIX calls and appended
+`ftnlen` values for `#if defined(UNIX) && !defined(CRAY)` calls. `__CYGWIN__`
+selects the header's `ftnlen` declaration but does not alone select that raw
+UNIX bridge path. Likewise, `strcpy_s` uses in the old transition source do
+not prove it compiles unchanged on every Unix-like target. macOS x86-64 is
+therefore source-modelled only, macOS ARM64 reaches the literal non-x86-64
+fallback only, and neither has runtime ABI support established. CRAY remains
+not modelled because the reference source deliberately excludes it from the
+ordinary UNIX raw-call branch.
 
 Input CHARACTER arguments are raw pointers, not Rust references to an assumed
 first data byte. `CString::as_ptr()` remains valid for an empty `CString`

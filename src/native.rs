@@ -13,6 +13,12 @@ use function_name::{named};
 
 use crate::DEFAULT_LIBNAME;
 use crate::{SystemDimensions, TransparentHeader};
+use crate::abi::{
+	ChemAppInt, ChemAppLen, chemapp_int_array_to_i32, chemapp_int_to_i32,
+	chemapp_int_to_u32, chemapp_int_to_usize, cstring_character_input,
+	i32_to_chemapp_int, usize_to_chemapp_character_length, usize_to_chemapp_int,
+	wrap_nonnegative_result, wrap_result,
+};
 use crate::defs::{FUNCSWIN32,FUNCSWIN64,FUNCSUNIX32,FUNCSUNIX64};
 use crate::error::{ChemAppError};
 
@@ -24,35 +30,6 @@ const TQGTRH_USER_ID_LENGTH: usize = 255;
 const TQGTRH_TEXT_LENGTH: usize = 80;
 const TQERR_RECORD_LENGTH: usize = 80;
 const TQERR_RECORD_COUNT: usize = 3;
-
-/// Raw ChemApp `INTEGER`/`LI`/`LIP` storage.
-///
-/// The checked Win64 DLL reads and writes this type as a signed 32-bit value;
-/// it is deliberately independent from Rust pointer width and from Fortran
-/// CHARACTER-length arguments.
-type ChemAppInt = i32;
-
-/// Windows non-UNIX `LNT` CHARACTER length.  The checked Win64 DLL carries
-/// this by-value argument in a 64-bit `size_t` slot.  It must not be replaced
-/// by [`ChemAppInt`] while correcting native INTEGER pointers.
-#[cfg(target_family = "windows")]
-type ChemAppWindowsLength = usize;
-
-/// UNIX Fortran CHARACTER length (`ftnlen`) from the checked GTT transition
-/// source. It is a signed 32-bit `long` on checked UNIX/i386 and a signed
-/// 32-bit `int` in the UNIX/x86-64 source branch. Unix64 has no checked
-/// ChemApp binary, so this representation is source evidence, not runtime
-/// verification.
-#[cfg(target_family = "unix")]
-type ChemAppUnixLength = i32;
-
-/// Raw by-value Fortran CHARACTER length for the target-specific ABI branch.
-/// This is intentionally distinct from [`ChemAppInt`].
-#[cfg(target_family = "windows")]
-type ChemAppLen = ChemAppWindowsLength;
-
-#[cfg(target_family = "unix")]
-type ChemAppLen = ChemAppUnixLength;
 
 // Rust buffer capacity is intentionally kept as `usize` above. These values
 // are the corresponding raw Fortran declarations and must cross FFI as the
@@ -128,87 +105,65 @@ fn tqerr_message(buffer: &[u8]) -> Result<String, ChemAppError> {
 	return Ok(records.join("\n"));
 }
 
-/// Converts an arbitrary Rust byte count into a checked signed 32-bit
-/// Fortran `ftnlen`. This is kept separate so Unix overflow behavior is
-/// testable on every host.
-#[cfg(any(target_family = "unix", test))]
-fn usize_to_i32_character_length(value: usize) -> Result<i32, ChemAppError> {
-	i32::try_from(value).map_err(|_| {
-		ChemAppError::OtherError(format!(
-			"Fortran CHARACTER length cannot represent Rust byte length {value}"
-		))
-	})
-}
-
-/// Converts a Rust byte count to the raw target-specific Fortran CHARACTER
-/// length type. Windows `LNT` follows `size_t`; UNIX `ftnlen` is a signed
-/// 32-bit value in the checked GTT transition source.
-#[cfg(target_family = "windows")]
-fn usize_to_chemapp_character_length(value: usize) -> Result<ChemAppLen, ChemAppError> {
-	Ok(value)
-}
-
-#[cfg(target_family = "unix")]
-fn usize_to_chemapp_character_length(value: usize) -> Result<ChemAppLen, ChemAppError> {
-	usize_to_i32_character_length(value)
-}
-
-/// Obtains one raw input CHARACTER pointer and its matching declared length.
-/// `CString` owns a trailing NUL even when its byte slice is empty, so the
-/// pointer is valid for a zero-length Fortran CHARACTER argument. The NUL is
-/// not included in the native length.
-fn cstring_character_input(cstring: &CString) -> Result<(*const u8, ChemAppLen), ChemAppError> {
-	let length = usize_to_chemapp_character_length(cstring.as_bytes().len())?;
-	Ok((cstring.as_ptr().cast::<u8>(), length))
-}
-
-/// Converts a public non-negative Rust index/count to the signed native ABI
-/// representation without truncation.
-fn usize_to_chemapp_int(value: usize) -> Result<ChemAppInt, ChemAppError> {
-	ChemAppInt::try_from(value).map_err(|_| {
-		ChemAppError::OtherError(format!(
-			"ChemApp INTEGER cannot represent Rust value {value}"
-		))
-	})
-}
-
-/// Converts a native value used as a public count/index. Negative native
-/// selectors are intentionally rejected here; APIs that document them must
-/// retain `ChemAppInt` until their semantics are handled explicitly.
-fn chemapp_int_to_usize(value: ChemAppInt) -> Result<usize, ChemAppError> {
-	usize::try_from(value).map_err(|_| {
-		ChemAppError::OtherError(format!(
-			"negative ChemApp INTEGER {value} cannot be represented as usize"
-		))
-	})
-}
-
-fn chemapp_int_to_u32(value: ChemAppInt) -> Result<u32, ChemAppError> {
-	u32::try_from(value).map_err(|_| {
-		ChemAppError::OtherError(format!(
-			"ChemApp INTEGER {value} cannot be represented as u32"
-		))
-	})
-}
-
 macro_rules! raw_chemapp_ints {
 	($($value:ident),+ $(,)?) => {
 		$(let $value = usize_to_chemapp_int($value)?;)+
 	};
 }
 
-fn wrap_result<T>(result: T, errcode: ChemAppInt)->Result<T, ChemAppError>{
-	match errcode {
-		0 => Ok(result),
-		_ => Err(ChemAppError::NativeError(errcode)),
+/// Raw `LI` storage for `TQSIZE` and `TQUSED`.
+struct RawSystemDimensions {
+	nconstituents: ChemAppInt,
+	ncomponents: ChemAppInt,
+	nmixtures: ChemAppInt,
+	nexcess_gibbs: ChemAppInt,
+	nexcess_magnetic: ChemAppInt,
+	nsublattices: ChemAppInt,
+	nspecies: ChemAppInt,
+	nconstituents_mqm: ChemAppInt,
+	nranges_constituent: ChemAppInt,
+	nranges: ChemAppInt,
+	ndependent: ChemAppInt,
+}
+
+impl RawSystemDimensions {
+	fn new() -> Self {
+		Self {
+			nconstituents: 0,
+			ncomponents: 0,
+			nmixtures: 0,
+			nexcess_gibbs: 0,
+			nexcess_magnetic: 0,
+			nsublattices: 0,
+			nspecies: 0,
+			nconstituents_mqm: 0,
+			nranges_constituent: 0,
+			nranges: 0,
+			ndependent: 0,
+		}
 	}
 }
 
-/// Checks the native error before adapting a non-negative ChemApp count or
-/// index to Rust, so failed calls never expose an unspecified output value.
-fn wrap_nonnegative_result(value: ChemAppInt, errcode: ChemAppInt) -> Result<usize, ChemAppError> {
-	wrap_result((), errcode)?;
-	chemapp_int_to_usize(value)
+/// Adapts `TQSIZE`/`TQUSED` raw `LI` outputs only after the native call has
+/// succeeded. `SystemDimensions` intentionally keeps its established public
+/// `i32` fields, so it must never be handed to a source-modelled `long*` ABI
+/// directly on a fallback target.
+fn system_dimensions_from_raw(
+	values: RawSystemDimensions,
+) -> Result<SystemDimensions, ChemAppError> {
+	Ok(SystemDimensions {
+		nconstituents: chemapp_int_to_i32(values.nconstituents)?,
+		ncomponents: chemapp_int_to_i32(values.ncomponents)?,
+		nmixtures: chemapp_int_to_i32(values.nmixtures)?,
+		nexcess_gibbs: chemapp_int_to_i32(values.nexcess_gibbs)?,
+		nexcess_magnetic: chemapp_int_to_i32(values.nexcess_magnetic)?,
+		nsublattices: chemapp_int_to_i32(values.nsublattices)?,
+		nspecies: chemapp_int_to_i32(values.nspecies)?,
+		nconstituents_mqm: chemapp_int_to_i32(values.nconstituents_mqm)?,
+		nranges_constituent: chemapp_int_to_i32(values.nranges_constituent)?,
+		nranges: chemapp_int_to_i32(values.nranges)?,
+		ndependent: chemapp_int_to_i32(values.ndependent)?,
+	})
 }
 
 /*********************************************************************************************************************************************************************************************************/
@@ -273,8 +228,8 @@ impl Engine {
 	#[named]
 	pub fn tqvers(&self) -> Result<i32, ChemAppError>{
 		let fname = func_alias(function_name!());
-		let mut vers = 0;
-		let mut errcode = 0;
+		let mut vers: ChemAppInt = 0;
+		let mut errcode: ChemAppInt = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
@@ -288,7 +243,8 @@ impl Engine {
 			func(&mut vers, &mut errcode);
 		}
 		/******************************************************************************************************/
-		return wrap_result(vers, errcode);
+		wrap_result((), errcode)?;
+		return chemapp_int_to_i32(vers);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -319,8 +275,8 @@ impl Engine {
 	#[named]
 	pub fn tqlite(&self) -> Result<bool, ChemAppError>{
 		let fname = func_alias(function_name!());
-		let mut lite = 0;
-		let mut errcode = 0;
+		let mut lite: ChemAppInt = 0;
+		let mut errcode: ChemAppInt = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
@@ -413,8 +369,8 @@ impl Engine {
 	#[named]
 	pub fn tqgthi(&self)->Result<(String,i32), ChemAppError>{
 		let fname = func_alias(function_name!());
-		let mut errcode = 0;
-		let mut hid = 0;
+		let mut errcode: ChemAppInt = 0;
+		let mut hid: ChemAppInt = 0;
 		let mut cstring: [u8; NAME_LENGTH_MAX] = [0; NAME_LENGTH_MAX];
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
@@ -429,7 +385,11 @@ impl Engine {
 			func(&mut cstring[0], &mut hid, &mut errcode, NAME_NATIVE_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
-		return wrap_result((fixed_fortran_string(&cstring, NAME_LENGTH_MAX)?,hid), errcode);
+		wrap_result((), errcode)?;
+		return Ok((
+			fixed_fortran_string(&cstring, NAME_LENGTH_MAX)?,
+			chemapp_int_to_i32(hid)?,
+		));
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -439,7 +399,7 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut month: ChemAppInt = 0;
 		let mut year: ChemAppInt = 0;
-		let mut errcode = 0;
+		let mut errcode: ChemAppInt = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
@@ -488,8 +448,8 @@ impl Engine {
 	#[named]
 	pub fn tqsize(&self)->Result<SystemDimensions, ChemAppError>{
 		let fname = func_alias(function_name!());
-		let mut dims : SystemDimensions =  SystemDimensions::new();
-		let mut errcode = 0;
+		let mut dims = RawSystemDimensions::new();
+		let mut errcode: ChemAppInt = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
@@ -504,7 +464,8 @@ impl Engine {
 			func(&mut dims.nconstituents, &mut dims.ncomponents, &mut dims.nmixtures, &mut dims.nexcess_gibbs, &mut dims.nexcess_magnetic, &mut dims.nsublattices, &mut dims.nspecies, &mut dims.nconstituents_mqm, &mut dims.nranges_constituent, &mut dims.nranges, &mut dims.ndependent, &mut errcode);
 		}
 		/******************************************************************************************************/
-		return wrap_result(dims, errcode);
+		wrap_result((), errcode)?;
+		return system_dimensions_from_raw(dims);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -512,8 +473,8 @@ impl Engine {
 	#[named]
 	pub fn tqused(&self)->Result<SystemDimensions, ChemAppError>{
 		let fname = func_alias(function_name!());
-		let mut dims : SystemDimensions =  SystemDimensions::new();
-		let mut errcode = 0;
+		let mut dims = RawSystemDimensions::new();
+		let mut errcode: ChemAppInt = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
@@ -528,7 +489,8 @@ impl Engine {
 			func(&mut dims.nconstituents, &mut dims.ncomponents, &mut dims.nmixtures, &mut dims.nexcess_gibbs, &mut dims.nexcess_magnetic, &mut dims.nsublattices, &mut dims.nspecies, &mut dims.nconstituents_mqm, &mut dims.nranges_constituent, &mut dims.nranges, &mut dims.ndependent, &mut errcode);
 		}
 		/******************************************************************************************************/
-		return wrap_result(dims, errcode);
+		wrap_result((), errcode)?;
+		return system_dimensions_from_raw(dims);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -807,17 +769,17 @@ impl Engine {
 	#[named]
 	pub fn tqgtrh(&self)->Result<TransparentHeader,ChemAppError>{
 		let fname = func_alias(function_name!());
-		let mut cver = 0;
+		let mut cver: ChemAppInt = 0;
 		let mut cnwp : [u8; TQGTRH_PROGRAM_NAME_LENGTH] = [0; TQGTRH_PROGRAM_NAME_LENGTH];
-		let mut cvnw : [i32; 3] = [0; 3];
+		let mut cvnw : [ChemAppInt; 3] = [0; 3];
 		let mut cnrp : [u8; TQGTRH_PROGRAM_NAME_LENGTH] = [0; TQGTRH_PROGRAM_NAME_LENGTH];
-		let mut cvnr : [i32; 3] = [0; 3];
-		let mut cdtc : [i32; 6] = [0; 6];
-		let mut cdte : [i32; 6] = [0; 6];
+		let mut cvnr : [ChemAppInt; 3] = [0; 3];
+		let mut cdtc : [ChemAppInt; 6] = [0; 6];
+		let mut cdte : [ChemAppInt; 6] = [0; 6];
 		let mut cid  : [u8; TQGTRH_USER_ID_LENGTH] = [0; TQGTRH_USER_ID_LENGTH];
 		let mut cusr : [u8; TQGTRH_TEXT_LENGTH] = [0; TQGTRH_TEXT_LENGTH];
 		let mut crem : [u8; TQGTRH_TEXT_LENGTH] = [0; TQGTRH_TEXT_LENGTH];
-		let mut errcode = 0;
+		let mut errcode: ChemAppInt = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
@@ -831,19 +793,20 @@ impl Engine {
 			func(&mut cver, &mut cnwp[0], &mut cvnw[0], &mut cnrp[0], &mut cvnr[0], &mut cdtc[0], &mut cdte[0], &mut cid[0], &mut cusr[0], &mut crem[0], &mut errcode, TQGTRH_PROGRAM_NAME_NATIVE_LENGTH, TQGTRH_PROGRAM_NAME_NATIVE_LENGTH, TQGTRH_USER_ID_NATIVE_LENGTH, TQGTRH_TEXT_NATIVE_LENGTH, TQGTRH_TEXT_NATIVE_LENGTH);
 		}
 		/******************************************************************************************************/
+		wrap_result((), errcode)?;
 		let header : TransparentHeader = TransparentHeader {
-			version : cver,
+			version : chemapp_int_to_i32(cver)?,
 			name_writing_program       : fixed_fortran_string(&cnwp, TQGTRH_PROGRAM_NAME_LENGTH)?,
-			version_writing_program    : cvnw,
+			version_writing_program    : chemapp_int_array_to_i32(cvnw)?,
 			name_reading_program       : fixed_fortran_string(&cnrp, TQGTRH_PROGRAM_NAME_LENGTH)?,
-			minversion_reading_program : cvnr,
-			creation_date              : cdtc,
-			expiry_date                : cdte,
+			minversion_reading_program : chemapp_int_array_to_i32(cvnr)?,
+			creation_date              : chemapp_int_array_to_i32(cdtc)?,
+			expiry_date                : chemapp_int_array_to_i32(cdte)?,
 			user_ids_allowed           : fixed_fortran_string(&cid, TQGTRH_USER_ID_LENGTH)?,
 			license_holders_allowed    : fixed_fortran_string(&cusr, TQGTRH_TEXT_LENGTH)?,
 			remark                     : fixed_fortran_string(&crem, TQGTRH_TEXT_LENGTH)?,
 		};
-		return wrap_result(header, errcode);
+		return Ok(header);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -1528,8 +1491,8 @@ impl Engine {
 		raw_chemapp_ints!(indexp, indexc);
 		let coption: CString = CString::new(option)?;
 		let option_length = cstring_character_input(&coption)?.1;
-		let mut numcon  = 0;
-		let mut errcode = 0;
+		let mut numcon: ChemAppInt = 0;
+		let mut errcode: ChemAppInt = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
@@ -1544,7 +1507,8 @@ impl Engine {
 			func(cstring_character_input(&coption)?.0, &indexp, &indexc, &val, &mut numcon, &mut errcode, option_length);
 		}
 		/******************************************************************************************************/
-		return wrap_result(numcon, errcode);
+		wrap_result((), errcode)?;
+		return chemapp_int_to_i32(numcon);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -1552,7 +1516,8 @@ impl Engine {
 	#[named]
 	pub fn tqremc(&self, numcon: i32) -> Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
-		let mut errcode = 0;
+		let numcon = i32_to_chemapp_int(numcon)?;
+		let mut errcode: ChemAppInt = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
@@ -2237,70 +2202,7 @@ mod tests {
 	}
 
 	#[test]
-	fn cstring_input_preserves_an_empty_character_pointer_and_length() {
-		let empty = CString::new("").unwrap();
-		let (pointer, length) = cstring_character_input(&empty).unwrap();
-		assert_eq!(length, 0);
-		assert!(!pointer.is_null());
-		assert_eq!(unsafe { *pointer }, 0);
-
-		let pressure = CString::new("Pressure").unwrap();
-		assert_eq!(cstring_character_input(&pressure).unwrap().1, 8);
-	}
-
-	#[test]
-	fn signed_fortran_character_length_conversion_is_checked() {
-		assert_eq!(usize_to_i32_character_length(0).unwrap(), 0);
-		assert_eq!(usize_to_i32_character_length(i32::MAX as usize).unwrap(), i32::MAX);
-		assert!(usize_to_i32_character_length(i32::MAX as usize + 1).is_err());
-	}
-
-	#[cfg(target_family = "unix")]
-	#[test]
-	fn unix_fortran_character_length_is_32_bit() {
-		assert_eq!(std::mem::size_of::<ChemAppLen>(), 4);
-	}
-
-	#[cfg(all(target_family = "windows", target_pointer_width = "64"))]
-	#[test]
-	fn win64_fortran_character_length_is_pointer_sized() {
-		assert_eq!(std::mem::size_of::<ChemAppLen>(), 8);
-	}
-
-	#[cfg(all(target_family = "windows", target_pointer_width = "32"))]
-	#[test]
-	fn win32_fortran_character_length_is_32_bit() {
-		assert_eq!(std::mem::size_of::<ChemAppLen>(), 4);
-	}
-
-	#[test]
 	fn tqchar_exposes_the_native_double_precision_result() {
 		let _: fn(&Engine, usize, usize) -> Result<f64, ChemAppError> = Engine::tqchar;
-	}
-
-	#[test]
-	fn native_integer_is_signed_32_bit_storage() {
-		assert_eq!(std::mem::size_of::<ChemAppInt>(), 4);
-		assert_eq!(ChemAppInt::MIN, i32::MIN);
-		assert_eq!(ChemAppInt::MAX, i32::MAX);
-	}
-
-	#[test]
-	fn public_to_native_integer_conversion_is_checked() {
-		assert_eq!(usize_to_chemapp_int(0).unwrap(), 0);
-		assert_eq!(usize_to_chemapp_int(i32::MAX as usize).unwrap(), i32::MAX);
-		assert!(usize_to_chemapp_int(i32::MAX as usize + 1).is_err());
-	}
-
-	#[test]
-	fn native_to_public_integer_conversion_rejects_negative_values() {
-		assert_eq!(chemapp_int_to_usize(0).unwrap(), 0);
-		assert_eq!(chemapp_int_to_usize(42).unwrap(), 42);
-		assert!(chemapp_int_to_usize(-1).is_err());
-	}
-
-	#[test]
-	fn native_error_codes_remain_signed() {
-		assert!(matches!(wrap_result((), -1), Err(ChemAppError::NativeError(-1))));
 	}
 }

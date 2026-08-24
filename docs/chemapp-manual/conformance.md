@@ -107,21 +107,25 @@ already correct. Win32/x86 therefore has 74 verified wrappers and one
 incomplete API (`TQGETR`) after this correction. Direct disassembly of the
 checked 2017 Win64 DLL establishes signed 32-bit raw `LI`/`LIP`/`NOERR`
 storage and 64-bit non-UNIX `LNT` values. Current master implements those
-distinct roles using raw `ChemAppInt = i32` and target-specific
-`ChemAppLen`, with checked public `usize` conversions. This removes the
-former common Win64 ABI-ISSUE, but no wrapper is promoted to Win64 VERIFIED
+distinct roles through source-modelled raw `ChemAppInt` and `ChemAppLen`
+aliases, with checked public `usize` conversions. This removes the former
+common Win64 ABI-ISSUE, but no wrapper is promoted to Win64 VERIFIED
 without complete per-routine evidence: 74 rows remain UNVERIFIED and
 `TQGETR` remains INCOMPLETE. Linux/i386 has 68 UNVERIFIED wrappers and 7
-absent exports; Unix64 has no checked binary. A subsequent CHARACTER-boundary
-hardening pass keeps Windows `LNT` pointer-sized while representing UNIX
-`ftnlen` as checked signed 32-bit storage from the transition source, and
-passes every input `CString` as a raw pointer plus its matching byte length.
+absent exports; Unix64 has no checked binary. The subsequent platform-ABI
+modelling pass moved raw aliases into `src/abi.rs`: Win64 remains
+`LI`/`LIP`/`NOERR = c_int` with `LNT = usize`, while the checked transition
+source selects UNIX/x86-64 `LI`/`ftnlen = c_int` and the literal non-x86-64
+UNIX fallback `= c_long`. Those source models are not runtime-support claims.
+Every input `CString` remains a raw pointer plus its matching checked byte
+length.
 
 The checked Win64 `maindemo` run observed a non-empty TQGTNM result containing
 internal spaces with no trailing padding. It also executed the canonical
 `TQCPRT -> immediate TQERR` sequence and obtained three structurally complete
 records. Installation-specific text and identifiers were not retained in
-repository documentation or tests.
+repository documentation or tests. The source-modelled alias refactor repeated
+that Win64 run successfully; the generated demo result artifact was removed.
 
 The former CRITICAL and HIGH defects above are **FIXED IN CURRENT MASTER**.
 The direct-binary Win64 integer and length questions are likewise resolved
