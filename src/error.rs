@@ -11,7 +11,12 @@ use bincode::{Encode};
 /*****************************************************************************************************************************************************************************************************/
 /*****************************************************************************************************************************************************************************************************/
 
-/// Custom error struct
+/// Custom error struct.
+///
+/// Serde/bincode support is a convenience representation only. The crate does
+/// not promise a stable cross-version wire format: enum variant ordering and
+/// payload shape may change as error reporting evolves. Persisted errors must
+/// therefore be versioned by the consuming application.
 #[derive(Debug,Clone,Serialize,Deserialize,Encode)]
 pub enum ChemAppError{
 	/// A native ChemApp `NOERR` value. ChemApp INTEGER storage is signed i32.

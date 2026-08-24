@@ -9,17 +9,46 @@ use crate::snapshot::StreamSnapshot;
 /// idempotent without inventing shared native ownership.
 #[derive(Debug)]
 struct StreamLease {
-    active: bool,
+    state: StreamLeaseState,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StreamLeaseState {
+    Active,
+    Removing,
+    Released,
 }
 
 impl StreamLease {
     fn active() -> Self {
-        Self { active: true }
+        Self {
+            state: StreamLeaseState::Active,
+        }
     }
 
-    /// Returns whether this call consumed the cleanup responsibility.
-    fn deactivate(&mut self) -> bool {
-        std::mem::replace(&mut self.active, false)
+    /// Consume Drop's cleanup responsibility before an observable native call.
+    fn begin_explicit_removal(&mut self) -> bool {
+        if self.state == StreamLeaseState::Active {
+            self.state = StreamLeaseState::Removing;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn complete_explicit_removal(&mut self) {
+        debug_assert_eq!(self.state, StreamLeaseState::Removing);
+        self.state = StreamLeaseState::Released;
+    }
+
+    /// Returns whether Drop owns exactly one best-effort cleanup call.
+    fn begin_drop_cleanup(&mut self) -> bool {
+        if self.state == StreamLeaseState::Active {
+            self.state = StreamLeaseState::Released;
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -78,13 +107,20 @@ impl<'a> Stream<'a> {
 
     /// Removes this stream and consumes its unique high-level ownership.
     ///
-    /// A successful call disables `Drop` cleanup, making native removal
-    /// errors observable without attempting a second successful removal.
+    /// Cleanup responsibility is consumed before TQSTRM. Consequently a
+    /// native error remains observable and Drop never makes a hidden retry.
+    /// On failure the name remains reserved because native stream state is
+    /// unknown; callers must not create a second high-level owner for it.
     pub fn remove(mut self) -> Result<(), ChemAppError> {
-        self.calculator.engine.tqstrm(&self.name)?;
-        debug_assert!(self.lease.deactivate());
-        self.calculator.release_stream_name(&self.name);
-        Ok(())
+        debug_assert!(self.lease.begin_explicit_removal());
+        match self.calculator.engine.tqstrm(&self.name) {
+            Ok(()) => {
+                self.lease.complete_explicit_removal();
+                self.calculator.release_stream_name(&self.name);
+                Ok(())
+            }
+            Err(error) => Err(error),
+        }
     }
 
     pub fn add_with_indices(
@@ -132,7 +168,7 @@ impl<'a> Stream<'a> {
 
 impl Drop for Stream<'_> {
     fn drop(&mut self) {
-        if self.lease.deactivate() {
+        if self.lease.begin_drop_cleanup() {
             // Drop cannot report native cleanup failures. Releasing the Rust
             // lease is still required because the value is gone; callers that
             // need to observe cleanup errors should use consuming `remove`.
@@ -149,7 +185,25 @@ mod tests {
     #[test]
     fn explicit_removal_disables_drop_cleanup_idempotently() {
         let mut lease = StreamLease::active();
-        assert!(lease.deactivate());
-        assert!(!lease.deactivate());
+        assert!(lease.begin_explicit_removal());
+        assert!(!lease.begin_drop_cleanup());
+        lease.complete_explicit_removal();
+        assert!(!lease.begin_drop_cleanup());
+    }
+
+    #[test]
+    fn failed_explicit_removal_never_rearms_drop_cleanup() {
+        let mut lease = StreamLease::active();
+        assert!(lease.begin_explicit_removal());
+        // Model a native error by deliberately not completing removal.
+        assert_eq!(lease.state, StreamLeaseState::Removing);
+        assert!(!lease.begin_drop_cleanup());
+    }
+
+    #[test]
+    fn ordinary_drop_gets_exactly_one_cleanup_attempt() {
+        let mut lease = StreamLease::active();
+        assert!(lease.begin_drop_cleanup());
+        assert!(!lease.begin_drop_cleanup());
     }
 }

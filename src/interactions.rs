@@ -40,6 +40,197 @@ impl Display for InteractionChannel {
     }
 }
 
+/// Semantic role of one magnetic TQGPAR column.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum MagneticInteractionRole {
+    /// Column 1: excess Curie/Neel temperature.
+    CurieNeelTemperature,
+    /// Column 2: excess magnetic moment.
+    MagneticMoment,
+}
+
+impl MagneticInteractionRole {
+    fn tqcdat_selector(self) -> usize {
+        match self {
+            Self::CurieNeelTemperature => 1,
+            Self::MagneticMoment => 2,
+        }
+    }
+}
+
+impl Display for MagneticInteractionRole {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::CurieNeelTemperature => "Curie/Neel temperature",
+            Self::MagneticMoment => "Magnetic moment",
+        })
+    }
+}
+
+/// A one-based, channel-safe address of one live ChemApp interaction value.
+///
+/// Gibbs parameters lower to `TQCDAT(13, interaction, expression, term,
+/// phase, value)`. Magnetic parameters lower to `TQCDAT(10, interaction,
+/// expression, role, phase, value)`. The variants make it impossible to put a
+/// magnetic role on a Gibbs interaction accidentally.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum InteractionParameterAddress {
+    /// One ordinary excess Gibbs coefficient.
+    Gibbs {
+        /// One-based phase index.
+        phase_index: usize,
+        /// One-based interaction index in TQLPAR/TQGPAR order.
+        interaction_index: usize,
+        /// One-based TQGPAR expression row.
+        expression_index: usize,
+        /// One-based coefficient term.
+        term_index: usize,
+    },
+    /// One magnetic interaction value.
+    Magnetic {
+        /// One-based phase index.
+        phase_index: usize,
+        /// One-based interaction index in TQLPAR/TQGPAR order.
+        interaction_index: usize,
+        /// One-based TQGPAR expression row.
+        expression_index: usize,
+        /// The manual-defined magnetic column.
+        role: MagneticInteractionRole,
+    },
+}
+
+impl InteractionParameterAddress {
+    fn checked_parts(self) -> Result<(usize, usize, usize, usize, usize), ChemAppError> {
+        let (i1, interaction, expression, term, phase) = match self {
+            Self::Gibbs {
+                phase_index,
+                interaction_index,
+                expression_index,
+                term_index,
+            } => (
+                13,
+                interaction_index,
+                expression_index,
+                term_index,
+                phase_index,
+            ),
+            Self::Magnetic {
+                phase_index,
+                interaction_index,
+                expression_index,
+                role,
+            } => (
+                10,
+                interaction_index,
+                expression_index,
+                role.tqcdat_selector(),
+                phase_index,
+            ),
+        };
+        if interaction == 0 || expression == 0 || term == 0 || phase == 0 {
+            return Err(ChemAppError::OtherError(
+                "interaction parameter addresses use one-based nonzero indices".to_owned(),
+            ));
+        }
+        Ok((i1, interaction, expression, term, phase))
+    }
+
+    /// Return the exact five integer selectors passed to raw TQCDAT.
+    pub fn tqcdat_selectors(self) -> Result<[usize; 5], ChemAppError> {
+        let (i1, i2, i3, i4, i5) = self.checked_parts()?;
+        Ok([i1, i2, i3, i4, i5])
+    }
+
+    /// Return the TQGPAR channel for readback.
+    pub fn channel(self) -> InteractionChannel {
+        match self {
+            Self::Gibbs { .. } => InteractionChannel::GibbsExcess,
+            Self::Magnetic { .. } => InteractionChannel::Magnetic,
+        }
+    }
+
+    fn matrix_coordinates(self) -> (usize, usize, usize, usize) {
+        match self {
+            Self::Gibbs {
+                phase_index,
+                interaction_index,
+                expression_index,
+                term_index,
+            } => (phase_index, interaction_index, expression_index, term_index),
+            Self::Magnetic {
+                phase_index,
+                interaction_index,
+                expression_index,
+                role,
+            } => (
+                phase_index,
+                interaction_index,
+                expression_index,
+                role.tqcdat_selector(),
+            ),
+        }
+    }
+}
+
+/// One addressable live interaction value.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct InteractionParameter {
+    /// Structural mutation/readback address.
+    pub address: InteractionParameterAddress,
+    /// Value returned by live TQGPAR in the active default units.
+    pub value: f64,
+}
+
+/// Semantic role of a returned TQGPAR cell.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum InteractionParameterRole {
+    /// An ordinary Gibbs coefficient identified by one-based term number.
+    GibbsTerm { term_index: usize },
+    /// Excess Curie/Neel temperature.
+    CurieNeelTemperature,
+    /// Excess magnetic moment.
+    MagneticMoment,
+    /// A returned column whose mutation selector is not yet established.
+    Unclassified { column_index: usize },
+}
+
+impl Display for InteractionParameterRole {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::GibbsTerm { term_index } => write!(formatter, "Gibbs term {term_index}"),
+            Self::CurieNeelTemperature => formatter.write_str("Curie/Neel temperature"),
+            Self::MagneticMoment => formatter.write_str("Magnetic moment"),
+            Self::Unclassified { column_index } => {
+                write!(formatter, "Unclassified column {column_index}")
+            }
+        }
+    }
+}
+
+/// Whether one returned TQGPAR cell has a verified TQCDAT mutation address.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum InteractionMutationSupport {
+    /// The contained address was verified by mutate/read/restore round-trip.
+    Verified(InteractionParameterAddress),
+    /// The value remains inspectable, but mutation is deliberately unavailable.
+    ReadOnly { reason: String },
+}
+
+/// One cell of the complete logical TQGPAR matrix.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InteractionParameterCell {
+    /// One-based expression row.
+    pub expression_index: usize,
+    /// One-based returned TQGPAR column.
+    pub column_index: usize,
+    /// Model/channel-aware meaning of the column.
+    pub role: InteractionParameterRole,
+    /// Live value returned by TQGPAR.
+    pub value: f64,
+    /// Verified address or an explicit read-only reason.
+    pub mutation: InteractionMutationSupport,
+}
+
 /// Provenance of the structural descriptor used for name resolution.
 ///
 /// The exact TQLPAR text is retained in [`InteractionRaw`] for both variants.
@@ -69,8 +260,8 @@ pub enum InteractionRecoveryReason {
     /// The native descriptor differs only where TQLPAR printed `[*]` and the
     /// deterministically corresponding DAT interaction has an order >= 10.
     KnownMultiDigitOrderCorruption,
-    /// The native text could not be parsed by a known complete grammar, while
-    /// the corresponding DAT descriptor is structurally usable.
+    /// Reserved for a positively identified malformed-output defect. Merely
+    /// failing the current Rust grammar never selects this recovery.
     MalformedNativeDescriptor,
     /// Reserved for another independently validated native defect class.
     OtherValidatedNativeDefect,
@@ -562,6 +753,215 @@ impl Interaction {
             InteractionResolution::Resolved(value) => value.to_string(),
             InteractionResolution::Unresolved { reason } => format!("UNRESOLVED: {reason}"),
         }
+    }
+
+    /// Expand the complete logical `NOEXPR × NVALA` matrix into typed cells.
+    ///
+    /// EN22 Win64 round-trips establish ordinary six-term Gibbs addresses for
+    /// SUBQ/SUBL/SUBLM/QKTO/QKTOM and both magnetic roles for SUBLM. SUBQ's
+    /// returned columns 7–18 are retained but read-only: the generic Gibbs
+    /// selector was rejected by ChemApp, and their special meaning must not be
+    /// guessed. SUBG is likewise read-only pending dedicated runtime evidence.
+    pub fn parameter_cells(&self) -> Vec<InteractionParameterCell> {
+        let model = self.raw.model.trim().to_ascii_uppercase();
+        let mut cells = Vec::new();
+        for (expression_offset, row) in self.raw.values.iter().enumerate() {
+            for (column_offset, value) in row.iter().copied().enumerate() {
+                let expression_index = expression_offset + 1;
+                let column_index = column_offset + 1;
+                let (role, mutation) = match self.raw.channel {
+                    InteractionChannel::Magnetic => match column_index {
+                        1 => {
+                            let address = InteractionParameterAddress::Magnetic {
+                                phase_index: self.raw.phase_index,
+                                interaction_index: self.raw.parameter_index,
+                                expression_index,
+                                role: MagneticInteractionRole::CurieNeelTemperature,
+                            };
+                            (
+                                InteractionParameterRole::CurieNeelTemperature,
+                                if model == "SUBLM" {
+                                    InteractionMutationSupport::Verified(address)
+                                } else {
+                                    InteractionMutationSupport::ReadOnly {
+                                        reason: format!(
+                                            "magnetic mutation is not runtime-verified for model {model}"
+                                        ),
+                                    }
+                                },
+                            )
+                        }
+                        2 => {
+                            let address = InteractionParameterAddress::Magnetic {
+                                phase_index: self.raw.phase_index,
+                                interaction_index: self.raw.parameter_index,
+                                expression_index,
+                                role: MagneticInteractionRole::MagneticMoment,
+                            };
+                            (
+                                InteractionParameterRole::MagneticMoment,
+                                if model == "SUBLM" {
+                                    InteractionMutationSupport::Verified(address)
+                                } else {
+                                    InteractionMutationSupport::ReadOnly {
+                                        reason: format!(
+                                            "magnetic mutation is not runtime-verified for model {model}"
+                                        ),
+                                    }
+                                },
+                            )
+                        }
+                        _ => (
+                            InteractionParameterRole::Unclassified { column_index },
+                            InteractionMutationSupport::ReadOnly {
+                                reason: "the manual defines exactly two magnetic columns"
+                                    .to_owned(),
+                            },
+                        ),
+                    },
+                    InteractionChannel::GibbsExcess => {
+                        let role = if column_index <= 6 {
+                            InteractionParameterRole::GibbsTerm {
+                                term_index: column_index,
+                            }
+                        } else {
+                            InteractionParameterRole::Unclassified { column_index }
+                        };
+                        let verified_model =
+                            matches!(model.as_str(), "SUBQ" | "SUBL" | "SUBLM" | "QKTO" | "QKTOM");
+                        let mutation = if verified_model && column_index <= 6 {
+                            InteractionMutationSupport::Verified(
+                                InteractionParameterAddress::Gibbs {
+                                    phase_index: self.raw.phase_index,
+                                    interaction_index: self.raw.parameter_index,
+                                    expression_index,
+                                    term_index: column_index,
+                                },
+                            )
+                        } else if model == "SUBQ" && column_index > 6 {
+                            InteractionMutationSupport::ReadOnly {
+                                reason: "SUBQ extended column rejected the documented generic Gibbs selector in the checked runtime".to_owned(),
+                            }
+                        } else if model == "SUBG" {
+                            InteractionMutationSupport::ReadOnly {
+                                reason:
+                                    "SUBG term/power mutation is documented but runtime-unverified"
+                                        .to_owned(),
+                            }
+                        } else {
+                            InteractionMutationSupport::ReadOnly {
+                                reason: format!(
+                                    "Gibbs mutation is not runtime-verified for model {model} column {column_index}"
+                                ),
+                            }
+                        };
+                        (role, mutation)
+                    }
+                };
+                cells.push(InteractionParameterCell {
+                    expression_index,
+                    column_index,
+                    role,
+                    value,
+                    mutation,
+                });
+            }
+        }
+        cells
+    }
+
+    /// Render this interaction's complete parameter matrix and mutation status.
+    ///
+    /// The normal interaction inventory stays descriptor-focused; this
+    /// separate table exposes one row per expression/column for debugging and
+    /// sensitivity workflows.
+    pub fn parameter_table_string(&self) -> String {
+        let rows = self
+            .parameter_cells()
+            .into_iter()
+            .map(|cell| {
+                let support = match cell.mutation {
+                    InteractionMutationSupport::Verified(address) => address
+                        .tqcdat_selectors()
+                        .map(|selectors| format!("Verified TQCDAT{selectors:?}"))
+                        .unwrap_or_else(|error| format!("Invalid: {error}")),
+                    InteractionMutationSupport::ReadOnly { reason } => {
+                        format!("Read-only: {reason}")
+                    }
+                };
+                vec![
+                    cell.expression_index.to_string(),
+                    cell.column_index.to_string(),
+                    cell.role.to_string(),
+                    format!("{:.8e}", cell.value),
+                    support,
+                ]
+            })
+            .collect();
+        crate::table::render(
+            &format!(
+                "{} / {} interaction {} parameters",
+                self.raw.phase_name, self.raw.channel, self.raw.parameter_index
+            ),
+            &["Expression", "Column", "Role", "Current value", "Mutation"].map(str::to_owned),
+            rows,
+        )
+    }
+}
+
+pub(crate) fn read_interaction_parameter(
+    engine: &Engine,
+    address: InteractionParameterAddress,
+) -> Result<InteractionParameter, ChemAppError> {
+    address.checked_parts()?;
+    let (phase, interaction, expression, column) = address.matrix_coordinates();
+    let values = engine.tqgpar(phase, address.channel().option(), interaction)?;
+    let value = values
+        .get(expression - 1)
+        .and_then(|row| row.get(column - 1))
+        .copied()
+        .ok_or_else(|| {
+            ChemAppError::OtherError(format!(
+                "TQGPAR matrix has no expression {expression}, column {column} for phase {phase}, interaction {interaction}"
+            ))
+        })?;
+    Ok(InteractionParameter { address, value })
+}
+
+pub(crate) fn write_interaction_parameter(
+    engine: &Engine,
+    address: InteractionParameterAddress,
+    value: f64,
+) -> Result<(), ChemAppError> {
+    let [i1, i2, i3, i4, i5] = address.tqcdat_selectors()?;
+    engine.tqcdat(i1, i2, i3, i4, i5, value)
+}
+
+pub(crate) fn validate_interaction_parameter_mutation(
+    engine: &Engine,
+    address: InteractionParameterAddress,
+) -> Result<(), ChemAppError> {
+    address.checked_parts()?;
+    // A successful read proves the requested expression/column exists before
+    // the state-changing call. Model/channel policy then restricts the safe
+    // API to the families covered by the Win64 EN22 round-trip audit.
+    read_interaction_parameter(engine, address)?;
+    let (phase_index, _, _, column_index) = address.matrix_coordinates();
+    let model = engine.tqmodl(phase_index)?.trim().to_ascii_uppercase();
+    let supported = match address {
+        InteractionParameterAddress::Gibbs { .. } => {
+            column_index <= 6
+                && matches!(model.as_str(), "SUBQ" | "SUBL" | "SUBLM" | "QKTO" | "QKTOM")
+        }
+        InteractionParameterAddress::Magnetic { .. } => model == "SUBLM",
+    };
+    if supported {
+        Ok(())
+    } else {
+        Err(ChemAppError::OtherError(format!(
+            "interaction mutation is not runtime-verified for model {model}, channel {}, column {column_index}",
+            address.channel()
+        )))
     }
 }
 
@@ -1081,11 +1481,6 @@ fn descriptor_with_cross_check(
         && is_known_multi_digit_order_corruption(native_parsed, &dat_descriptor)
     {
         Some(InteractionRecoveryReason::KnownMultiDigitOrderCorruption)
-    } else if dat_resolution.is_ok()
-        && matches!(native_parsed, InteractionDescriptor::Unparsed { .. })
-        && !matches!(dat_descriptor, InteractionDescriptor::Unparsed { .. })
-    {
-        Some(InteractionRecoveryReason::MalformedNativeDescriptor)
     } else {
         None
     };
@@ -1537,7 +1932,7 @@ mod tests {
     }
 
     #[test]
-    fn malformed_native_descriptor_can_be_explicitly_recovered() {
+    fn unparsed_native_descriptor_is_not_automatically_recovered() {
         let native_text = "(Si)";
         let native = parse_interaction_descriptor(native_text);
         let dat = powered_descriptor(InteractionOrder::Numeric(10));
@@ -1555,17 +1950,15 @@ mod tests {
 
         assert!(matches!(native, InteractionDescriptor::Unparsed { .. }));
         assert_eq!(interaction.native_parsed, native);
-        assert_eq!(interaction.effective_descriptor, dat);
+        assert_eq!(interaction.effective_descriptor, native);
         assert_eq!(interaction.raw.raw_descriptor, native_text);
         assert_eq!(interaction.raw.values, values);
         assert!(matches!(
             interaction.cross_check,
-            InteractionCrossCheck::ValidatedRecovery {
-                reason: InteractionRecoveryReason::MalformedNativeDescriptor,
-                ..
-            }
+            InteractionCrossCheck::Disagree { ref dat_descriptor, .. }
+                if dat_descriptor == &dat
         ));
-        assert!(interaction.is_resolved());
+        assert!(!interaction.is_resolved());
     }
 
     #[test]
@@ -1645,5 +2038,120 @@ mod tests {
             resolve_member(NativeInteractionIndex(2), ResolutionStrategy::FlattenedSublattices, &metadata).unwrap(),
             InteractionMember::SublatticeSpecies { name, .. } if name == "B"
         ));
+    }
+
+    #[test]
+    fn typed_addresses_lower_to_the_official_tqcdat_selectors() {
+        assert_eq!(
+            InteractionParameterAddress::Gibbs {
+                phase_index: 7,
+                interaction_index: 4,
+                expression_index: 2,
+                term_index: 5,
+            }
+            .tqcdat_selectors()
+            .unwrap(),
+            [13, 4, 2, 5, 7]
+        );
+        assert_eq!(
+            InteractionParameterAddress::Magnetic {
+                phase_index: 3,
+                interaction_index: 8,
+                expression_index: 2,
+                role: MagneticInteractionRole::CurieNeelTemperature,
+            }
+            .tqcdat_selectors()
+            .unwrap(),
+            [10, 8, 2, 1, 3]
+        );
+        assert_eq!(
+            InteractionParameterAddress::Magnetic {
+                phase_index: 3,
+                interaction_index: 8,
+                expression_index: 2,
+                role: MagneticInteractionRole::MagneticMoment,
+            }
+            .tqcdat_selectors()
+            .unwrap(),
+            [10, 8, 2, 2, 3]
+        );
+    }
+
+    #[test]
+    fn typed_addresses_reject_zero_native_indices() {
+        let addresses = [
+            InteractionParameterAddress::Gibbs {
+                phase_index: 0,
+                interaction_index: 1,
+                expression_index: 1,
+                term_index: 1,
+            },
+            InteractionParameterAddress::Gibbs {
+                phase_index: 1,
+                interaction_index: 0,
+                expression_index: 1,
+                term_index: 1,
+            },
+            InteractionParameterAddress::Magnetic {
+                phase_index: 1,
+                interaction_index: 1,
+                expression_index: 0,
+                role: MagneticInteractionRole::MagneticMoment,
+            },
+        ];
+        for address in addresses {
+            assert!(address.tqcdat_selectors().is_err());
+        }
+    }
+
+    #[test]
+    fn parameter_cells_retain_full_matrices_and_mark_special_columns_read_only() {
+        let mut raw = synthetic_raw("native", vec![vec![1.0; 18]]);
+        raw.model = "SUBQ".to_owned();
+        let interaction = Interaction {
+            raw,
+            native_parsed: powered_descriptor(InteractionOrder::Numeric(0)),
+            cross_check: InteractionCrossCheck::NotRequested,
+            effective_descriptor: powered_descriptor(InteractionOrder::Numeric(0)),
+            resolution: InteractionResolution::Unresolved {
+                reason: "not relevant".to_owned(),
+            },
+        };
+        let cells = interaction.parameter_cells();
+        assert_eq!(cells.len(), 18);
+        assert!(matches!(
+            cells[5].mutation,
+            InteractionMutationSupport::Verified(InteractionParameterAddress::Gibbs {
+                term_index: 6,
+                ..
+            })
+        ));
+        assert!(matches!(
+            cells[6].mutation,
+            InteractionMutationSupport::ReadOnly { .. }
+        ));
+        assert_eq!(cells[17].value, 1.0);
+    }
+
+    #[test]
+    fn magnetic_cells_have_semantic_roles_not_generic_terms() {
+        let mut raw = synthetic_raw("native", vec![vec![11.0, 22.0]]);
+        raw.model = "SUBLM".to_owned();
+        raw.channel = InteractionChannel::Magnetic;
+        let interaction = Interaction {
+            raw,
+            native_parsed: powered_descriptor(InteractionOrder::Numeric(0)),
+            cross_check: InteractionCrossCheck::NotRequested,
+            effective_descriptor: powered_descriptor(InteractionOrder::Numeric(0)),
+            resolution: InteractionResolution::Unresolved {
+                reason: "not relevant".to_owned(),
+            },
+        };
+        let cells = interaction.parameter_cells();
+        assert_eq!(
+            cells[0].role,
+            InteractionParameterRole::CurieNeelTemperature
+        );
+        assert_eq!(cells[1].role, InteractionParameterRole::MagneticMoment);
     }
 }

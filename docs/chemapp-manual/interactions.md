@@ -17,7 +17,7 @@ The index printed at the start of every observed TQLPAR descriptor matched its
 one-based position and the TQGPAR index used to retrieve its values. The Rust
 wrapper now uses each returned `LGTPAR` length rather than trimming the entire
 record, and reconstructs the logical TQGPAR rows from Fortran column-major
-storage with the fixed expression leading dimension. Buffer capacity and
+storage with the TQSIZE `NI` expression leading dimension. Buffer capacity and
 logical result shape remain separate concepts.
 
 ## Native → parsed → cross-checked → effective → resolved
@@ -59,10 +59,12 @@ difference is `Disagree`, retains the DAT descriptor as evidence, and keeps the
 native parse effective. Consequently an optional parser failure cannot turn a
 healthy native interaction into an unresolved row, and no row disappears.
 Likewise, a syntactically parsed descriptor that fails native metadata
-resolution is not automatically replaced merely because DAT differs. An
-`Unparsed` native fragment such as `(Si)` may use the explicit
-`MalformedNativeDescriptor` recovery path only when the deterministic DAT row
-is itself structurally resolvable.
+resolution is not automatically replaced merely because DAT differs.
+`Unparsed` means only that the current Rust grammar does not understand the
+native text. Even an independently resolvable DAT row remains `Disagree` unless
+a positive, typed native-defect classifier applies. The reserved
+`MalformedNativeDescriptor` reason must never be selected from unparsed status
+alone.
 
 ## Index namespaces
 
@@ -245,28 +247,28 @@ status `NotRequested`.
 
 ## Native buffer-capacity evidence
 
-TQLPAR currently allocates 1,999 `CHARACTER*156` records. That boundary is
-documented by the legacy manual and independently mirrored by the checked GTT
-bridge, which allocates and copies exactly 1,999 records. The post-call count
-check cannot protect against a hypothetical newer native build that writes
-more records. `TQSIZE` exposes compiled thermodynamic dimensions, but the
-available manual/bridge evidence does not establish any one of them as the
-required TQLPAR caller-buffer extent. The implementation therefore retains a
-named, explicitly version-scoped 1,999 capacity rather than inventing dynamic
-sizing from unrelated counters.
+TQLPAR now queries TQSIZE and allocates `ND` `CHARACTER*156` records for Gibbs
+and `NE` records for magnetic data. The checked Win64 build reports `ND=2000`
+and `NE=500`; this supersedes the former fixed 1,999-record Rust allocation.
+Manual §6.2 contains an inconsistent magnetic-extent reference, while the
+TQSIZE definitions and checked bridge distinguish Gibbs `ND` from magnetic
+`NE`; the implementation follows that channel-specific evidence.
 
-For TQGPAR, the expression leading dimension of 20 is established by the
-checked interface/source model and is required for column-major reconstruction.
-The current 28-value extent is compatible with the checked runtime, but broader
-version-wide proof is incomplete; it is not documented as a universal ChemApp
-limit.
+TQGPAR now queries TQSIZE `NI` for the Fortran expression leading dimension;
+the checked build reports 20. The current second extent of 28 remains
+version-scoped checked-runtime evidence, not a universal ChemApp limit. Full
+matrix and mutation details are in
+[Interaction parameter addressing and reversible mutation](parameter-mutation.md).
 
 ## Tables, examples, and cache relationship
 
 `PhaseInteractionReport::table_string` uses the crate's shared `comfy-table`
 style and shows phase, model, sublattice count, channel, parameter index,
 structural kind, effective source, compact cross-check status, raw descriptor,
-resolved form, all coefficient rows, and state. The combined `interactions`
+resolved form, all coefficient rows, and state. Mutation selectors deliberately
+do not clutter this inventory; `Interaction::parameter_table_string` provides a
+separate expression/column/value/address/support table for one interaction, and
+`ParameterCache::table_string` provides the complete cache view. The combined `interactions`
 demo outputs every parsed and transformed
 Gibbs and magnetic row. It and the focused `interactions_gibbs` and
 `interactions_magnetic` examples support
@@ -274,11 +276,12 @@ Gibbs and magnetic row. It and the focused `interactions_gibbs` and
 `CHEMAPP_DATAFILE`) and contain no workstation-specific paths.
 
 `ParameterCache` remains a parameter perturbation/reset facility, not the
-general interaction model. Its Gibbs loader now consumes the authoritative
-interaction pipeline, retaining parameter index, resolved identity, and
-values. Model-specific TQCDAT addressing and magnetic mutation/reset remain a
-separate evidence task; listing a parameter does not prove how it may safely be
-modified.
+general interaction model. It now retains every TQGPAR cell and uses structural
+phase/channel/interaction/expression/column identity rather than pretty text.
+Verified ordinary Gibbs cells and both SUBLM magnetic roles support absolute,
+baseline-relative delta, and readback-verified reset operations. Unsupported
+special columns remain visible and explicitly read-only. See
+[Interaction parameter addressing and reversible mutation](parameter-mutation.md).
 
 ## Unknown policy
 

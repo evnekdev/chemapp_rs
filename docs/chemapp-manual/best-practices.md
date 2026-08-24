@@ -189,6 +189,10 @@ same name. Use one live owner, `Stream::remove(self)` when cleanup errors must
 be observed, and regard `Drop` as a best-effort fallback. An owned
 `StreamSnapshot` remains valid after stream removal.
 
+Consume destructor responsibility before an explicit native removal call. If
+that call fails, report its error and do not let `Drop` issue a second hidden
+TQSTRM call; the native state is unknown and the name remains reserved.
+
 ## 16. Preserve native interaction evidence before interpretation
 
 `TQLPAR` text is authoritative evidence of what the native library returned;
@@ -213,5 +217,19 @@ wildcard alone proves nothing. Never guess from a corrupted fragment, and never
 replace live TQGPAR values with DAT coefficients.
 
 Treat the TQGPAR buffer as a Fortran array: reconstruct logical expression
-rows using its column-major layout and fixed leading dimension. Do not assume
-that a Rust nested array's row-major indexing has the same meaning.
+rows using its column-major layout and the TQSIZE `NI` leading dimension. Do
+not assume that a Rust nested array's row-major indexing has the same meaning.
+
+## 17. Mutate interaction parameters through typed native identity
+
+Use phase/channel/interaction/expression/term-or-role as the physical identity.
+Never use formatted TQLPAR text as the mutation key. Ordinary Gibbs values map
+to `TQCDAT(13, interaction, expression, term, phase, value)`; the two magnetic
+roles map to I1=10 and I4=1/2 respectively. Only expose high-level writes for
+model/channel families verified by mutate/readback/restore evidence.
+
+Cache every logical TQGPAR cell, including read-only special columns. Define a
+delta relative to the captured baseline, not current live state. Reset by the
+stored typed addresses and verify live TQGPAR readback. A TQCDAT write makes
+prior equilibrium results stale but must not silently recalculate or clear
+conditions.

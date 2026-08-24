@@ -15,6 +15,11 @@
     inspection through `Phase` and `Calculator`, with diagnostic tables
   - an optional, dependency-neutral ASCII-DAT interaction cross-check boundary
     with explicit native, disagreement, and validated-recovery provenance
+  - typed one-based `InteractionParameterAddress` values and checked
+    `Calculator` read/write access for runtime-verified TQGPAR/TQCDAT cells
+  - a model-neutral interaction parameter cache retaining complete
+    multi-expression Gibbs and SUBLM magnetic matrices, read-only support
+    status, structural keys, baseline-relative deltas, and verified resets
 
 ### Changed
   - `usize` in `tqgthi` output to `i32`
@@ -41,6 +46,9 @@
     native parsing, cross-check status, effective structure, and resolution as
     separate provenance layers; deprecated recovery-name aliases forward to the
     same implementation.
+  - the experimental interaction cache no longer exposes the former MQM-only
+    `InteractionGEMQM`/`InteractionMagnMQM` and six-term, first-expression
+    mutation methods; callers use typed structural parameter addresses.
 
 ### Fixed
 
@@ -103,3 +111,12 @@
     from invalidating healthy native interactions; DAT structure now becomes
     effective only for a typed validated native-defect recovery, including the
     known two-digit-order TQLPAR corruption.
+  - prevented generic `Unparsed` native interaction text from being labelled a
+    ChemApp defect or automatically replaced by a valid DAT-side descriptor.
+  - sized TQLPAR records from TQSIZE `ND`/`NE` by channel and TQGPAR's Fortran
+    leading dimension from TQSIZE `NI`, retaining the checked-build 28-column
+    second extent explicitly.
+  - made explicit `Stream::remove` consume destructor cleanup responsibility
+    before TQSTRM, so a failed removal cannot trigger a second hidden Drop call.
+  - removed unchecked first-element indexing from compound/endmember TQGDAT
+    cache loading and report empty native results as contextual errors.

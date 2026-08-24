@@ -1,412 +1,727 @@
-// chemapp_rs::cache.rs
+//! Baseline cache for reversible ChemApp parameter perturbations.
+//!
+//! Interaction identity is structural: phase/channel/interaction/expression
+//! plus a Gibbs term or magnetic role. Pretty descriptor text is retained for
+//! display only and is never the mutation key. Every TQGPAR cell is cached;
+//! cells without a verified TQCDAT selector remain explicitly read-only.
 
-//! A newer submodule which facilitates working with *model parameters* (only available for unencrypted *.dat datafiles). Involves 'tqgdat', 'tqcdat', 'tqgpar' ChemApp routines.
-//! Disclaimer - this submodule can be subject to change.
+use std::collections::HashMap;
 
-use std::collections::{HashMap};
-
-use super::calculator::{Calculator};
-use crate::error::{ChemAppError};
-use crate::interactions::InteractionChannel;
-use crate::{Engine};
-
-/*******************************************************************************************************************************************************************************************************************************/
-/*******************************************************************************************************************************************************************************************************************************/
+use crate::calculator::Calculator;
+use crate::error::ChemAppError;
+use crate::interactions::{
+    Interaction, InteractionChannel, InteractionMutationSupport, InteractionParameterAddress,
+    InteractionParameterRole,
+};
+use crate::Engine;
 
 impl Calculator {
-	
-	/// Creates an instance of `ParameterCache` for changing model parameter values and restoring them back to the original values
-	pub fn generate_parameter_cache<T: AsRef<str> + std::fmt::Debug>(&mut self, phasenames: &[T], include_ge: bool, include_magn: bool, include_endm: bool, include_cmp: bool)->Result<(),ChemAppError> {
-		self.cache = Some(ParameterCache::new(self, phasenames, include_ge, include_magn, include_endm, include_cmp)?);
-		return Ok(());
-	}
-	
+    /// Build a baseline parameter cache for the named phases.
+    pub fn generate_parameter_cache<T: AsRef<str> + std::fmt::Debug>(
+        &mut self,
+        phase_names: &[T],
+        include_gibbs: bool,
+        include_magnetic: bool,
+        include_endmembers: bool,
+        include_compounds: bool,
+    ) -> Result<(), ChemAppError> {
+        self.cache = Some(ParameterCache::new(
+            self,
+            phase_names,
+            include_gibbs,
+            include_magnetic,
+            include_endmembers,
+            include_compounds,
+        )?);
+        Ok(())
+    }
 }
 
-/*******************************************************************************************************************************************************************************************************************************/
-/*******************************************************************************************************************************************************************************************************************************/
-
-/// An excess free energy interaction in a mixture phase.
-#[derive(Debug)]
-pub struct InteractionGEMQM {
-	indexp: usize,
-	index: usize,
-	phasename: String,
-	text: String,
-	values: Vec<f64>,
+/// Structural key for one cached interaction cell.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct InteractionParameterKey {
+    /// One-based native phase index.
+    pub phase_index: usize,
+    /// TQLPAR/TQGPAR option channel.
+    pub channel: InteractionChannel,
+    /// One-based interaction position in native data-file order.
+    pub interaction_index: usize,
+    /// One-based TQGPAR expression row.
+    pub expression_index: usize,
+    /// One-based TQGPAR column.
+    pub column_index: usize,
 }
 
-impl InteractionGEMQM {
-	
-	pub fn reset(&self, engine: &Engine)->Result<(),ChemAppError>{
-		for k in 0..6 {
-			engine.tqcdat(13,self.index,1,k+1,self.indexp,self.values[k])?;
-		}
-		return Ok(());
-	}
-	
+/// Cached baseline and mutation metadata for one complete TQGPAR cell.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CachedInteractionParameter {
+    /// Stable structural identity independent of display text.
+    pub key: InteractionParameterKey,
+    /// Phase name retained for display and convenience lookup.
+    pub phase_name: String,
+    /// Native TQMODL code.
+    pub model: String,
+    /// Exact native TQLPAR text.
+    pub native_descriptor: String,
+    /// Name-resolved display form, or an explicit unresolved diagnostic.
+    pub resolved_descriptor: String,
+    /// Channel-aware meaning of this matrix column.
+    pub role: InteractionParameterRole,
+    /// Original live TQGPAR value. Delta writes are always relative to this.
+    pub baseline: f64,
+    /// Verified TQCDAT address or an explicit read-only reason.
+    pub mutation: InteractionMutationSupport,
 }
 
-/*******************************************************************************************************************************************************************************************************************************/
-/// An excess magnetic interaction in a mixture phase.
-#[allow(dead_code)]
-#[derive(Debug)]
-pub struct InteractionMagnMQM {
-	indexp: usize,
-	index: usize,
-	phasename: String,
-	text: String,
-	values: Vec<f64>,
+#[derive(Clone, Debug)]
+pub struct EndmemberParameter {
+    phase_index: usize,
+    constituent_index: usize,
+    phase_name: String,
+    name: String,
+    h298: f64,
+    s298: f64,
 }
 
-impl InteractionMagnMQM {
-	
-	pub fn reset(&self, engine: &Engine)->Result<(),ChemAppError>{
-		//todo!();
-		return Ok(());
-	}
-	
+impl EndmemberParameter {
+    fn reset(&self, engine: &Engine) -> Result<(), ChemAppError> {
+        engine.tqcdat(1, 0, 0, self.constituent_index, self.phase_index, self.h298)?;
+        engine.tqcdat(1, 0, 1, self.constituent_index, self.phase_index, self.s298)
+    }
 }
 
-/*******************************************************************************************************************************************************************************************************************************/
-/// A representation of a mixture phase endmember. Currently, only H298 and S298 are considered.
-#[derive(Debug)]
-pub struct Endmember {
-	indexp: usize,
-	indexc: usize,
-	phasename: String,
-	name: String,
-	h298: f64,
-	s298: f64,
+#[derive(Clone, Debug)]
+pub struct CompoundParameter {
+    phase_index: usize,
+    phase_name: String,
+    h298: f64,
+    s298: f64,
 }
 
-impl Endmember {
-	
-	pub fn reset(&self, engine: &Engine)->Result<(),ChemAppError>{
-		engine.tqcdat(1,0,0,self.indexc,self.indexp, self.h298)?; // H298
-		engine.tqcdat(1,0,1,self.indexc,self.indexp, self.s298)?; // S298
-		return Ok(());
-	}
-	
+impl CompoundParameter {
+    fn reset(&self, engine: &Engine) -> Result<(), ChemAppError> {
+        engine.tqcdat(1, 0, 0, 1, self.phase_index, self.h298)?;
+        engine.tqcdat(1, 0, 1, 1, self.phase_index, self.s298)
+    }
 }
 
-/*******************************************************************************************************************************************************************************************************************************/
-/// A representation of a `PURE` phase (a stoichiometric compound). Currenly, only H298 and S298 are considered.
-#[derive(Debug)]
-pub struct Compound {
-	indexp: usize,
-	phasename: String,
-	h298: f64,
-	s298: f64,
-}
-
-impl Compound {
-	
-	pub fn reset(&self, engine: &Engine)->Result<(),ChemAppError>{
-		engine.tqcdat(1,0,0,1,self.indexp, self.h298)?; // H298
-		engine.tqcdat(1,0,1,1,self.indexp, self.s298)?; // S298
-		return Ok(());
-	}
-	
-}
-
-/*******************************************************************************************************************************************************************************************************************************/
-/*******************************************************************************************************************************************************************************************************************************/
-
-/// A cache which allows to apply and reset parameter deltas, which is important for construction of sensitivity matrices (delta calc values vs delta parameters).
-#[allow(dead_code)]
+/// A model-neutral cache of live ChemApp parameter baselines.
 #[derive(Debug)]
 pub struct ParameterCache {
-	lookup_ge: HashMap<(String,String),usize>,
-	lookup_magn: HashMap<(String,String),usize>,
-	lookup_endm: HashMap<(String,String),usize>,
-	lookup_cmp: HashMap<String,usize>,
-	interactions_ge : Vec<InteractionGEMQM>,
-	interactions_magn: Vec<InteractionMagnMQM>,
-	endmembers : Vec<Endmember>,
-	compounds : Vec<Compound>,
+    interaction_lookup: HashMap<InteractionParameterAddress, usize>,
+    interaction_parameters: Vec<CachedInteractionParameter>,
+    endmember_lookup: HashMap<(String, String), usize>,
+    compound_lookup: HashMap<String, usize>,
+    endmembers: Vec<EndmemberParameter>,
+    compounds: Vec<CompoundParameter>,
+}
+
+fn cache_interaction(interaction: Interaction) -> Vec<CachedInteractionParameter> {
+    interaction
+        .parameter_cells()
+        .into_iter()
+        .map(|cell| CachedInteractionParameter {
+            key: InteractionParameterKey {
+                phase_index: interaction.raw.phase_index,
+                channel: interaction.raw.channel,
+                interaction_index: interaction.raw.parameter_index,
+                expression_index: cell.expression_index,
+                column_index: cell.column_index,
+            },
+            phase_name: interaction.raw.phase_name.clone(),
+            model: interaction.raw.model.clone(),
+            native_descriptor: interaction.raw.raw_descriptor.clone(),
+            resolved_descriptor: interaction.resolved_text(),
+            role: cell.role,
+            baseline: cell.value,
+            mutation: cell.mutation,
+        })
+        .collect()
+}
+
+fn first_tqgdat_value(
+    values: Vec<f64>,
+    phase_name: &str,
+    constituent_index: usize,
+    option: &str,
+) -> Result<f64, ChemAppError> {
+    values.into_iter().next().ok_or_else(|| {
+        ChemAppError::OtherError(format!(
+            "TQGDAT returned no {option} value for phase {phase_name:?}, constituent {constituent_index}"
+        ))
+    })
 }
 
 impl ParameterCache {
-	
-	/// load H,S for a compound into the cache
-	pub fn load_compound(calculator: &Calculator, phasename: &str)->Result<Compound,ChemAppError> {
-		let indexp = calculator.engine.tqinp(phasename)?;
-		let h298 = calculator.engine.tqgdat(indexp, 1, "H", 0)?[0];
-		let s298 = calculator.engine.tqgdat(indexp, 1, "S", 0)?[0];
-		return Ok(Compound {
-			indexp: indexp,
-			phasename: phasename.to_string(),
-			h298: h298,
-			s298: s298,
-		});
-	}
-	
-	/// load H,S for a constituent (endmember) into the cache
-	pub fn load_endmembers(calculator: &Calculator, phasename: &str)->Result<Vec<Endmember>,ChemAppError>{
-		let mut vecc : Vec<Endmember> = Vec::new();
-		let indexp = calculator.engine.tqinp(phasename)?;
-		let nendm = calculator.engine.tqnopc(indexp)?;
-		for k in 0..nendm {
-			let name = calculator.engine.tqgnpc(indexp, k+1)?;
-			let h298 = calculator.engine.tqgdat(indexp, k+1, "H", 0)?[0];
-			let s298 = calculator.engine.tqgdat(indexp, k+1, "S", 0)?[0];
-			vecc.push(Endmember {
-				indexp: indexp,
-				indexc: k+1,
-				phasename: phasename.to_string(),
-				name: name,
-				h298: h298,
-				s298: s298,
-			});
-		}
-		return Ok(vecc);
-	}
-	
-	/// load excess Gibbs interactions for a solution phase
-	pub fn load_interactions_ge(calculator: &Calculator, phasename: &str)->Result<Vec<InteractionGEMQM>,ChemAppError>{
-		let indexp = calculator.engine.tqinp(phasename)?;
-		let source = crate::interactions::load_phase_interactions(
-			&calculator.engine,
-			indexp,
-			InteractionChannel::GibbsExcess,
-		)?;
-		let mut interactions : Vec<InteractionGEMQM> = Vec::new();
-		for interaction in source {
-			let values = interaction.raw.values.first().cloned().ok_or_else(|| {
-				ChemAppError::OtherError(format!(
-					"TQGPAR returned no value row for phase {phasename} interaction {}",
-					interaction.raw.parameter_index
-				))
-			})?;
-			interactions.push(InteractionGEMQM {
-				indexp: indexp,
-				index: interaction.raw.parameter_index,
-				phasename: phasename.to_string(),
-				text: interaction.resolved_text(),
-				values: values,
-			});
-		}
-		return Ok(interactions);
-	}
-	
-	/// load magnetic interactions for a solution phase
-	pub fn load_interactions_magn(calculator: &Calculator, phase: &str)->Result<Vec<InteractionMagnMQM>,ChemAppError>{
-		//todo!();
-		return Ok(vec![]);
-	}
-	
-	/// Initialize a new instance
-	pub fn new<T: AsRef<str> + std::fmt::Debug>(calculator: & Calculator, phasenames: &[T], include_ge: bool, include_magn: bool, include_endm: bool, include_cmp: bool)->Result<Self,ChemAppError> {
-		let compounds : Vec<Compound> = Vec::new();
-		let endmembers : Vec<Endmember> = Vec::new();
-		let mut interactions_ge : Vec<InteractionGEMQM> = Vec::new();
-		let interactions_magn : Vec<InteractionMagnMQM> = Vec::new();
-		for phasename in phasenames.iter(){
-			let indexp = calculator.engine.tqinp(phasename.as_ref())?;
-			let modelname = calculator.engine.tqmodl(indexp)?;
-			match modelname.as_ref() {
-				"PURE" => {
-					if include_cmp {
-						//let compound : Compound = Self::load_compound(calculator, phasename.as_ref())?;
-						//compounds.push(compound);
-					}
-				}
-				"SUBG" | "SUBQ" => {
-					//println!("MATCH SUBG, SUBQ");
-					if include_endm {
-						//let mut endmembers_ : Vec<Endmember> = Self::load_endmembers(calculator, phasename.as_ref())?;
-						//endmembers.append(&mut endmembers_);
-					}
-					if include_ge {
-						let mut interactions : Vec<InteractionGEMQM> = Self::load_interactions_ge(calculator, phasename.as_ref())?;
-						interactions_ge.append(&mut interactions);
-					}
-					if include_magn {
-						todo!();
-					}
-				}
-				_ => {
-					// skip for now
-				}
-			}
-		}
-		let lookup_ge = Self::generate_lookup_interactions_ge(&interactions_ge);
-		let lookup_magn  = Self::generate_lookup_interactions_magn(&interactions_magn);
-		let lookup_cmp  = Self::generate_lookup_cmp(&compounds);
-		let lookup_endm = Self::generate_lookup_endm(&endmembers);
-		return Ok(Self {
-			lookup_ge: lookup_ge,
-			lookup_magn: lookup_magn,
-			lookup_endm: lookup_endm,
-			lookup_cmp: lookup_cmp,
-			interactions_ge: interactions_ge,
-			interactions_magn: interactions_magn,
-			endmembers : endmembers,
-			compounds: compounds,
-		});
-	}
-	
-	/// Set all parameters in the datafile to the initial values from the cache.
-	pub fn reset_all(&self, engine: &Engine)->Result<(),ChemAppError>{
-		self.reset_compounds(engine)?;
-		self.reset_endmembers(engine)?;
-		self.reset_interactions_ge(engine)?;
-		self.reset_interactions_magn(engine)?;
-		return Ok(());
-	}
-	
-	/// Reset H,S for all compounds in the datafile to the initial values from the cache.
-	pub fn reset_compounds(&self, engine: &Engine)->Result<(),ChemAppError>{
-		for k in 0..self.compounds.len(){
-			self.compounds[k].reset(engine)?;
-		}
-		return Ok(());
-	}
-	
-	/// Reset H,S for all endmembers in the datafile to the initial values from the cache.
-	pub fn reset_endmembers(&self, engine: &Engine)->Result<(),ChemAppError>{
-		for k in 0..self.endmembers.len(){
-			self.endmembers[k].reset(engine)?;
-		}
-		return Ok(());
-	}
-	
-	/// Reset interactions (excess Gibbs) in the datafile to the initial values from the cache.
-	pub fn reset_interactions_ge(&self, engine: &Engine)->Result<(),ChemAppError>{
-		for k in 0..self.interactions_ge.len(){
-			self.interactions_ge[k].reset(engine)?;
-		}
-		return Ok(());
-	}
-	
-	/// Reset magnetic interactions in the datafile to the initial values from the cache.
-	pub fn reset_interactions_magn(&self, engine: &Engine)->Result<(),ChemAppError>{
-		for k in 0..self.interactions_magn.len(){
-			self.interactions_magn[k].reset(engine)?;
-		}
-		return Ok(());
-	}
-	
-	pub fn set_interaction_ge(&self, engine: &Engine, phase: &str, interaction: &str, value: f64, tindex: usize, isdelta: bool)->Result<bool,ChemAppError>{
-		//println!("LOOKING for ({:?},{:?}) in {:?}", phase, interaction, &self.lookup_ge);
-		match self.lookup_ge.get(&(phase.to_string(),interaction.to_string())){
-			Some(index) => {
-				//println!("FOUND INTERACTION {:?} at {:?}", interaction, &index);
-				let interaction = &self.interactions_ge[*index];
-				let indexp = interaction.indexp;
-				let indexi = interaction.index;
-				let val = if isdelta {interaction.values[tindex] + value} else {value};
-				engine.tqcdat(13,indexi,1,tindex+1,indexp,val)?;
-				return Ok(true);
-			}
-			None => {return Ok(false);}
-		}
-		
-	}
-	
-	pub fn set_interaction_magn(&self, engine: &Engine, phase: &str, interaction: &str, value: f64, tindex: usize, isdelta: bool)->Result<bool,ChemAppError>{
-		todo!();
-	}
-	
-	pub fn set_compound_h298(&self, engine: &Engine, phase: &str, value: f64, isdelta: bool)->Result<bool,ChemAppError> {
-		match self.lookup_cmp.get(phase) {
-			Some(index) => {
-				let cmp = &self.compounds[*index];
-				let indexp = cmp.indexp;
-				let val = if isdelta {cmp.h298 + value} else {value};
-				engine.tqcdat(1,0,0,1,indexp,val)?; // H298
-				return Ok(true);
-			}
-			None => {return Ok(false);}
-		}
-	}
-	
-	pub fn set_compound_s298(&self, engine: &Engine, phase: &str, value: f64, isdelta: bool)->Result<bool,ChemAppError> {
-		match self.lookup_cmp.get(phase) {
-			Some(index) => {
-				let cmp = &self.compounds[*index];
-				let indexp = cmp.indexp;
-				let val = if isdelta {cmp.s298 + value} else {value};
-				engine.tqcdat(1,0,1,1,indexp,val)?; // S298
-				return Ok(true);
-			}
-			None => {return Ok(false);}
-		}
-	}
-	
-	pub fn set_endmember_h298(&self, engine: &Engine, phase: &str, constituent: &str, value: f64, isdelta: bool)->Result<bool,ChemAppError> {
-		match self.lookup_endm.get(&(phase.to_string(),constituent.to_string())) {
-			Some(index) => {
-				let endm = &self.endmembers[*index];
-				let indexp = endm.indexp;
-				let indexc = endm.indexc;
-				let val = if isdelta {endm.h298 + value} else {value};
-				engine.tqcdat(1,0,0,indexc,indexp,val)?; // H298
-				return Ok(true);
-			}
-			None => {return Ok(false);}
-		}
-	}
-	
-	pub fn set_endmember_s298(&self, engine: &Engine, phase: &str, constituent: &str, value: f64, isdelta: bool)->Result<bool,ChemAppError> {
-		match self.lookup_endm.get(&(phase.to_string(),constituent.to_string())) {
-			Some(index) => {
-				let endm = &self.endmembers[*index];
-				let indexp = endm.indexp;
-				let indexc = endm.indexc;
-				let val = if isdelta {endm.s298 + value} else {value};
-				engine.tqcdat(1,0,1,indexc,indexp,val)?; // S298
-				return Ok(true);
-			}
-			None => {return Ok(false);}
-		}
-	}
-	
-	/*******************************************************************************************************************************************************************************************************************************/
-	/*******************************************************************************************************************************************************************************************************************************/
-	
-	fn generate_lookup_cmp(compounds: &[Compound])->HashMap<String,usize>{
-		let mut hmap : HashMap<String,usize> = HashMap::new();
-		for k in 0..compounds.len(){
-			let name = compounds[k].phasename.clone();
-			hmap.insert(name,k);
-		}
-		return hmap;
-	}
-	
-	fn generate_lookup_endm(endmembers: &[Endmember])->HashMap<(String,String),usize>{
-		let mut hmap : HashMap<(String,String),usize> = HashMap::new();
-		for k in 0..endmembers.len(){
-			let phasename = endmembers[k].phasename.clone();
-			let name = endmembers[k].name.clone();
-			hmap.insert((phasename,name),k);
-		}
-		return hmap;
-	}
-	
-	fn generate_lookup_interactions_ge(interactions: &[InteractionGEMQM])->HashMap<(String,String),usize>{
-		let mut hmap : HashMap<(String,String),usize> = HashMap::new();
-		for k in 0..interactions.len(){
-			let phasename = interactions[k].phasename.clone();
-			let text = interactions[k].text.clone();
-			hmap.insert((phasename,text),k);
-		}
-		return hmap;
-	}
-	
-	fn generate_lookup_interactions_magn(interactions: &[InteractionMagnMQM])->HashMap<(String,String),usize>{
-		let mut hmap : HashMap<(String,String),usize> = HashMap::new();
-		for k in 0..interactions.len(){
-			let phasename = interactions[k].phasename.clone();
-			let text = interactions[k].text.clone();
-			hmap.insert((phasename,text),k);
-		}
-		return hmap;
-	}
-	
-	/*******************************************************************************************************************************************************************************************************************************/
-	/*******************************************************************************************************************************************************************************************************************************/
-	
+    /// Capture baselines for requested interaction channels and standard-state data.
+    pub fn new<T: AsRef<str> + std::fmt::Debug>(
+        calculator: &Calculator,
+        phase_names: &[T],
+        include_gibbs: bool,
+        include_magnetic: bool,
+        include_endmembers: bool,
+        include_compounds: bool,
+    ) -> Result<Self, ChemAppError> {
+        let mut interaction_parameters = Vec::new();
+        let mut endmembers = Vec::new();
+        let mut compounds = Vec::new();
+        for phase_name in phase_names {
+            let phase_name = phase_name.as_ref();
+            let phase_index = calculator.engine.tqinp(phase_name)?;
+            if calculator.engine.tqmodl(phase_index)? == "PURE" {
+                if include_compounds {
+                    compounds.push(Self::load_compound(calculator, phase_name)?);
+                }
+                continue;
+            }
+            if include_endmembers {
+                endmembers.extend(Self::load_endmembers(calculator, phase_name)?);
+            }
+            for channel in [
+                InteractionChannel::GibbsExcess,
+                InteractionChannel::Magnetic,
+            ] {
+                let include = match channel {
+                    InteractionChannel::GibbsExcess => include_gibbs,
+                    InteractionChannel::Magnetic => include_magnetic,
+                };
+                if include {
+                    for interaction in crate::interactions::load_phase_interactions(
+                        &calculator.engine,
+                        phase_index,
+                        channel,
+                    )? {
+                        interaction_parameters.extend(cache_interaction(interaction));
+                    }
+                }
+            }
+        }
+        let interaction_lookup = interaction_parameters
+            .iter()
+            .enumerate()
+            .filter_map(|(offset, parameter)| match parameter.mutation {
+                InteractionMutationSupport::Verified(address) => Some((address, offset)),
+                InteractionMutationSupport::ReadOnly { .. } => None,
+            })
+            .collect();
+        let endmember_lookup = endmembers
+            .iter()
+            .enumerate()
+            .map(|(offset, value)| ((value.phase_name.clone(), value.name.clone()), offset))
+            .collect();
+        let compound_lookup = compounds
+            .iter()
+            .enumerate()
+            .map(|(offset, value)| (value.phase_name.clone(), offset))
+            .collect();
+        Ok(Self {
+            interaction_lookup,
+            interaction_parameters,
+            endmember_lookup,
+            compound_lookup,
+            endmembers,
+            compounds,
+        })
+    }
+
+    /// Complete cached TQGPAR surface, including read-only cells.
+    pub fn interaction_parameters(&self) -> &[CachedInteractionParameter] {
+        &self.interaction_parameters
+    }
+
+    /// Look up one mutable cell by its exact native structural address.
+    pub fn parameter(
+        &self,
+        address: InteractionParameterAddress,
+    ) -> Option<&CachedInteractionParameter> {
+        self.interaction_lookup
+            .get(&address)
+            .map(|offset| &self.interaction_parameters[*offset])
+    }
+
+    /// Parameters for one structural phase/channel/interaction identity.
+    pub fn interaction_by_index(
+        &self,
+        phase_index: usize,
+        channel: InteractionChannel,
+        interaction_index: usize,
+    ) -> Vec<&CachedInteractionParameter> {
+        self.interaction_parameters
+            .iter()
+            .filter(|parameter| {
+                parameter.key.phase_index == phase_index
+                    && parameter.key.channel == channel
+                    && parameter.key.interaction_index == interaction_index
+            })
+            .collect()
+    }
+
+    /// Convenience lookup by phase name plus native channel/interaction index.
+    pub fn interaction(
+        &self,
+        phase_name: &str,
+        channel: InteractionChannel,
+        interaction_index: usize,
+    ) -> Vec<&CachedInteractionParameter> {
+        self.interaction_parameters
+            .iter()
+            .filter(|parameter| {
+                parameter.phase_name == phase_name
+                    && parameter.key.channel == channel
+                    && parameter.key.interaction_index == interaction_index
+            })
+            .collect()
+    }
+
+    /// Deterministic table of every cached interaction cell and its support.
+    pub fn table_string(&self) -> String {
+        let rows = self
+            .interaction_parameters
+            .iter()
+            .map(|parameter| {
+                let support = match &parameter.mutation {
+                    InteractionMutationSupport::Verified(address) => address
+                        .tqcdat_selectors()
+                        .map(|selectors| format!("Verified {:?}", selectors))
+                        .unwrap_or_else(|error| format!("Invalid: {error}")),
+                    InteractionMutationSupport::ReadOnly { reason } => {
+                        format!("Read-only: {reason}")
+                    }
+                };
+                vec![
+                    parameter.phase_name.clone(),
+                    parameter.model.clone(),
+                    parameter.key.channel.to_string(),
+                    parameter.key.interaction_index.to_string(),
+                    parameter.key.expression_index.to_string(),
+                    parameter.key.column_index.to_string(),
+                    parameter.role.to_string(),
+                    format!("{:.8e}", parameter.baseline),
+                    support,
+                    parameter.resolved_descriptor.clone(),
+                ]
+            })
+            .collect();
+        crate::table::render(
+            "ChemApp parameter cache",
+            &[
+                "Phase",
+                "Model",
+                "Channel",
+                "Interaction",
+                "Expression",
+                "Column",
+                "Role",
+                "Baseline",
+                "Mutation",
+                "Descriptor",
+            ]
+            .map(str::to_owned),
+            rows,
+        )
+    }
+
+    /// Write an absolute value or `baseline + delta` for a verified address.
+    pub fn set_interaction_parameter(
+        &self,
+        engine: &Engine,
+        address: InteractionParameterAddress,
+        value: f64,
+        is_delta: bool,
+    ) -> Result<bool, ChemAppError> {
+        let Some(offset) = self.interaction_lookup.get(&address).copied() else {
+            return Ok(false);
+        };
+        let baseline = self.interaction_parameters[offset].baseline;
+        crate::interactions::write_interaction_parameter(
+            engine,
+            address,
+            if is_delta { baseline + value } else { value },
+        )?;
+        Ok(true)
+    }
+
+    fn verified_interaction_baselines(
+        &self,
+    ) -> Vec<(InteractionParameterAddress, f64, InteractionParameterKey)> {
+        self.interaction_parameters
+            .iter()
+            .filter_map(|parameter| match parameter.mutation {
+                InteractionMutationSupport::Verified(address) => {
+                    Some((address, parameter.baseline, parameter.key))
+                }
+                InteractionMutationSupport::ReadOnly { .. } => None,
+            })
+            .collect()
+    }
+
+    /// Restore one verified cell to its captured baseline and verify readback.
+    pub fn reset_interaction_parameter(
+        &self,
+        engine: &Engine,
+        address: InteractionParameterAddress,
+    ) -> Result<bool, ChemAppError> {
+        let Some(parameter) = self.parameter(address) else {
+            return Ok(false);
+        };
+        crate::interactions::write_interaction_parameter(engine, address, parameter.baseline)?;
+        let actual = crate::interactions::read_interaction_parameter(engine, address)?.value;
+        if actual != parameter.baseline {
+            return Err(ChemAppError::OtherError(format!(
+                "interaction reset readback mismatch at {:?}",
+                parameter.key
+            )));
+        }
+        Ok(true)
+    }
+
+    /// Restore every verified cell of one native interaction exactly once.
+    pub fn reset_interaction(
+        &self,
+        engine: &Engine,
+        phase_index: usize,
+        channel: InteractionChannel,
+        interaction_index: usize,
+    ) -> Result<usize, ChemAppError> {
+        let addresses = self
+            .interaction_by_index(phase_index, channel, interaction_index)
+            .into_iter()
+            .filter_map(|parameter| match parameter.mutation {
+                InteractionMutationSupport::Verified(address) => Some(address),
+                InteractionMutationSupport::ReadOnly { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        for address in &addresses {
+            self.reset_interaction_parameter(engine, *address)?;
+        }
+        Ok(addresses.len())
+    }
+
+    /// Restore every verified interaction cell and verify live readback.
+    pub fn reset_interactions(&self, engine: &Engine) -> Result<(), ChemAppError> {
+        let baselines = self.verified_interaction_baselines();
+        for (address, baseline, _) in &baselines {
+            crate::interactions::write_interaction_parameter(engine, *address, *baseline)?;
+        }
+        for (address, baseline, key) in baselines {
+            let actual = crate::interactions::read_interaction_parameter(engine, address)?.value;
+            if actual != baseline {
+                return Err(ChemAppError::OtherError(format!(
+                    "interaction reset readback mismatch at {key:?}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Restore every cached compound, endmember, and verified interaction value.
+    pub fn reset_all(&self, engine: &Engine) -> Result<(), ChemAppError> {
+        for compound in &self.compounds {
+            compound.reset(engine)?;
+        }
+        for endmember in &self.endmembers {
+            endmember.reset(engine)?;
+        }
+        self.reset_interactions(engine)
+    }
+
+    /// Load the standard-state baseline for one pure phase.
+    pub fn load_compound(
+        calculator: &Calculator,
+        phase_name: &str,
+    ) -> Result<CompoundParameter, ChemAppError> {
+        let phase_index = calculator.engine.tqinp(phase_name)?;
+        let h298 = first_tqgdat_value(
+            calculator.engine.tqgdat(phase_index, 1, "H", 0)?,
+            phase_name,
+            1,
+            "H",
+        )?;
+        let s298 = first_tqgdat_value(
+            calculator.engine.tqgdat(phase_index, 1, "S", 0)?,
+            phase_name,
+            1,
+            "S",
+        )?;
+        Ok(CompoundParameter {
+            phase_index,
+            phase_name: phase_name.to_owned(),
+            h298,
+            s298,
+        })
+    }
+
+    /// Load standard-state baselines for every constituent of a solution phase.
+    pub fn load_endmembers(
+        calculator: &Calculator,
+        phase_name: &str,
+    ) -> Result<Vec<EndmemberParameter>, ChemAppError> {
+        let phase_index = calculator.engine.tqinp(phase_name)?;
+        (1..=calculator.engine.tqnopc(phase_index)?)
+            .map(|constituent_index| {
+                let h298 = first_tqgdat_value(
+                    calculator
+                        .engine
+                        .tqgdat(phase_index, constituent_index, "H", 0)?,
+                    phase_name,
+                    constituent_index,
+                    "H",
+                )?;
+                let s298 = first_tqgdat_value(
+                    calculator
+                        .engine
+                        .tqgdat(phase_index, constituent_index, "S", 0)?,
+                    phase_name,
+                    constituent_index,
+                    "S",
+                )?;
+                Ok(EndmemberParameter {
+                    phase_index,
+                    constituent_index,
+                    phase_name: phase_name.to_owned(),
+                    name: calculator.engine.tqgnpc(phase_index, constituent_index)?,
+                    h298,
+                    s298,
+                })
+            })
+            .collect()
+    }
+
+    /// Set a pure-phase enthalpy baseline or a delta from that baseline.
+    pub fn set_compound_h298(
+        &self,
+        engine: &Engine,
+        phase: &str,
+        value: f64,
+        is_delta: bool,
+    ) -> Result<bool, ChemAppError> {
+        self.set_compound(engine, phase, value, is_delta, false)
+    }
+
+    /// Set a pure-phase entropy baseline or a delta from that baseline.
+    pub fn set_compound_s298(
+        &self,
+        engine: &Engine,
+        phase: &str,
+        value: f64,
+        is_delta: bool,
+    ) -> Result<bool, ChemAppError> {
+        self.set_compound(engine, phase, value, is_delta, true)
+    }
+
+    fn set_compound(
+        &self,
+        engine: &Engine,
+        phase: &str,
+        value: f64,
+        is_delta: bool,
+        entropy: bool,
+    ) -> Result<bool, ChemAppError> {
+        let Some(offset) = self.compound_lookup.get(phase).copied() else {
+            return Ok(false);
+        };
+        let compound = &self.compounds[offset];
+        let baseline = if entropy {
+            compound.s298
+        } else {
+            compound.h298
+        };
+        engine.tqcdat(
+            1,
+            0,
+            usize::from(entropy),
+            1,
+            compound.phase_index,
+            if is_delta { baseline + value } else { value },
+        )?;
+        Ok(true)
+    }
+
+    /// Set an endmember enthalpy baseline or a delta from that baseline.
+    pub fn set_endmember_h298(
+        &self,
+        engine: &Engine,
+        phase: &str,
+        constituent: &str,
+        value: f64,
+        is_delta: bool,
+    ) -> Result<bool, ChemAppError> {
+        self.set_endmember(engine, phase, constituent, value, is_delta, false)
+    }
+
+    /// Set an endmember entropy baseline or a delta from that baseline.
+    pub fn set_endmember_s298(
+        &self,
+        engine: &Engine,
+        phase: &str,
+        constituent: &str,
+        value: f64,
+        is_delta: bool,
+    ) -> Result<bool, ChemAppError> {
+        self.set_endmember(engine, phase, constituent, value, is_delta, true)
+    }
+
+    fn set_endmember(
+        &self,
+        engine: &Engine,
+        phase: &str,
+        constituent: &str,
+        value: f64,
+        is_delta: bool,
+        entropy: bool,
+    ) -> Result<bool, ChemAppError> {
+        let Some(offset) = self
+            .endmember_lookup
+            .get(&(phase.to_owned(), constituent.to_owned()))
+            .copied()
+        else {
+            return Ok(false);
+        };
+        let endmember = &self.endmembers[offset];
+        let baseline = if entropy {
+            endmember.s298
+        } else {
+            endmember.h298
+        };
+        engine.tqcdat(
+            1,
+            0,
+            usize::from(entropy),
+            endmember.constituent_index,
+            endmember.phase_index,
+            if is_delta { baseline + value } else { value },
+        )?;
+        Ok(true)
+    }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::interactions::{
+        InteractionCrossCheck, InteractionDescriptor, InteractionRaw, InteractionResolution,
+    };
+
+    fn synthetic_interaction(descriptor: &str) -> Interaction {
+        let parsed = InteractionDescriptor::Unparsed {
+            raw: descriptor.to_owned(),
+            reason: "synthetic cache test".to_owned(),
+        };
+        Interaction {
+            raw: InteractionRaw {
+                phase_index: 7,
+                phase_name: "Synthetic".to_owned(),
+                model: "SUBLM".to_owned(),
+                sublattice_count: 2,
+                channel: InteractionChannel::GibbsExcess,
+                parameter_index: 4,
+                raw_descriptor: descriptor.to_owned(),
+                values: vec![vec![11.0, 12.0, 13.0], vec![21.0, 22.0, 23.0]],
+            },
+            native_parsed: parsed.clone(),
+            cross_check: InteractionCrossCheck::NotRequested,
+            effective_descriptor: parsed,
+            resolution: InteractionResolution::Unresolved {
+                reason: "synthetic cache test".to_owned(),
+            },
+        }
+    }
+
+    #[test]
+    fn structural_keys_distinguish_expression_term_and_channel() {
+        let base = InteractionParameterKey {
+            phase_index: 7,
+            channel: InteractionChannel::GibbsExcess,
+            interaction_index: 4,
+            expression_index: 1,
+            column_index: 1,
+        };
+        let mut keys = std::collections::HashSet::new();
+        keys.insert(base);
+        keys.insert(InteractionParameterKey {
+            expression_index: 2,
+            ..base
+        });
+        keys.insert(InteractionParameterKey {
+            column_index: 2,
+            ..base
+        });
+        keys.insert(InteractionParameterKey {
+            channel: InteractionChannel::Magnetic,
+            ..base
+        });
+        assert_eq!(keys.len(), 4);
+    }
+
+    #[test]
+    fn baseline_relative_delta_does_not_accumulate() {
+        let baseline = 12.5;
+        let delta = -0.25;
+        let first = baseline + delta;
+        let second = baseline + delta;
+        assert_eq!(first, 12.25);
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn complete_multi_expression_matrix_is_cached_by_structural_identity() {
+        let first = cache_interaction(synthetic_interaction("first display text"));
+        let second = cache_interaction(synthetic_interaction("changed display text"));
+        assert_eq!(first.len(), 6);
+        assert_eq!(
+            first
+                .iter()
+                .map(|parameter| parameter.baseline)
+                .collect::<Vec<_>>(),
+            vec![11.0, 12.0, 13.0, 21.0, 22.0, 23.0]
+        );
+        assert_eq!(
+            first
+                .iter()
+                .map(|parameter| parameter.key)
+                .collect::<Vec<_>>(),
+            second
+                .iter()
+                .map(|parameter| parameter.key)
+                .collect::<Vec<_>>()
+        );
+        assert!(first.iter().all(|parameter| matches!(
+            parameter.mutation,
+            InteractionMutationSupport::Verified(_)
+        )));
+    }
+
+    #[test]
+    fn empty_tqgdat_result_is_a_contextual_error_not_an_index_panic() {
+        let error = first_tqgdat_value(Vec::new(), "Synthetic", 2, "H").unwrap_err();
+        assert!(error.to_string().contains("returned no H value"));
+    }
+
+    #[test]
+    fn complete_reset_plan_contains_each_structural_address_once() {
+        let interaction_parameters = cache_interaction(synthetic_interaction("display"));
+        let interaction_lookup = interaction_parameters
+            .iter()
+            .enumerate()
+            .filter_map(|(offset, parameter)| match parameter.mutation {
+                InteractionMutationSupport::Verified(address) => Some((address, offset)),
+                InteractionMutationSupport::ReadOnly { .. } => None,
+            })
+            .collect();
+        let cache = ParameterCache {
+            interaction_lookup,
+            interaction_parameters,
+            endmember_lookup: HashMap::new(),
+            compound_lookup: HashMap::new(),
+            endmembers: Vec::new(),
+            compounds: Vec::new(),
+        };
+        let reset_plan = cache.verified_interaction_baselines();
+        let unique = reset_plan
+            .iter()
+            .map(|(address, _, _)| *address)
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(reset_plan.len(), 6);
+        assert_eq!(unique.len(), reset_plan.len());
+    }
+}

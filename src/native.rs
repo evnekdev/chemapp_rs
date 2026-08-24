@@ -42,15 +42,9 @@ const TQGTRH_USER_ID_NATIVE_LENGTH: ChemAppLen = 255;
 const TQGTRH_TEXT_NATIVE_LENGTH: ChemAppLen = 80;
 const TQERR_NATIVE_RECORD_LENGTH: ChemAppLen = 80;
 const TQLPAR_NATIVE_RECORD_LENGTH: ChemAppLen = 156;
-// The checked GTT bridge allocates and copies exactly 1,999 CHARACTER*156
-// records. The legacy manual documents the same version-scoped maximum.
-// TQSIZE reports compiled thermodynamic dimensions, but available evidence
-// does not establish any returned dimension as a TQLPAR caller-buffer size.
-const TQLPAR_DESCRIPTOR_CAPACITY: usize = 1999;
-// TQGPAR's expression leading dimension is established as 20 by the checked
-// interface/source model. The 28-value extent is runtime-compatible with the
-// checked library, but is not claimed as a version-independent ChemApp law.
-const TQGPAR_EXPRESSION_CAPACITY: usize = 20;
+// TQLPAR record capacity and TQGPAR's Fortran leading dimension are queried
+// from TQSIZE. This avoids baking the checked 7.14 build's ND/NE/NI values
+// into the caller-side buffers.
 const TQGPAR_VALUE_CAPACITY: usize = 28;
 
 /*********************************************************************************************************************************************************************************************************/
@@ -116,18 +110,24 @@ fn tqerr_message(buffer: &[u8]) -> Result<String, ChemAppError> {
 }
 
 /// Reconstructs logical TQGPAR expression rows from Fortran column-major
-/// storage. The compiled expression leading dimension is fixed even when the
-/// returned `NOEXPR` is smaller.
-fn tqgpar_values(raw: &[f64], noexpr: usize, nvala: usize) -> Result<Vec<Vec<f64>>, ChemAppError> {
-	if noexpr > TQGPAR_EXPRESSION_CAPACITY || nvala > TQGPAR_VALUE_CAPACITY {
+/// storage. TQSIZE supplies the compiled leading dimension even when returned
+/// `NOEXPR` is smaller.
+fn tqgpar_values(raw: &[f64], leading_dimension: usize, noexpr: usize, nvala: usize) -> Result<Vec<Vec<f64>>, ChemAppError> {
+	if noexpr > leading_dimension || nvala > TQGPAR_VALUE_CAPACITY {
 		return Err(ChemAppError::OtherError(format!(
-			"TQGPAR returned dimensions {noexpr}x{nvala} for a {TQGPAR_EXPRESSION_CAPACITY}x{TQGPAR_VALUE_CAPACITY} buffer"
+			"TQGPAR returned dimensions {noexpr}x{nvala} for a {leading_dimension}x{TQGPAR_VALUE_CAPACITY} buffer"
 		)));
+	}
+	let required = leading_dimension.checked_mul(nvala).ok_or_else(|| {
+		ChemAppError::OtherError("TQGPAR raw extent overflowed usize".to_owned())
+	})?;
+	if raw.len() < required {
+		return Err(ChemAppError::OtherError("TQGPAR raw buffer is shorter than its declared Fortran extent".to_owned()));
 	}
 	Ok((0..noexpr)
 		.map(|expression| {
 			(0..nvala)
-				.map(|value| raw[expression + value * TQGPAR_EXPRESSION_CAPACITY])
+				.map(|value| raw[expression + value * leading_dimension])
 				.collect()
 		})
 		.collect())
@@ -2077,10 +2077,19 @@ impl Engine {
 		let mut errcode: ChemAppInt = 0;
 		let mut nopar: ChemAppInt = 0;
 		let coption: CString = CString::new(option)?;
-		let mut lgtpar: [ChemAppInt; TQLPAR_DESCRIPTOR_CAPACITY] =
-			[0; TQLPAR_DESCRIPTOR_CAPACITY];
-		let mut chrpar: [[u8; 156]; TQLPAR_DESCRIPTOR_CAPACITY] =
-			[[0u8; 156]; TQLPAR_DESCRIPTOR_CAPACITY];
+		let dimensions = self.tqsize()?;
+		let descriptor_capacity = match option.trim().to_ascii_uppercase().as_str() {
+			"G" => usize::try_from(dimensions.nexcess_gibbs),
+			"M" => usize::try_from(dimensions.nexcess_magnetic),
+			// Preserve Engine fidelity for unknown options: ChemApp decides
+			// validity, while the larger list capacity keeps storage sufficient.
+			_ => usize::try_from(dimensions.nexcess_gibbs.max(dimensions.nexcess_magnetic)),
+		}.map_err(|_| ChemAppError::OtherError("TQSIZE returned a negative TQLPAR capacity".to_owned()))?;
+		if descriptor_capacity == 0 {
+			return Err(ChemAppError::OtherError("TQSIZE returned zero TQLPAR capacity".to_owned()));
+		}
+		let mut lgtpar = vec![0 as ChemAppInt; descriptor_capacity];
+		let mut chrpar = vec![[0u8; 156]; descriptor_capacity];
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
@@ -2123,9 +2132,16 @@ impl Engine {
 		let coption: CString = CString::new(option)?;
 		let mut noexpr: ChemAppInt = 0;
 		let mut nvala: ChemAppInt = 0;
-		// Fortran stores VALA(expression, value) column-major with a fixed
-		// expression leading dimension. Adapt that layout after the native call.
-		let mut vala = [0.0; TQGPAR_EXPRESSION_CAPACITY * TQGPAR_VALUE_CAPACITY];
+		// Fortran stores VALA(expression, value) column-major. The manual ties
+		// its first/leading dimension to TQSIZE.NI, not returned NOEXPR.
+		let leading_dimension = usize::try_from(self.tqsize()?.nranges_constituent)
+			.map_err(|_| ChemAppError::OtherError("TQSIZE returned a negative TQGPAR leading dimension".to_owned()))?;
+		if leading_dimension == 0 {
+			return Err(ChemAppError::OtherError("TQSIZE returned zero TQGPAR leading dimension".to_owned()));
+		}
+		let raw_capacity = leading_dimension.checked_mul(TQGPAR_VALUE_CAPACITY)
+			.ok_or_else(|| ChemAppError::OtherError("TQGPAR buffer extent overflowed usize".to_owned()))?;
+		let mut vala = vec![0.0; raw_capacity];
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
@@ -2142,7 +2158,7 @@ impl Engine {
 		wrap_result((), errcode)?;
 		let noexpr = chemapp_int_to_usize(noexpr)?;
 		let nvala = chemapp_int_to_usize(nvala)?;
-		return tqgpar_values(&vala, noexpr, nvala);
+		return tqgpar_values(&vala, leading_dimension, noexpr, nvala);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -2253,15 +2269,26 @@ mod tests {
 
 	#[test]
 	fn tqgpar_reconstructs_fortran_column_major_rows() {
-		let mut raw = [0.0; TQGPAR_EXPRESSION_CAPACITY * TQGPAR_VALUE_CAPACITY];
+		let leading_dimension = 5;
+		let mut raw = vec![0.0; leading_dimension * 3];
 		raw[0] = 10.0;
 		raw[1] = 20.0;
-		raw[TQGPAR_EXPRESSION_CAPACITY] = 11.0;
-		raw[TQGPAR_EXPRESSION_CAPACITY + 1] = 21.0;
+		raw[leading_dimension] = 11.0;
+		raw[leading_dimension + 1] = 21.0;
+		raw[2 * leading_dimension] = 12.0;
+		raw[2 * leading_dimension + 1] = 22.0;
 		assert_eq!(
-			tqgpar_values(&raw, 2, 2).unwrap(),
-			vec![vec![10.0, 11.0], vec![20.0, 21.0]]
+			tqgpar_values(&raw, leading_dimension, 2, 3).unwrap(),
+			vec![vec![10.0, 11.0, 12.0], vec![20.0, 21.0, 22.0]]
 		);
+	}
+
+	#[test]
+	fn tqgpar_rejects_dimensions_outside_the_allocated_extent() {
+		let raw = vec![0.0; 5 * TQGPAR_VALUE_CAPACITY];
+		assert!(tqgpar_values(&raw, 5, 6, 1).is_err());
+		assert!(tqgpar_values(&raw, 5, 1, TQGPAR_VALUE_CAPACITY + 1).is_err());
+		assert!(tqgpar_values(&raw[..4], 5, 1, 1).is_err());
 	}
 
 	#[test]

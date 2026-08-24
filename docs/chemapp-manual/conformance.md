@@ -192,9 +192,24 @@ exact binary evidence, and C/Rust demo coverage are in
 
 ### Parameter cache — experimental
 
-`cache` is explicitly described in source as newer and subject to change. Gibbs interaction caching/modification is partially implemented; magnetic interactions and several compound/endmember paths contain `todo!()` or commented-out functionality.
+`cache` remains an experimental API, but its interaction surface is now
+model-neutral and complete for every TQGPAR cell returned by EN22. It retained
+9,034 cells, with 4,042 typed, runtime-verified TQCDAT addresses and 4,992
+inspectable read-only SUBQ extended columns. Structural keys include phase,
+channel, interaction, expression, and column/role; display text is not physical
+identity. Gibbs and SUBLM magnetic absolute/delta/reset paths are implemented,
+and delta is always relative to the captured baseline.
 
-The manual also limits thermodynamic data modification to appropriate data-file formats/models. This layer should validate those prerequisites rather than assuming arbitrary loaded systems are mutable.
+The disposable Win64 audit changed/read/restored all 4,042 supported cells,
+covered all eight observed matrix shapes, verified six neighboring-interaction
+families, confirmed documented Slag-liq copy propagation, and completed six
+representative equilibrium mutation/restoration smokes. A separate active-phase
+probe changed system Gibbs energy and reproduced its baseline after exact
+coefficient restoration. It never called TQWASC and the source DAT digest was
+unchanged. Generic SUBQ selectors for
+terms 7 and 18 were rejected with error 1024 without changing the matrix, so
+columns 7–18 remain read-only. See
+[Interaction parameter addressing and reversible mutation](parameter-mutation.md).
 
 ### Interaction inspection — runtime-observed for the EN22 model set
 
@@ -280,11 +295,11 @@ Do not mix these into one compatibility assumption.
 
 ## Next recommended milestone
 
-The interaction inspection layer is complete for the models observed in EN22.
-The next interaction milestone should verify model-specific TQCDAT
-mutation/reset addressing before broadening `ParameterCache`, especially its
-magnetic path. Native TQBOND runtime conformance remains limited by the absence
-of a non-proprietary SUBG/QUAS/QSOL data set.
+The interaction inspection and verified mutation/cache layers are complete for
+the EN22 model/channel families. The next interaction milestone should build a
+sensitivity/Jacobian API on the typed reversible mutation boundary, without
+recreating selector arrays or text keys. Native TQBOND runtime conformance
+remains limited by the absence of a non-proprietary SUBG/QUAS/QSOL data set.
 
 The routine-by-routine native ABI audit is already complete for the current
 75-wrapper surface; platform-specific binary verification remains a separate,

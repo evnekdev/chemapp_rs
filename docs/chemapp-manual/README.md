@@ -47,6 +47,7 @@ This material is a paraphrased engineering reference. Do not copy substantial po
 - [Subroutine index](subroutine-index.md)
 - [Entities, snapshots, tables, and mapping](entities-and-snapshots.md)
 - [Interaction inspection and name resolution](interactions.md)
+- [Interaction parameter addressing and reversible mutation](parameter-mutation.md)
 - [Development policy](development-policy.md)
 - [Current conformance notes](conformance.md)
 

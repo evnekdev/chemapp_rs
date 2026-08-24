@@ -266,4 +266,17 @@ sublattice-local species. Flattened sublattice namespaces use cumulative
 checked ranges and must support more than two sublattices. Interactions belong
 to the loaded thermodynamic model, so they are not duplicated into each
 equilibrium or mapping snapshot. `ParameterCache` may consume the inspection
-layer, but model-specific TQCDAT mutation semantics require separate evidence.
+layer only through structural native identity. A high-level mutation address
+must lower to the manual-defined TQCDAT selectors, be bounded by the complete
+TQGPAR matrix, and be enabled only after a reversible runtime round-trip for
+that model/channel family. Unknown or special columns remain inspectable and
+read-only. Mutation invalidates earlier equilibrium results without silently
+recalculating them.
+
+## 23. Error serialization is not a stable wire protocol
+
+`ChemAppError` derives serde and bincode traits for application convenience,
+but the crate has no in-repository persisted-error protocol or compatibility
+promise. Enum variant order and payload evolution may change encoded bytes.
+Applications needing cross-version persistence must define and version an
+explicit wire DTO rather than treating the Rust enum encoding as stable.

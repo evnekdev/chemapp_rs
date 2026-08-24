@@ -13,7 +13,8 @@ use tempfile::NamedTempFile;
 use crate::cache::ParameterCache;
 use crate::entities::system::System;
 use crate::interactions::{
-    InteractionChannel, InteractionDescriptorCrossCheck, PhaseInteractionReport,
+    InteractionChannel, InteractionDescriptorCrossCheck, InteractionParameter,
+    InteractionParameterAddress, PhaseInteractionReport,
 };
 use crate::iterator::PhaseIterator;
 use crate::iterator::SystemComponentIterator;
@@ -163,6 +164,28 @@ impl Default for Calculator {
 /*******************************************************************************************************************************************************************************************************************************/
 
 impl Calculator {
+    /// Read one typed interaction parameter from the current live TQGPAR matrix.
+    pub fn interaction_parameter(
+        &self,
+        address: InteractionParameterAddress,
+    ) -> Result<InteractionParameter, ChemAppError> {
+        crate::interactions::read_interaction_parameter(&self.engine, address)
+    }
+
+    /// Change one verified interaction parameter through its exact TQCDAT address.
+    ///
+    /// This mutates the loaded ChemApp model in memory. It deliberately does
+    /// not reset conditions or recalculate equilibrium, so previously obtained
+    /// results are stale until the caller explicitly calculates again.
+    pub fn set_interaction_parameter(
+        &self,
+        address: InteractionParameterAddress,
+        value: f64,
+    ) -> Result<(), ChemAppError> {
+        crate::interactions::validate_interaction_parameter_mutation(&self.engine, address)?;
+        crate::interactions::write_interaction_parameter(&self.engine, address, value)
+    }
+
     /// Queries the loaded system's component names without turning a failed
     /// native lookup into a silently incomplete composition basis.
     fn component_names(engine: &Engine) -> Result<Vec<String>, ChemAppError> {

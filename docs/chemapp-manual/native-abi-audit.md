@@ -448,9 +448,9 @@ claim the other arguments are verified.
 | Routine / wrapper | Manual semantic arguments, state, units | H and reconstructed raw ABI | CHAR / Rust ABI types | Symbols; coverage; runtime | Verdict / severity / audit note |
 |---|---|---|---|---|---|
 | TQGDAT `tqgdat` | §6.1; I phase/constituent/option/range; O count and value vector; ASCII data required; options define vector size. | `(LI,LI,CHP,LI,LIP,DBP,LIP)`. | C(OPTION); Rust fixed `[f64;25]`. | `_TQGDAT@32` / `TQGDAT` / **absent**; -/-/crate; no. | Win32/x86: VERIFIED; Linux/i386: PLATFORM-UNAVAILABLE / MEDIUM: fixed capacity still needs option-by-option bounds proof. |
-| TQLPAR `tqlpar` | §6.2; I phase/option; O parameter count, text records, lengths; ASCII/model dependent. | `(LI,CHP,LIP,CHP,LIP,LIP)`, text record len 156. | C(OPTION,156); Rust 1999×156 and validates/uses each returned `LGTPAR` length. | `_TQLPAR@32` / `TQLPAR` / **absent**; C/R/crate; Win64 runtime yes. | **FIXED IN CURRENT MASTER:** record adaptation preserves exactly the native meaningful region. Checked Win64 EN22 run retrieved 692 G/M descriptors. Win32/x86 raw ABI VERIFIED; Linux/i386: PLATFORM-UNAVAILABLE. |
-| TQGPAR `tqgpar` | §6.3; I phase/option/index; O expression/value counts and values; ASCII/model dependent. | `(LI,CHP,LI,LIP,LIP,DBP,LIP)`. Native `VALA(expression,value)` is Fortran column-major with expression leading dimension 20. | C(OPTION); Rust allocates a flat 20×28 buffer, validates returned dimensions, reconstructs logical `NOEXPR × NVALA` rows, and propagates `NOERR`. | `_TQGPAR@32` / `TQGPAR` / **absent**; C/R/crate; Win64 runtime yes. | **FIXED IN CURRENT MASTER:** the former Rust row-major interpretation mixed multi-expression values. Checked Win64 EN22 run retrieved values for all 692 TQLPAR rows; the 28-value capacity still needs version-wide bounds proof. Win32/x86 raw ABI VERIFIED; Linux/i386: PLATFORM-UNAVAILABLE. |
-| TQCDAT `tqcdat` | §6.4; five I integer selectors and I value; changes ASCII thermodynamic data. | `(LI,LI,LI,LI,LI,DB,LIP)`. | none. | `_TQCDAT@28` / `TQCDAT` / **absent**; -/-/crate; no. | Win32/x86: VERIFIED; Linux/i386: PLATFORM-UNAVAILABLE / MEDIUM. |
+| TQLPAR `tqlpar` | §6.2; I phase/option; O parameter count, text records, lengths; ASCII/model dependent. | `(LI,CHP,LIP,CHP,LIP,LIP)`, text record len 156. | C(OPTION,156); Rust queries TQSIZE and allocates `ND` records for G or `NE` for M, then validates/uses each returned `LGTPAR` length. | `_TQLPAR@32` / `TQLPAR` / **absent**; C/R/crate; Win64 runtime yes. | **FIXED IN CURRENT MASTER:** dynamic capacity and record adaptation preserve the channel extent and each meaningful native record region. Checked Win64 reports ND=2000/NE=500 and EN22 retrieved 692 G/M descriptors. Win32/x86 raw ABI VERIFIED; Linux/i386: PLATFORM-UNAVAILABLE. |
+| TQGPAR `tqgpar` | §6.3; I phase/option/index; O expression/value counts and values; ASCII/model dependent. | `(LI,CHP,LI,LIP,LIP,DBP,LIP)`. Native `VALA(expression,value)` is Fortran column-major with TQSIZE `NI` as its leading dimension. | C(OPTION); Rust queries NI (20 on checked Win64), allocates `NI×28`, validates returned dimensions, reconstructs logical `NOEXPR × NVALA` rows, and propagates `NOERR`. | `_TQGPAR@32` / `TQGPAR` / **absent**; C/R/crate; Win64 runtime yes. | **FIXED IN CURRENT MASTER:** the former Rust row-major interpretation mixed multi-expression values. Checked Win64 EN22 run retrieved 9,034 cells across all 692 TQLPAR rows; the 28-value second extent still needs version-wide bounds proof. Win32/x86 raw ABI VERIFIED; Linux/i386: PLATFORM-UNAVAILABLE. |
+| TQCDAT `tqcdat` | §6.4; five I integer selectors and I value; changes ASCII thermodynamic data. Gibbs uses `(13, interaction, expression, term, phase)`; magnetic uses `(10, interaction, expression, 1-or-2, phase)`. | `(LI,LI,LI,LI,LI,DB,LIP)`. | none. | `_TQCDAT@28` / `TQCDAT` / **absent**; -/-/crate; Win64 EN22 runtime yes. | **VERIFIED FOR CHECKED EN22 FAMILIES:** 4,042 supported cells changed/read/restored exactly, plus boundaries, neighbor isolation, phase-copy propagation, and equilibrium smokes. SUBQ columns 7–18 and SUBG remain read-only/unverified. Linux/i386: PLATFORM-UNAVAILABLE / MEDIUM. |
 | TQWASC `tqwasc` | §6.5; I output filename; writes ASCII data where capability permits. | `(CHP,LIP)` plus file length. | C(FILE). | `_TQWASC@12` / `TQWASC` / **absent**; -/-/-; no. | Win32/x86: VERIFIED; Linux/i386: PLATFORM-UNAVAILABLE / MEDIUM. |
 
 ## Separate semantic findings
@@ -484,12 +484,16 @@ claim the other arguments are verified.
 7. **FIXED IN CURRENT MASTER:** `Stream` implements `Drop`, has one
    high-level owner per name-addressed native stream, and provides consuming
    `Stream::remove` for observable cleanup errors. `StreamSnapshot` captures
-   current values and units. Destructor cleanup remains necessarily
-   best-effort because Rust `Drop` cannot return a native error.
-8. The cache/parse layers use the data-manipulation surface with fixed
-   assumptions and several `unwrap()`/`todo!()` paths.  They should remain
-   classified as experimental until their ASCII-file/model preconditions and
-   parameter bounds are independently tested.
+   current values and units. Explicit removal consumes cleanup ownership before
+   TQSTRM, so a failure cannot trigger a second hidden destructor call.
+   Destructor-only cleanup remains necessarily best-effort because Rust `Drop`
+   cannot return a native error.
+8. **HARDENED IN CURRENT MASTER:** the interaction cache retains complete
+   TQGPAR matrices and uses typed, runtime-verified TQCDAT addresses for EN22
+   ordinary Gibbs and SUBLM magnetic cells. Special/unverified cells remain
+   explicitly read-only. Compound/endmember cache loading now reports empty
+   TQGDAT results rather than indexing them. The cache remains experimental
+   because supported data-file/model preconditions are intentionally narrow.
 
 ## Separate ABI and CHARACTER findings
 

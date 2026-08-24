@@ -28,8 +28,10 @@ pub use crate::error::ChemAppError;
 pub use crate::interactions::{
     Interaction, InteractionChannel, InteractionCrossCheck, InteractionCrossCheckRequest,
     InteractionDescriptor, InteractionDescriptorCrossCheck, InteractionDescriptorRecovery,
-    InteractionDescriptorSource, InteractionMember, InteractionOrder, InteractionRaw,
-    InteractionRecoveryReason, InteractionRecoveryRequest, InteractionResolution,
+    InteractionDescriptorSource, InteractionMember, InteractionMutationSupport, InteractionOrder,
+    InteractionParameter, InteractionParameterAddress, InteractionParameterCell,
+    InteractionParameterRole, InteractionRaw, InteractionRecoveryReason,
+    InteractionRecoveryRequest, InteractionResolution, MagneticInteractionRole,
     NativeInteractionIndex, NativePoweredMember, PhaseInteractionReport,
     ResolvedInteractionDescriptor, ResolvedPoweredMember,
 };
