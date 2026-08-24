@@ -2,6 +2,7 @@
 
 use crate::calculator::Calculator;
 use crate::error::ChemAppError;
+use crate::iterator::species::has_sublattice_species;
 use crate::snapshot::SpeciesSnapshot;
 
 /// Conceptual one-based identity within one sublattice.
@@ -60,6 +61,9 @@ impl<'a> Species<'a> {
 
     pub fn is_valid(&self) -> Result<bool, ChemAppError> {
         if self.indexp == 0 || self.indexp > self.calculator.engine.tqnop()? {
+            return Ok(false);
+        }
+        if !has_sublattice_species(&self.calculator.engine.tqmodl(self.indexp)?) {
             return Ok(false);
         }
         let number_of_sublattices = self.calculator.engine.tqnosl(self.indexp)?;

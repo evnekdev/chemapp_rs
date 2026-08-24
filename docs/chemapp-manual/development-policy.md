@@ -225,3 +225,19 @@ Never model TQBOND as an unconditional four-member record. Dispatch by TQMODL:
 SUBG is a sublattice quadruplet, QUAS/QSOL are phase-constituent pairs, and
 other models expose no TQBOND entity. Preserve local sublattice identity and
 apply SUBG's combined second-sublattice offset only at the native boundary.
+
+## 20. Do not infer sublattice species from model spelling
+
+`TQMODL` returns `PURE` for a non-mixture phase. `TQNOSL` and `TQNOLC`
+describe solution phases as one or more sublattices, so high-level species
+enumeration must use the documented non-mixture/solution distinction—not a
+`SUB*` prefix or a manually guessed model list. Query failures remain errors;
+they are not a signal to silently return no species.
+
+## 21. High-level streams have one native owner per name
+
+The manual defines `TQSTTP` and `TQSTRM` by stream identifier but does not
+specify duplicate creation semantics. `Calculator` must therefore lease a
+name to at most one live high-level `Stream`; consuming explicit removal
+reports native errors and disables best-effort destructor cleanup. Direct
+`Engine` calls intentionally remain outside this ergonomic ownership rule.

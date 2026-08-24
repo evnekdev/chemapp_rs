@@ -1,22 +1,41 @@
 // chemapp_rs//examples/maindemo.rs
-use std::path::PathBuf;
-use chemapp_rs::Engine;
+use std::path::{Path, PathBuf};
+use chemapp_rs::{ChemAppError, Engine};
 
-pub fn main(){
+/// Chooses only a repository binary whose target matches this executable, or
+/// an explicit vendor override. In particular, the bundled Linux SO is i386,
+/// not a generic Unix library.
+fn chemapp_library_path(project_dir: &Path) -> Result<PathBuf, ChemAppError> {
+	if let Some(path) = std::env::var_os("CHEMAPP_LIBRARY") {
+		return Ok(PathBuf::from(path));
+	}
+	#[cfg(all(target_os = "windows", target_arch = "x86"))]
+	return Ok(project_dir.join("windows").join("ca_vc_e_local.dll"));
+	#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+	return Ok(project_dir.join("windows").join("ca_vc_e_x64.dll"));
+	#[cfg(all(target_os = "linux", target_arch = "x86"))]
+	return Ok(project_dir.join("linux").join("libLChemAppS.so"));
+
+	#[allow(unreachable_code)]
+	Err(ChemAppError::OtherError(format!(
+		"no checked ChemApp native library is bundled for {}-{}; set CHEMAPP_LIBRARY to a compatible vendor library",
+		std::env::consts::OS,
+		std::env::consts::ARCH,
+	)))
+}
+
+pub fn main() -> Result<(), ChemAppError> {
 	/**********************************************************************************************************************/
 	let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-	#[cfg(all(target_family = "windows", target_pointer_width = "32"))]
-	let libpath = project_dir.join("windows").join("ca_vc_e_local.dll");
-	#[cfg(all(target_family = "windows", target_pointer_width = "64"))]
-	let libpath = project_dir.join("windows").join("ca_vc_e_x64.dll");
-	#[cfg(target_family = "unix")]
-	let libpath = project_dir.join("linux").join("libLChemAppS.so");
+	let libpath = chemapp_library_path(&project_dir)?;
 	/**********************************************************************************************************************/
-	let datafile_path = project_dir.join("data").join("cosi.dat");
-	let libname = libpath.to_str().unwrap();
-	let datafile_dat = datafile_path.to_str().unwrap();
+	let datafile_path = std::env::var_os("CHEMAPP_DATAFILE")
+		.map(PathBuf::from)
+		.unwrap_or_else(|| project_dir.join("data").join("cosi.dat"));
+	let libname = libpath.to_str().ok_or_else(|| ChemAppError::OtherError("ChemApp library path is not valid UTF-8".to_owned()))?;
+	let datafile_dat = datafile_path.to_str().ok_or_else(|| ChemAppError::OtherError("ChemApp data-file path is not valid UTF-8".to_owned()))?;
 	/**********************************************************************************************************************/
-	let engine = Engine::new(libname).unwrap();
+	let engine = Engine::new(libname)?;
 	/**********************************************************************************************************************/
 	// Initialize the library
 	let _    = engine.tqini().unwrap();
@@ -153,7 +172,7 @@ pub fn main(){
 		let mut more = engine.tqmap("tf", 0, 0, interval).unwrap();
 		let mut result_number = 1;
 		println!("Mapping result: {:?} K", engine.tqgetr("t", 0, 0).unwrap());
-		while more != 0 {
+		while more > 0 {
 			more = if result_number == 2 { engine.tqmapl("tn", 0, 0, interval).unwrap() } else { engine.tqmap("tn", 0, 0, interval).unwrap() };
 			result_number += 1;
 			println!("Mapping result: {:?} K", engine.tqgetr("t", 0, 0).unwrap());
@@ -189,7 +208,8 @@ pub fn main(){
 	}
 	engine.tqce(" ", 0, 0, (0.0, 0.0)).unwrap();
 	for indexp in 1..=engine.tqnop().unwrap() {
-		if engine.tqgetr("a", indexp, 0).unwrap() > 0.0 && engine.tqmodl(indexp).unwrap().starts_with("SUB") {
+		let model = engine.tqmodl(indexp).unwrap();
+		if engine.tqgetr("a", indexp, 0).unwrap() > 0.0 && !model.trim().eq_ignore_ascii_case("PURE") {
 			println!("Sublattice fractions in {:?}", engine.tqgnp(indexp).unwrap());
 			for indexl in 1..=engine.tqnosl(indexp).unwrap() {
 				for indexc in 1..=engine.tqnolc(indexp, indexl).unwrap() {
@@ -229,4 +249,5 @@ pub fn main(){
 		println!("Skipping transparent file functions because cosiex.cst is unavailable.");
 	}
 	println!("End of output translated from cademo1.");
+	Ok(())
 }

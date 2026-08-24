@@ -166,6 +166,15 @@ records. Installation-specific text and identifiers were not retained in
 repository documentation or tests. The source-modelled alias refactor repeated
 that Win64 run successfully; the generated demo result artifact was removed.
 
+The current Win64 entity conformance run confirms that Species is not limited
+to model codes beginning with `SUB`: the `IDMX` gas phase in `cosi.dat` has
+one sublattice and 15 captured species, while each of its seven `PURE` phases
+has none. The full live report, including the additional Species rows, equals
+its snapshot report before the engine advances. Stream creation, snapshotting,
+and consuming removal also completed successfully; duplicate native-name
+semantics remain undocumented, so the high-level layer rejects duplicate live
+owners rather than assuming a replace/share behavior.
+
 The former CRITICAL and HIGH defects above are **FIXED IN CURRENT MASTER**.
 The direct-binary Win64 integer and length questions are likewise resolved
 for the checked 2017 x64 DLL and implemented at the raw boundary. Unix64
@@ -244,10 +253,11 @@ Do not mix these into one compatibility assumption.
 
 ## Next recommended milestone
 
-The next focused task should add a typed aggregate `TQGETR` API for signed
-selectors and array-returning modes without weakening the existing verified
-scalar boundary. Model-specific native TQBOND runtime conformance also awaits
-a suitable non-proprietary SUBG/QUAS/QSOL data set.
+The scalar `TQGETR` wrapper is an intentional, verified subset; aggregate
+retrieval is an optional additive API only when a concrete use case requires
+it. The next milestone should instead follow actual project needs. Native
+TQBOND model conformance remains limited by the absence of a non-proprietary
+SUBG/QUAS/QSOL data set.
 
 The routine-by-routine native ABI audit is already complete for the current
 75-wrapper surface; platform-specific binary verification remains a separate,

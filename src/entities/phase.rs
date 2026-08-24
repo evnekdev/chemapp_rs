@@ -33,6 +33,11 @@ impl<'a> Phase<'a> {
         Ok(crate::snapshot::is_stable_phase_activity(self.ac()?))
     }
 
+    /// Enumerates sublattice constituents for a solution phase.
+    ///
+    /// `TQMODL == PURE` is ChemApp's documented non-mixture marker and yields
+    /// no species. Other model codes are queried structurally through
+    /// `TQNOSL`/`TQNOLC`; model-name prefixes are not an applicability rule.
     pub fn species(&self) -> Result<SpeciesIterator<'a>, ChemAppError> {
         SpeciesIterator::new(self.calculator, self.index)
     }

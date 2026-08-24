@@ -29,6 +29,10 @@
     `ChemAppError` rather than silently returning placeholders or empty sets.
   - `Engine::tqmap` and `Engine::tqmapl` now return signed `i32` continuation
     values so the documented non-positive terminal states remain representable.
+  - `Stream::remove(self)` provides observable consuming native cleanup;
+    high-level streams now have unique ownership per stream name.
+  - a failed `Calculator::set_clim` retry now reports both bounded-ordering
+    failures through `ChemAppError::RetryError`.
 
 ### Fixed
 
@@ -63,3 +67,9 @@
     pair and SUBG quadruplet identities, including canonical enumeration.
   - implemented real stream ownership cleanup through `Drop` and fallible
     stream property/snapshot access.
+  - corrected species enumeration to use ChemApp's documented non-mixture
+    (`PURE`) versus solution-phase distinction instead of a `SUB*` prefix.
+  - corrected `Calculator::set_clim` so either failed call in its preferred
+    two-bound order retries the complete reverse ordering once.
+  - made examples select only architecture-matched bundled ChemApp binaries,
+    with `CHEMAPP_LIBRARY` and optional `CHEMAPP_DATAFILE` overrides.

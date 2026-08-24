@@ -4,6 +4,8 @@
 //! An important feature of `Calculator` is the ability of predefining the composition basis - a useful feature, for example, in oxide systems, where system components are defined as elements, but the compositions should be entered as oxides (CaO, FeO, SiO2, etc).
 use chemformula::Transform;
 use nalgebra::{DVector, Dim, Storage, Vector};
+use std::cell::RefCell;
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::Path;
 use tempfile::NamedTempFile;
@@ -70,6 +72,44 @@ fn datafile_format_from_filename(filename: &str) -> Result<DatafileFormat, ChemA
     }
 }
 
+/// Executes two complete TQCLIM orderings at most once each. A failed first
+/// write may already have mutated ChemApp's target-limit state, so the retry
+/// deliberately writes *both* bounds again rather than retrying only the call
+/// which reported the error.
+fn set_temperature_limits_with_retry<F>(
+    interval: (f64, f64),
+    inverse_order: bool,
+    mut set_limit: F,
+) -> Result<(), ChemAppError>
+where
+    F: FnMut(&'static str, f64) -> Result<(), ChemAppError>,
+{
+    let low = ("TLOW", interval.0);
+    let high = ("THIGH", interval.1);
+    let (preferred, alternate) = if inverse_order {
+        ([high, low], [low, high])
+    } else {
+        ([low, high], [high, low])
+    };
+
+    let attempt = |ordering: [(&'static str, f64); 2], setter: &mut F| {
+        setter(ordering[0].0, ordering[0].1)?;
+        setter(ordering[1].0, ordering[1].1)
+    };
+
+    match attempt(preferred, &mut set_limit) {
+        Ok(()) => Ok(()),
+        Err(preferred_error) => match attempt(alternate, &mut set_limit) {
+            Ok(()) => Ok(()),
+            Err(alternate_error) => Err(ChemAppError::RetryError {
+                operation: "setting ChemApp temperature target limits".to_owned(),
+                preferred: Box::new(preferred_error),
+                alternate: Box::new(alternate_error),
+            }),
+        },
+    }
+}
+
 /*******************************************************************************************************************************************************************************************************************************/
 /*******************************************************************************************************************************************************************************************************************************/
 
@@ -92,6 +132,10 @@ pub struct Calculator {
     pub transform: Transform,
     /// The ERROR unit active before `redirect_error_to_temp` changed it.
     previous_errunit: Option<usize>,
+    /// Names leased to live high-level `Stream` owners. ChemApp streams are
+    /// name-addressed, so allowing duplicate owners would make `Drop` remove
+    /// a stream still represented by another Rust value.
+    pub(crate) active_stream_names: RefCell<HashSet<String>>,
 }
 
 /*******************************************************************************************************************************************************************************************************************************/
@@ -108,6 +152,7 @@ impl Default for Calculator {
             number_target_t: 0,
             transform: Transform::default(),
             previous_errunit: None,
+            active_stream_names: RefCell::new(HashSet::new()),
         };
     }
 }
@@ -150,6 +195,7 @@ impl Calculator {
             number_target_t: 0,
             transform,
             previous_errunit: None,
+            active_stream_names: RefCell::new(HashSet::new()),
         });
     }
 
@@ -166,7 +212,27 @@ impl Calculator {
             number_target_t: 0,
             transform: Transform::default(),
             previous_errunit: None,
+            active_stream_names: RefCell::new(HashSet::new()),
         });
+    }
+
+    /// Claims the unique high-level owner for a name-addressed native stream.
+    /// The ChemApp manual specifies stream creation/removal by identifier but
+    /// does not define duplicate-definition semantics, so this wrapper avoids
+    /// relying on an undocumented replace/share behavior.
+    pub(crate) fn claim_stream_name(&self, name: &str) -> Result<(), ChemAppError> {
+        let mut names = self.active_stream_names.borrow_mut();
+        if names.insert(name.to_owned()) {
+            Ok(())
+        } else {
+            Err(ChemAppError::OtherError(format!(
+                "a live Stream already owns the ChemApp stream name {name:?}"
+            )))
+        }
+    }
+
+    pub(crate) fn release_stream_name(&self, name: &str) {
+        self.active_stream_names.borrow_mut().remove(name);
     }
 
     /***************************************************************************************************************************************************************************************************************************/
@@ -329,29 +395,15 @@ impl Calculator {
     /***************************************************************************************************************************************************************************************************************************/
     /***************************************************************************************************************************************************************************************************************************/
 
-    /// Sets temperature target limits, trying the requested ChemApp ordering
-    /// once and the reverse ordering once if ChemApp rejects the first call.
+    /// Sets temperature target limits with at most two complete orderings.
     ///
-    /// A failed first call may have changed native target-limit state, so this
-    /// method deliberately avoids recursion and makes no broader reset claim.
+    /// If either call in the preferred ordering fails, this writes both bounds
+    /// again in reverse order. A failed call may already have changed native
+    /// target-limit state; this bounded protocol makes no reset claim.
     pub fn set_clim(&self, interval: (f64, f64), inverse_order: bool) -> Result<(), ChemAppError> {
-        if inverse_order {
-            match self.engine.tqclim("THIGH", interval.1) {
-                Ok(()) => self.engine.tqclim("TLOW", interval.0),
-                Err(_) => {
-                    self.engine.tqclim("TLOW", interval.0)?;
-                    self.engine.tqclim("THIGH", interval.1)
-                }
-            }
-        } else {
-            match self.engine.tqclim("TLOW", interval.0) {
-                Ok(()) => self.engine.tqclim("THIGH", interval.1),
-                Err(_) => {
-                    self.engine.tqclim("THIGH", interval.1)?;
-                    self.engine.tqclim("TLOW", interval.0)
-                }
-            }
-        }
+        set_temperature_limits_with_retry(interval, inverse_order, |option, value| {
+            self.engine.tqclim(option, value)
+        })
     }
 
     /***************************************************************************************************************************************************************************************************************************/
@@ -775,6 +827,77 @@ mod tests {
                 "snapshot:3",
             ]
         );
+    }
+
+    #[test]
+    fn temperature_limit_retry_stops_after_a_successful_preferred_order() {
+        let mut calls = Vec::new();
+        set_temperature_limits_with_retry((100.0, 200.0), false, |option, _| {
+            calls.push(option);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(calls, ["TLOW", "THIGH"]);
+    }
+
+    #[test]
+    fn temperature_limit_retry_replays_both_reverse_bounds_after_first_failure() {
+        let mut calls = Vec::new();
+        let mut first = true;
+        set_temperature_limits_with_retry((100.0, 200.0), false, |option, _| {
+            calls.push(option);
+            if first {
+                first = false;
+                Err(ChemAppError::NativeError(505))
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap();
+        assert_eq!(calls, ["TLOW", "THIGH", "TLOW"]);
+    }
+
+    #[test]
+    fn temperature_limit_retry_replays_both_reverse_bounds_after_second_failure() {
+        let mut calls = Vec::new();
+        set_temperature_limits_with_retry((100.0, 200.0), false, |option, _| {
+            calls.push(option);
+            if calls.len() == 2 {
+                Err(ChemAppError::NativeError(505))
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap();
+        assert_eq!(calls, ["TLOW", "THIGH", "THIGH", "TLOW"]);
+    }
+
+    #[test]
+    fn temperature_limit_retry_preserves_both_bounded_failures() {
+        let error = set_temperature_limits_with_retry((100.0, 200.0), false, |_, _| {
+            Err(ChemAppError::NativeError(505))
+        })
+        .unwrap_err();
+        match error {
+            ChemAppError::RetryError {
+                preferred,
+                alternate,
+                ..
+            } => {
+                assert!(matches!(*preferred, ChemAppError::NativeError(505)));
+                assert!(matches!(*alternate, ChemAppError::NativeError(505)));
+            }
+            _ => panic!("expected bounded retry error"),
+        }
+    }
+
+    #[test]
+    fn stream_name_registry_has_one_owner_at_a_time() {
+        let mut names = HashSet::new();
+        assert!(names.insert("FEED".to_owned()));
+        assert!(!names.insert("FEED".to_owned()));
+        assert!(names.remove("FEED"));
+        assert!(names.insert("FEED".to_owned()));
     }
 }
 

@@ -78,9 +78,14 @@ quadruplet encoding; an inconsistent model structure is reported as an error.
 ## Iteration and validation
 
 Component, phase, and constituent iterator constructors query their native
-counts fallibly. Species enumeration flattens applicable `SUB*` sublattices
-while retaining each local sublattice identity. Bond enumeration is a
-model-dispatched combinatorial iterator, not a scalar counter.
+counts fallibly. Species applicability is structural: `TQMODL` documents
+`PURE` for a non-mixture phase, while `TQNOSL`/`TQNOLC` describe solution
+phases as one or more sublattices. Therefore `Phase::species()` returns empty
+for `PURE` and otherwise queries `TQNOSL`, then `TQNOLC` for every returned
+one-based sublattice. It never uses a `SUB*` name-prefix heuristic and never
+turns a native query failure into an empty iterator. Local sublattice identity
+is retained. Bond enumeration is a model-dispatched combinatorial iterator,
+not a scalar counter.
 
 `Constituent::is_valid`, `Species::is_valid`, and `Bond::is_valid` validate
 the complete one-based identity and propagate count/model query failures.
@@ -100,6 +105,21 @@ common columns `Phase`, `Model`, `Kind`, `Members`, and `X`, for example a
 pair as `A [1] - B [2]` and a quadruplet as
 `A [S1:1], B [S1:2] | C [S2:1], D [S2:2]`. Pair rows never have fake empty
 member columns. Streams use their own shared live/snapshot table.
+
+## Stream ownership
+
+ChemApp addresses streams by their `IDENTS` name. The checked manual defines
+creation (`TQSTTP`) and removal (`TQSTRM`) by that name, but does not specify
+the result of defining the same name twice. `Stream::new` consequently leases
+each name to one live high-level `Stream` per `Calculator`; a duplicate live
+owner is rejected before a second `TQSTTP` call. Direct `Engine` calls are a
+deliberate low-level escape hatch outside this high-level guarantee.
+
+`Stream::remove(self)` is consuming and reports its `TQSTRM` result. On
+success it releases the lease and disables destructor cleanup. `Drop` remains
+best-effort cleanup for an active owner and always releases the Rust lease
+because the handle is gone. A `StreamSnapshot` is already owned Rust data and
+is unaffected by removal or drop.
 
 ## Mapping state machine
 
@@ -131,3 +151,17 @@ The checked `cosi.dat` system contains no SUBG, QUAS, or QSOL phase, so the
 TQBOND model dispatch, offset, canonicalization, and duplicate-prevention
 coverage is pure structural evidence rather than a native model-data run.
 Unix64 remains without a checked native binary.
+
+The corrected Win64 `entitiesdemo` run also exercised the new Species rule
+against every `cosi.dat` phase. `GAS` (`IDMX`) exposed one sublattice and 15
+species rows; the seven `PURE` phases each exposed zero sublattices and zero
+species rows. This is the concrete behavior previously omitted by the
+`SUB*`-prefix heuristic. The complete live table, including those species
+rows, remained equal to the full snapshot table for the unchanged state.
+
+The repository bundles a native library only for Windows x86, Windows x86-64,
+and Linux i386. Both demos prefer `CHEMAPP_LIBRARY` when set; otherwise they
+select only the exact matching bundled binary and report a clear error for
+other targets. `CHEMAPP_DATAFILE` can likewise override the default
+project-relative `data/cosi.dat`. Compilation for another target is not native
+runtime evidence for that target.

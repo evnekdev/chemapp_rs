@@ -4,12 +4,37 @@ use crate::calculator::Calculator;
 use crate::error::ChemAppError;
 use crate::snapshot::StreamSnapshot;
 
-/// A stream created by this value and removed from ChemApp when dropped.
+/// Tracks whether this Rust handle still owns native cleanup. Keeping this
+/// small state separate makes explicit removal and best-effort `Drop`
+/// idempotent without inventing shared native ownership.
+#[derive(Debug)]
+struct StreamLease {
+    active: bool,
+}
+
+impl StreamLease {
+    fn active() -> Self {
+        Self { active: true }
+    }
+
+    /// Returns whether this call consumed the cleanup responsibility.
+    fn deactivate(&mut self) -> bool {
+        std::mem::replace(&mut self.active, false)
+    }
+}
+
+/// The sole high-level owner of one name-addressed native ChemApp stream.
+///
+/// The manual defines streams and their removal by `IDENTS`, but does not
+/// specify duplicate `TQSTTP` creation behavior. `Calculator` therefore
+/// leases each name to at most one live `Stream`; direct `Engine` calls remain
+/// an intentional low-level escape hatch outside this ownership guarantee.
 pub struct Stream<'a> {
     pub(crate) calculator: &'a Calculator,
     name: String,
     temp: f64,
     pres: f64,
+    lease: StreamLease,
 }
 
 impl<'a> Stream<'a> {
@@ -19,12 +44,17 @@ impl<'a> Stream<'a> {
         temp: f64,
         pres: f64,
     ) -> Result<Self, ChemAppError> {
-        calculator.engine.tqsttp(name, (temp, pres))?;
+        calculator.claim_stream_name(name)?;
+        if let Err(error) = calculator.engine.tqsttp(name, (temp, pres)) {
+            calculator.release_stream_name(name);
+            return Err(error);
+        }
         Ok(Self {
             calculator,
             name: name.to_owned(),
             temp,
             pres,
+            lease: StreamLease::active(),
         })
     }
 
@@ -44,6 +74,17 @@ impl<'a> Stream<'a> {
 
     pub fn table_string(&self) -> Result<String, ChemAppError> {
         crate::table::live_stream_table(self)
+    }
+
+    /// Removes this stream and consumes its unique high-level ownership.
+    ///
+    /// A successful call disables `Drop` cleanup, making native removal
+    /// errors observable without attempting a second successful removal.
+    pub fn remove(mut self) -> Result<(), ChemAppError> {
+        self.calculator.engine.tqstrm(&self.name)?;
+        debug_assert!(self.lease.deactivate());
+        self.calculator.release_stream_name(&self.name);
+        Ok(())
     }
 
     pub fn add_with_indices(
@@ -91,8 +132,24 @@ impl<'a> Stream<'a> {
 
 impl Drop for Stream<'_> {
     fn drop(&mut self) {
-        // Drop cannot report a native cleanup error. Explicit removal can be
-        // added later if callers need observable cleanup failure.
-        let _ = self.calculator.engine.tqstrm(&self.name);
+        if self.lease.deactivate() {
+            // Drop cannot report native cleanup failures. Releasing the Rust
+            // lease is still required because the value is gone; callers that
+            // need to observe cleanup errors should use consuming `remove`.
+            let _ = self.calculator.engine.tqstrm(&self.name);
+            self.calculator.release_stream_name(&self.name);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn explicit_removal_disables_drop_cleanup_idempotently() {
+        let mut lease = StreamLease::active();
+        assert!(lease.deactivate());
+        assert!(!lease.deactivate());
     }
 }

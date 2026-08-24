@@ -126,6 +126,13 @@ and completed `TQCEL`. The temporary result-table artifact from the broad demo
 was removed. This is runtime conformance evidence for that high-level path,
 not broader proof of entity error semantics or mapping completeness.
 
+The subsequent entity hardening run proved that the `IDMX` gas phase exposes
+one `TQNOSL` sublattice and fifteen `TQNOLC`/`TQGNLC`/`TQGTLC` Species rows;
+the seven `PURE` phases expose none. It also created, snapshotted, and
+explicitly removed the high-level stream successfully. The manual does not
+specify duplicate `TQSTTP` name semantics, so high-level duplicate ownership
+is rejected without inferring a native replace/share contract.
+
 The fixed-output conversion correction also ran this demo. `tqgtnm` returned
 a non-empty license-holder value containing internal spaces and no trailing
 padding; the installation-specific text was intentionally not recorded. The
@@ -474,9 +481,11 @@ claim the other arguments are verified.
 6. **FIXED IN CURRENT MASTER:** authoritative entity, iterator, snapshot, and
    table paths propagate `ChemAppError`; native failures no longer become
    `NaN`, false, placeholder names, or silently empty sets.
-7. **FIXED IN CURRENT MASTER:** `Stream` implements `Drop`, and
-   `StreamSnapshot` captures current values and units. Destructor cleanup is
-   necessarily best-effort because Rust `Drop` cannot return a native error.
+7. **FIXED IN CURRENT MASTER:** `Stream` implements `Drop`, has one
+   high-level owner per name-addressed native stream, and provides consuming
+   `Stream::remove` for observable cleanup errors. `StreamSnapshot` captures
+   current values and units. Destructor cleanup remains necessarily
+   best-effort because Rust `Drop` cannot return a native error.
 8. The cache/parse layers use the data-manipulation surface with fixed
    assumptions and several `unwrap()`/`todo!()` paths.  They should remain
    classified as experimental until their ASCII-file/model preconditions and
@@ -673,8 +682,10 @@ of comprehensive native coverage.
 2. Add capability/symbol detection for the older Linux/i386 binary, then
    decide its supported minimum ChemApp version.  Obtain a real Unix64 binary
    before claiming Unix64 support.
-3. Design an aggregate `tqgetr` API separately when signed selectors and
-   array-returning modes are required; do not alter the scalar ABI.
+3. Consider an aggregate `tqgetr` API separately only when signed selectors
+   and array-returning modes have a concrete use case; do not alter the
+   verified scalar ABI.
 
-The recommended next production milestone is the **signed-selector and
-scalar/array TQGETR API**, without altering the verified scalar ABI.
+No specific aggregate-TQGETR milestone is mandatory. The next production task
+should be selected from demonstrated project needs without weakening the
+verified scalar boundary.

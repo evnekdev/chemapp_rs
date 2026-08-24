@@ -25,6 +25,15 @@ pub enum ChemAppError{
 		primary: Box<ChemAppError>,
 		cleanup: Box<ChemAppError>,
 	},
+	/// Both bounded attempts of a stateful high-level protocol failed.
+	///
+	/// `alternate` is the final native failure, while `preferred` preserves the
+	/// reason that the retry had to be attempted.
+	RetryError {
+		operation: String,
+		preferred: Box<ChemAppError>,
+		alternate: Box<ChemAppError>,
+	},
 	OtherError(String),
 	CustomError(String),
 }
@@ -45,6 +54,14 @@ impl ChemAppError {
 					operation,
 					primary.description(),
 					cleanup.description()
+				);
+			}
+			Self::RetryError { operation, preferred, alternate } => {
+				return format!(
+					"{} failed in both bounded orderings: preferred ordering: {}; alternate ordering: {}",
+					operation,
+					preferred.description(),
+					alternate.description()
 				);
 			}
 			Self::OtherError(desc) => {return format!("{}", &desc);}

@@ -179,3 +179,12 @@ must create an owned snapshot before the next native call. Use
 TQBOND requires model dispatch before enumeration: `SUBG` is a quadruplet,
 `QUAS`/`QSOL` are pairs, and other models are not applicable. Keep local
 sublattice identity separate from SUBG's combined native index encoding.
+
+## 15. Keep high-level stream ownership singular
+
+ChemApp creates and removes streams by their identifier. The inspected manual
+does not define duplicate `TQSTTP` identifier behavior, so a high-level
+`Calculator` must not create two independently owning `Stream` values for the
+same name. Use one live owner, `Stream::remove(self)` when cleanup errors must
+be observed, and regard `Drop` as a best-effort fallback. An owned
+`StreamSnapshot` remains valid after stream removal.
