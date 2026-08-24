@@ -38,11 +38,13 @@ type ChemAppInt = i32;
 #[cfg(target_family = "windows")]
 type ChemAppWindowsLength = usize;
 
-/// UNIX/i386 Fortran CHARACTER length (`ftnlen`) from the checked GTT bridge.
-/// Its `usize` representation is layout-correct for the checked 32-bit SO;
-/// Unix64 has no checked binary, so this is not a Unix64 verification claim.
+/// UNIX Fortran CHARACTER length (`ftnlen`) from the checked GTT transition
+/// source. It is a signed 32-bit `long` on checked UNIX/i386 and a signed
+/// 32-bit `int` in the UNIX/x86-64 source branch. Unix64 has no checked
+/// ChemApp binary, so this representation is source evidence, not runtime
+/// verification.
 #[cfg(target_family = "unix")]
-type ChemAppUnixLength = usize;
+type ChemAppUnixLength = i32;
 
 /// Raw by-value Fortran CHARACTER length for the target-specific ABI branch.
 /// This is intentionally distinct from [`ChemAppInt`].
@@ -51,6 +53,18 @@ type ChemAppLen = ChemAppWindowsLength;
 
 #[cfg(target_family = "unix")]
 type ChemAppLen = ChemAppUnixLength;
+
+// Rust buffer capacity is intentionally kept as `usize` above. These values
+// are the corresponding raw Fortran declarations and must cross FFI as the
+// target-specific `ChemAppLen` type.
+const NAME_NATIVE_CHARACTER_LENGTH: ChemAppLen = 25;
+const TQGTID_NATIVE_CHARACTER_LENGTH: ChemAppLen = 255;
+const TQGTNM_NATIVE_CHARACTER_LENGTH: ChemAppLen = 80;
+const TQGTRH_PROGRAM_NAME_NATIVE_LENGTH: ChemAppLen = 40;
+const TQGTRH_USER_ID_NATIVE_LENGTH: ChemAppLen = 255;
+const TQGTRH_TEXT_NATIVE_LENGTH: ChemAppLen = 80;
+const TQERR_NATIVE_RECORD_LENGTH: ChemAppLen = 80;
+const TQLPAR_NATIVE_RECORD_LENGTH: ChemAppLen = 156;
 
 /*********************************************************************************************************************************************************************************************************/
 /*********************************************************************************************************************************************************************************************************/
@@ -114,9 +128,38 @@ fn tqerr_message(buffer: &[u8]) -> Result<String, ChemAppError> {
 	return Ok(records.join("\n"));
 }
 
-fn cstring_character_length(cstring: &CString) -> usize {
-	// CString::as_bytes deliberately excludes the trailing NUL.
-	return cstring.as_bytes().len();
+/// Converts an arbitrary Rust byte count into a checked signed 32-bit
+/// Fortran `ftnlen`. This is kept separate so Unix overflow behavior is
+/// testable on every host.
+#[cfg(any(target_family = "unix", test))]
+fn usize_to_i32_character_length(value: usize) -> Result<i32, ChemAppError> {
+	i32::try_from(value).map_err(|_| {
+		ChemAppError::OtherError(format!(
+			"Fortran CHARACTER length cannot represent Rust byte length {value}"
+		))
+	})
+}
+
+/// Converts a Rust byte count to the raw target-specific Fortran CHARACTER
+/// length type. Windows `LNT` follows `size_t`; UNIX `ftnlen` is a signed
+/// 32-bit value in the checked GTT transition source.
+#[cfg(target_family = "windows")]
+fn usize_to_chemapp_character_length(value: usize) -> Result<ChemAppLen, ChemAppError> {
+	Ok(value)
+}
+
+#[cfg(target_family = "unix")]
+fn usize_to_chemapp_character_length(value: usize) -> Result<ChemAppLen, ChemAppError> {
+	usize_to_i32_character_length(value)
+}
+
+/// Obtains one raw input CHARACTER pointer and its matching declared length.
+/// `CString` owns a trailing NUL even when its byte slice is empty, so the
+/// pointer is valid for a zero-length Fortran CHARACTER argument. The NUL is
+/// not included in the native length.
+fn cstring_character_input(cstring: &CString) -> Result<(*const u8, ChemAppLen), ChemAppError> {
+	let length = usize_to_chemapp_character_length(cstring.as_bytes().len())?;
+	Ok((cstring.as_ptr().cast::<u8>(), length))
 }
 
 /// Converts a public non-negative Rust index/count to the signed native ABI
@@ -307,13 +350,13 @@ impl Engine {
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(cstring: &mut u8, length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], TQGTID_CHARACTER_LENGTH, &mut errcode);
+			func(&mut cstring[0], TQGTID_NATIVE_CHARACTER_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(cstring: &mut u8, errcode: &mut ChemAppInt, length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], &mut errcode, TQGTID_CHARACTER_LENGTH);
+			func(&mut cstring[0], &mut errcode, TQGTID_NATIVE_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
 		return wrap_result(fixed_fortran_string(&cstring, TQGTID_CHARACTER_LENGTH)?, errcode);
@@ -330,13 +373,13 @@ impl Engine {
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(cstring: &mut u8, length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], TQGTNM_CHARACTER_LENGTH, &mut errcode);
+			func(&mut cstring[0], TQGTNM_NATIVE_CHARACTER_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(cstring: &mut u8, errcode: &mut ChemAppInt, length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], &mut errcode, TQGTNM_CHARACTER_LENGTH);
+			func(&mut cstring[0], &mut errcode, TQGTNM_NATIVE_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
 		return wrap_result(fixed_fortran_string(&cstring, TQGTNM_CHARACTER_LENGTH)?, errcode);
@@ -353,13 +396,13 @@ impl Engine {
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(cstring: &mut u8, length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], NAME_LENGTH_MAX, &mut errcode);
+			func(&mut cstring[0], NAME_NATIVE_CHARACTER_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(cstring: &mut u8, errcode: &mut ChemAppInt, length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], &mut errcode, NAME_LENGTH_MAX);
+			func(&mut cstring[0], &mut errcode, NAME_NATIVE_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
 		return wrap_result(fixed_fortran_string(&cstring, NAME_LENGTH_MAX)?, errcode);
@@ -377,13 +420,13 @@ impl Engine {
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(cstring: &mut u8, length: ChemAppLen, hid: &mut ChemAppInt, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], NAME_LENGTH_MAX, &mut hid, &mut errcode);
+			func(&mut cstring[0], NAME_NATIVE_CHARACTER_LENGTH, &mut hid, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(cstring: &mut u8, hid: &mut ChemAppInt, errcode: &mut ChemAppInt, length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], &mut hid, &mut errcode, NAME_LENGTH_MAX);
+			func(&mut cstring[0], &mut hid, &mut errcode, NAME_NATIVE_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
 		return wrap_result((fixed_fortran_string(&cstring, NAME_LENGTH_MAX)?,hid), errcode);
@@ -421,20 +464,20 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(valuea, valueb, valuec);
 		let coption : CString = CString::new(option)?;
-		let coption_length = option.len();
+		let coption_length = cstring_character_input(&coption)?.1;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(coption: &u8, coption_length: ChemAppLen, valuea: &ChemAppInt, valueb: &ChemAppInt, valuec: &ChemAppInt, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(coption: *const u8, coption_length: ChemAppLen, valuea: &ChemAppInt, valueb: &ChemAppInt, valuec: &ChemAppInt, errcode: &mut ChemAppInt)->()>
 			= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], coption_length, &valuea, &valueb, &valuec, &mut errcode);
+			func(cstring_character_input(&coption)?.0, coption_length, &valuea, &valueb, &valuec, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(coption: &u8, valuea: &ChemAppInt, valueb: &ChemAppInt, valuec: &ChemAppInt, errcode: &mut ChemAppInt, coption_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &valuea, &valueb, &valuec, &mut errcode, coption_length);
+			let func: Symbol<extern "C" fn(coption: *const u8, valuea: &ChemAppInt, valueb: &ChemAppInt, valuec: &ChemAppInt, errcode: &mut ChemAppInt, coption_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &valuea, &valueb, &valuec, &mut errcode, coption_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -499,15 +542,15 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func : Symbol<extern "system" fn(option: &u8, option_len: ChemAppLen, num: &mut ChemAppInt, errcode: &mut ChemAppInt)->()>
+			let func : Symbol<extern "system" fn(option: *const u8, option_len: ChemAppLen, num: &mut ChemAppInt, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option.len(), &mut num, &mut errcode);
+			func(cstring_character_input(&coption)?.0, cstring_character_input(&coption)?.1, &mut num, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, num: &mut ChemAppInt, errcode: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &mut num, &mut errcode, option.len());
+			let func: Symbol<extern "C" fn(option: *const u8, num: &mut ChemAppInt, errcode: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &mut num, &mut errcode, cstring_character_input(&coption)?.1);
 		}
 		/******************************************************************************************************/
 		return wrap_nonnegative_result(num, errcode);
@@ -524,15 +567,15 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_len: ChemAppLen, unit: &ChemAppInt, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_len: ChemAppLen, unit: &ChemAppInt, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option.len(), &unit, &mut errcode);
+			func(cstring_character_input(&coption)?.0, cstring_character_input(&coption)?.1, &unit, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, unit: &ChemAppInt, errcode: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &unit, &mut errcode, option.len());
+			let func: Symbol<extern "C" fn(option: *const u8, unit: &ChemAppInt, errcode: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &unit, &mut errcode, cstring_character_input(&coption)?.1);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -614,20 +657,20 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(unit);
 		let cfilename: CString = CString::new(filename)?;
-		let cfilename_length = filename.len();
+		let cfilename_length = cstring_character_input(&cfilename)?.1;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(cfilename: &u8, filename_length: ChemAppLen, unit: &ChemAppInt, errcode: &mut ChemAppInt)>
+			let func: Symbol<extern "system" fn(cfilename: *const u8, filename_length: ChemAppLen, unit: &ChemAppInt, errcode: &mut ChemAppInt)>
 			= self.library.get(fname.as_bytes())?;
-			func(&cfilename.as_bytes()[0], cfilename_length, &unit, &mut errcode);
+			func(cstring_character_input(&cfilename)?.0, cfilename_length, &unit, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(cfilename: &u8, unit: &ChemAppInt, errcode: &mut ChemAppInt, filename_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&cfilename.as_bytes()[0], &unit, &mut errcode, cfilename_length);
+			let func: Symbol<extern "C" fn(cfilename: *const u8, unit: &ChemAppInt, errcode: &mut ChemAppInt, filename_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cfilename)?.0, &unit, &mut errcode, cfilename_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -644,15 +687,15 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_len: ChemAppLen, text: &u8, text_len: ChemAppLen, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_len: ChemAppLen, text: *const u8, text_len: ChemAppLen, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option.len(), &ctext.as_bytes()[0], text.len(), &mut errcode);
+			func(cstring_character_input(&coption)?.0, cstring_character_input(&coption)?.1, cstring_character_input(&ctext)?.0, cstring_character_input(&ctext)?.1, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, text: &u8, errcode: &mut ChemAppInt, option_len: ChemAppLen, text_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &ctext.as_bytes()[0], &mut errcode, option.len(), text.len());
+			let func: Symbol<extern "C" fn(option: *const u8, text: *const u8, errcode: &mut ChemAppInt, option_len: ChemAppLen, text_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, cstring_character_input(&ctext)?.0, &mut errcode, cstring_character_input(&coption)?.1, cstring_character_input(&ctext)?.1);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -665,20 +708,20 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(unit);
 		let cname: CString = CString::new(name)?;
-		let cname_length = name.len();
+		let cname_length = cstring_character_input(&cname)?.1;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(cname: &u8, cfilename_length: ChemAppLen, unit: &ChemAppInt, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(cname: *const u8, cfilename_length: ChemAppLen, unit: &ChemAppInt, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&cname.as_bytes()[0], cname_length, &unit, &mut errcode);
+			func(cstring_character_input(&cname)?.0, cname_length, &unit, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(cname: &u8, unit: &ChemAppInt, errcode: &mut ChemAppInt, cfilename_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&cname.as_bytes()[0], &unit, &mut errcode, cname_length);
+			let func: Symbol<extern "C" fn(cname: *const u8, unit: &ChemAppInt, errcode: &mut ChemAppInt, cfilename_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cname)?.0, &unit, &mut errcode, cname_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -691,20 +734,20 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(unit);
 		let cname: CString = CString::new(name)?;
-		let cname_length = name.len();
+		let cname_length = cstring_character_input(&cname)?.1;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(cname: &u8, cname_length: ChemAppLen, unit: &ChemAppInt, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(cname: *const u8, cname_length: ChemAppLen, unit: &ChemAppInt, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&cname.as_bytes()[0], cname_length, &unit, &mut errcode);
+			func(cstring_character_input(&cname)?.0, cname_length, &unit, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(cname: &u8, unit: &ChemAppInt, errcode: &mut ChemAppInt, cname_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&cname.as_bytes()[0], &unit, &mut errcode, cname_length);
+			let func: Symbol<extern "C" fn(cname: *const u8, unit: &ChemAppInt, errcode: &mut ChemAppInt, cname_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cname)?.0, &unit, &mut errcode, cname_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -717,20 +760,20 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(unit);
 		let cname: CString = CString::new(name)?;
-		let cname_length = name.len();
+		let cname_length = cstring_character_input(&cname)?.1;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(cname: &u8, cname_length: ChemAppLen, unit: &ChemAppInt, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(cname: *const u8, cname_length: ChemAppLen, unit: &ChemAppInt, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&cname.as_bytes()[0], cname_length, &unit, &mut errcode);
+			func(cstring_character_input(&cname)?.0, cname_length, &unit, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(cname: &u8, unit: &ChemAppInt, errcode: &mut ChemAppInt, cname_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&cname.as_bytes()[0], &unit, &mut errcode, cname_length);
+			let func: Symbol<extern "C" fn(cname: *const u8, unit: &ChemAppInt, errcode: &mut ChemAppInt, cname_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cname)?.0, &unit, &mut errcode, cname_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -779,13 +822,13 @@ impl Engine {
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(&mut ChemAppInt, &mut u8, ChemAppLen, &mut ChemAppInt, &mut u8, ChemAppLen, &mut ChemAppInt, &mut ChemAppInt, &mut ChemAppInt, &mut u8, ChemAppLen, &mut u8, ChemAppLen, &mut u8, ChemAppLen, &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cver, &mut cnwp[0], TQGTRH_PROGRAM_NAME_LENGTH, &mut cvnw[0], &mut cnrp[0], TQGTRH_PROGRAM_NAME_LENGTH, &mut cvnr[0], &mut cdtc[0], &mut cdte[0], &mut cid[0], TQGTRH_USER_ID_LENGTH, &mut cusr[0], TQGTRH_TEXT_LENGTH, &mut crem[0], TQGTRH_TEXT_LENGTH, &mut errcode);
+			func(&mut cver, &mut cnwp[0], TQGTRH_PROGRAM_NAME_NATIVE_LENGTH, &mut cvnw[0], &mut cnrp[0], TQGTRH_PROGRAM_NAME_NATIVE_LENGTH, &mut cvnr[0], &mut cdtc[0], &mut cdte[0], &mut cid[0], TQGTRH_USER_ID_NATIVE_LENGTH, &mut cusr[0], TQGTRH_TEXT_NATIVE_LENGTH, &mut crem[0], TQGTRH_TEXT_NATIVE_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(&mut ChemAppInt, &mut u8, &mut ChemAppInt, &mut u8, &mut ChemAppInt, &mut ChemAppInt, &mut ChemAppInt, &mut u8, &mut u8, &mut u8, &mut ChemAppInt, ChemAppLen, ChemAppLen, ChemAppLen, ChemAppLen, ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cver, &mut cnwp[0], &mut cvnw[0], &mut cnrp[0], &mut cvnr[0], &mut cdtc[0], &mut cdte[0], &mut cid[0], &mut cusr[0], &mut crem[0], &mut errcode, TQGTRH_PROGRAM_NAME_LENGTH, TQGTRH_PROGRAM_NAME_LENGTH, TQGTRH_USER_ID_LENGTH, TQGTRH_TEXT_LENGTH, TQGTRH_TEXT_LENGTH);
+			func(&mut cver, &mut cnwp[0], &mut cvnw[0], &mut cnrp[0], &mut cvnr[0], &mut cdtc[0], &mut cdte[0], &mut cid[0], &mut cusr[0], &mut crem[0], &mut errcode, TQGTRH_PROGRAM_NAME_NATIVE_LENGTH, TQGTRH_PROGRAM_NAME_NATIVE_LENGTH, TQGTRH_USER_ID_NATIVE_LENGTH, TQGTRH_TEXT_NATIVE_LENGTH, TQGTRH_TEXT_NATIVE_LENGTH);
 		}
 		/******************************************************************************************************/
 		let header : TransparentHeader = TransparentHeader {
@@ -811,21 +854,21 @@ impl Engine {
 		let coption: CString = CString::new(option)?;
 		// CString::as_bytes excludes the terminating NUL and therefore matches
 		// the C bridge's strlen(OPTION), including for an empty option.
-		let option_length = cstring_character_length(&coption);
+		let option_length = cstring_character_input(&coption)?.1;
 		let mut cunit: [u8; NAME_LENGTH_MAX] = [0;NAME_LENGTH_MAX];
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_length: ChemAppLen, unit: &mut u8, unit_length: ChemAppLen, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_length: ChemAppLen, unit: &mut u8, unit_length: ChemAppLen, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option_length, &mut cunit[0], NAME_LENGTH_MAX, &mut errcode);
+			func(cstring_character_input(&coption)?.0, option_length, &mut cunit[0], NAME_NATIVE_CHARACTER_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, unit: &mut u8, errcode: &mut ChemAppInt, option_length: ChemAppLen, unit_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &mut cunit[0], &mut errcode, option_length, NAME_LENGTH_MAX);
+			let func: Symbol<extern "C" fn(option: *const u8, unit: &mut u8, errcode: &mut ChemAppInt, option_length: ChemAppLen, unit_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &mut cunit[0], &mut errcode, option_length, NAME_NATIVE_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
 		return wrap_result(fixed_fortran_string(&cunit, NAME_LENGTH_MAX)?, errcode);
@@ -838,21 +881,21 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let coption: CString = CString::new(option)?;
 		let cunit:   CString = CString::new(unit)?;
-		let option_length = option.len();
-		let unit_length = unit.len();
+		let option_length = cstring_character_input(&coption)?.1;
+		let unit_length = cstring_character_input(&cunit)?.1;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_length: ChemAppLen, unit: &u8, unit_length: ChemAppLen, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_length: ChemAppLen, unit: *const u8, unit_length: ChemAppLen, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option_length, &cunit.as_bytes()[0], unit_length, &mut errcode);
+			func(cstring_character_input(&coption)?.0, option_length, cstring_character_input(&cunit)?.0, unit_length, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, unit: &u8, errcode: &mut ChemAppInt, option_length: ChemAppLen, unit_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &cunit.as_bytes()[0], &mut errcode, option_length, unit_length);
+			let func: Symbol<extern "C" fn(option: *const u8, unit: *const u8, errcode: &mut ChemAppInt, option_length: ChemAppLen, unit_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, cstring_character_input(&cunit)?.0, &mut errcode, option_length, unit_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -864,21 +907,21 @@ impl Engine {
 	pub fn tqinsc(&self, name: &str) -> Result<usize, ChemAppError>{
 		let fname = func_alias(function_name!());
 		let cname: CString = CString::new(name)?;
-		let name_length = name.len();
+		let name_length = cstring_character_input(&cname)?.1;
 		let mut indexs = 0;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(name: &u8, name_length: ChemAppLen, indexs: &mut ChemAppInt, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(name: *const u8, name_length: ChemAppLen, indexs: &mut ChemAppInt, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&cname.as_bytes()[0], name_length, &mut indexs, &mut errcode);
+			func(cstring_character_input(&cname)?.0, name_length, &mut indexs, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(name: &u8, indexs: &mut ChemAppInt, errcode: &mut ChemAppInt, name_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&cname.as_bytes()[0], &mut indexs, &mut errcode, name_length);
+			let func: Symbol<extern "C" fn(name: *const u8, indexs: &mut ChemAppInt, errcode: &mut ChemAppInt, name_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cname)?.0, &mut indexs, &mut errcode, name_length);
 		}
 		/******************************************************************************************************/
 		return wrap_nonnegative_result(indexs, errcode);
@@ -897,13 +940,13 @@ impl Engine {
 		unsafe {
 			let func: Symbol<extern "system" fn(indexs: &ChemAppInt, name: &mut u8, name_length: ChemAppLen, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&indexs, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
+			func(&indexs, &mut cname[0], NAME_NATIVE_CHARACTER_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(indexs: &ChemAppInt, name: &mut u8, errcode: &mut ChemAppInt, name_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexs, &mut cname[0], &mut errcode, NAME_LENGTH_MAX);
+			func(&indexs, &mut cname[0], &mut errcode, NAME_NATIVE_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
 		return wrap_result(fixed_fortran_string(&cname, NAME_LENGTH_MAX)?, errcode);
@@ -916,20 +959,20 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(indexs);
 		let cname: CString = CString::new(name)?;
-		let name_length = name.len();
+		let name_length = cstring_character_input(&cname)?.1;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexs: &ChemAppInt, name: &u8, name_length: ChemAppLen, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(indexs: &ChemAppInt, name: *const u8, name_length: ChemAppLen, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&indexs, &cname.as_bytes()[0], name_length, &mut errcode);
+			func(&indexs, cstring_character_input(&cname)?.0, name_length, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(indexs: &ChemAppInt, name: &u8, errcode: &mut ChemAppInt, name_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexs, &cname.as_bytes()[0], &mut errcode, name_length);
+			let func: Symbol<extern "C" fn(indexs: &ChemAppInt, name: *const u8, errcode: &mut ChemAppInt, name_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(&indexs, cstring_character_input(&cname)?.0, &mut errcode, name_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -991,6 +1034,7 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let nsyscom = self.tqnosc()?;
 		let length: usize = 24;
+		let character_length = usize_to_chemapp_character_length(length)?;
 		let mut namememory : Vec::<u8> = vec![32; (nsyscom+1)*length];
 		let mut cname: CString;
 		let mut cbytes: &[u8];
@@ -1014,14 +1058,14 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(names: &u8, names_length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&namememory[0], length, &mut errcode);
+			let func: Symbol<extern "system" fn(names: *const u8, names_length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
+			func(namememory.as_ptr(), character_length, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(names: &u8, errcode: &mut ChemAppInt, names_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&namememory[0], &mut errcode, length);
+			let func: Symbol<extern "C" fn(names: *const u8, errcode: &mut ChemAppInt, names_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(namememory.as_ptr(), &mut errcode, character_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -1033,20 +1077,20 @@ impl Engine {
 	pub fn tqinp(&self, name: &str) -> Result<usize,ChemAppError>{
 		let fname = func_alias(function_name!());
 		let cname: CString = CString::new(name)?;
-		let cname_length = name.len();
+		let cname_length = cstring_character_input(&cname)?.1;
 		let mut indexp  = 0;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(cname: &u8, cname_length: ChemAppLen, indexp: &mut ChemAppInt, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&cname.as_bytes()[0], cname_length, &mut indexp, &mut errcode);
+			let func: Symbol<extern "system" fn(cname: *const u8, cname_length: ChemAppLen, indexp: &mut ChemAppInt, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cname)?.0, cname_length, &mut indexp, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(cname: &u8, indexp: &mut ChemAppInt, errcode: &mut ChemAppInt, cname_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&cname.as_bytes()[0], &mut indexp, &mut errcode, cname_length);
+			let func: Symbol<extern "C" fn(cname: *const u8, indexp: &mut ChemAppInt, errcode: &mut ChemAppInt, cname_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cname)?.0, &mut indexp, &mut errcode, cname_length);
 		}
 		/******************************************************************************************************/
 		return wrap_nonnegative_result(indexp, errcode);
@@ -1064,13 +1108,13 @@ impl Engine {
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(indexp: &ChemAppInt, cname: &mut u8, cname_length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
+			func(&indexp, &mut cname[0], NAME_NATIVE_CHARACTER_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, cname: &mut u8, errcode: &mut ChemAppInt, cname_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &mut cname[0], &mut errcode, NAME_LENGTH_MAX);
+			func(&indexp, &mut cname[0], &mut errcode, NAME_NATIVE_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
 		return wrap_result(fixed_fortran_string(&cname, NAME_LENGTH_MAX)?, errcode);
@@ -1088,13 +1132,13 @@ impl Engine {
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(indexp: &ChemAppInt, cname: &mut u8, cname_length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
+			func(&indexp, &mut cname[0], NAME_NATIVE_CHARACTER_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, cname: &mut u8, errcode: &mut ChemAppInt, cname_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &mut cname[0], &mut errcode, NAME_LENGTH_MAX);
+			func(&indexp, &mut cname[0], &mut errcode, NAME_NATIVE_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
 		return wrap_result(fixed_fortran_string(&cname, NAME_LENGTH_MAX)?, errcode);
@@ -1132,19 +1176,19 @@ impl Engine {
 		let mut indexc  = 0;
 		let mut errcode = 0;
 		let cname : CString = CString::new(name)?;
-		let cname_length = name.len();
+		let cname_length = cstring_character_input(&cname)?.1;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(cname: &u8, name_length: ChemAppLen, indexp: &ChemAppInt, indexc: &mut ChemAppInt, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(cname: *const u8, name_length: ChemAppLen, indexp: &ChemAppInt, indexc: &mut ChemAppInt, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&cname.as_bytes()[0], cname_length, &indexp, &mut indexc, &mut errcode);
+			func(cstring_character_input(&cname)?.0, cname_length, &indexp, &mut indexc, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(cname: &u8, indexp: &ChemAppInt, indexc: &mut ChemAppInt, errcode: &mut ChemAppInt, name_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&cname.as_bytes()[0], &indexp, &mut indexc, &mut errcode, cname_length);
+			let func: Symbol<extern "C" fn(cname: *const u8, indexp: &ChemAppInt, indexc: &mut ChemAppInt, errcode: &mut ChemAppInt, name_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cname)?.0, &indexp, &mut indexc, &mut errcode, cname_length);
 		}
 		/******************************************************************************************************/
 		return wrap_nonnegative_result(indexc, errcode);
@@ -1163,13 +1207,13 @@ impl Engine {
 		unsafe {
 			let func: Symbol<extern "system" fn(indexp: &ChemAppInt, indexc: &ChemAppInt, cname: &mut u8, cname_length: ChemAppLen, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&indexp, &indexc, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
+			func(&indexp, &indexc, &mut cname[0], NAME_NATIVE_CHARACTER_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, indexc: &ChemAppInt, cname: &mut u8, errcode: &mut ChemAppInt, cname_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &indexc, &mut cname[0], &mut errcode, NAME_LENGTH_MAX);
+			func(&indexp, &indexc, &mut cname[0], &mut errcode, NAME_NATIVE_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
 		return wrap_result(fixed_fortran_string(&cname, NAME_LENGTH_MAX)?, errcode);
@@ -1289,15 +1333,15 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(name: &u8, name_len: ChemAppLen, indexp: &ChemAppInt, indexl: &ChemAppInt, indexc: &mut ChemAppInt, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(name: *const u8, name_len: ChemAppLen, indexp: &ChemAppInt, indexl: &ChemAppInt, indexc: &mut ChemAppInt, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&cname.as_bytes()[0], name.len(), &indexp, &indexl, &mut indexc, &mut errcode);
+			func(cstring_character_input(&cname)?.0, cstring_character_input(&cname)?.1, &indexp, &indexl, &mut indexc, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(name: &u8, indexp: &ChemAppInt, indexl: &ChemAppInt, indexc: &mut ChemAppInt, errcode: &mut ChemAppInt, name_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&cname.as_bytes()[0], &indexp, &indexl, &mut indexc, &mut errcode, name.len());
+			let func: Symbol<extern "C" fn(name: *const u8, indexp: &ChemAppInt, indexl: &ChemAppInt, indexc: &mut ChemAppInt, errcode: &mut ChemAppInt, name_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cname)?.0, &indexp, &indexl, &mut indexc, &mut errcode, cstring_character_input(&cname)?.1);
 		}
 		/******************************************************************************************************/
 		return wrap_nonnegative_result(indexc, errcode);
@@ -1315,13 +1359,13 @@ impl Engine {
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(indexp: &ChemAppInt, indexl: &ChemAppInt, indexc: &ChemAppInt, cname: &mut u8, cname_length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &indexl, &indexc, &mut cname[0], NAME_LENGTH_MAX, &mut errcode);
+			func(&indexp, &indexl, &indexc, &mut cname[0], NAME_NATIVE_CHARACTER_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, indexl: &ChemAppInt, indexc: &ChemAppInt, cname: &mut u8, errcode: &mut ChemAppInt, cname_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &indexl, &indexc, &mut cname[0], &mut errcode, NAME_LENGTH_MAX);
+			func(&indexp, &indexl, &indexc, &mut cname[0], &mut errcode, NAME_NATIVE_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
 		return wrap_result(fixed_fortran_string(&cname, NAME_LENGTH_MAX)?, errcode);
@@ -1388,13 +1432,13 @@ impl Engine {
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(indexp: &ChemAppInt, cstatus: &mut u8, cstatus_length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &mut cstatus[0], NAME_LENGTH_MAX, &mut errcode);
+			func(&indexp, &mut cstatus[0], NAME_NATIVE_CHARACTER_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, cstatus: &mut u8, errcode: &mut ChemAppInt, cstatus_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &mut cstatus[0], &mut errcode, NAME_LENGTH_MAX);
+			func(&indexp, &mut cstatus[0], &mut errcode, NAME_NATIVE_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
 		return wrap_result(fixed_fortran_string(&cstatus, NAME_LENGTH_MAX)?, errcode);
@@ -1407,19 +1451,19 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(indexp);
 		let cstatus: CString = CString::new(status)?;
-		let cstatus_length = status.len();
+		let cstatus_length = cstring_character_input(&cstatus)?.1;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexp: &ChemAppInt, cstatus: &u8, cstatus_length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &cstatus.as_bytes()[0], cstatus_length, &mut errcode);
+			let func: Symbol<extern "system" fn(indexp: &ChemAppInt, cstatus: *const u8, cstatus_length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
+			func(&indexp, cstring_character_input(&cstatus)?.0, cstatus_length, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, cstatus: &u8, errcode: &mut ChemAppInt, cstatus_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &cstatus.as_bytes()[0], &mut errcode, cstatus_length);
+			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, cstatus: *const u8, errcode: &mut ChemAppInt, cstatus_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(&indexp, cstring_character_input(&cstatus)?.0, &mut errcode, cstatus_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -1439,13 +1483,13 @@ impl Engine {
 			// TQGSPC writes the fixed-width status buffer; express that write in
 			// the Rust FFI type even though pointer representation is unchanged.
 			let func: Symbol<extern "system" fn(indexp: &ChemAppInt, indexc: &ChemAppInt, cstatus: &mut u8, cstatus_length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &indexc, &mut cstatus[0], NAME_LENGTH_MAX, &mut errcode);
+			func(&indexp, &indexc, &mut cstatus[0], NAME_NATIVE_CHARACTER_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, indexc: &ChemAppInt, cstatus: &mut u8, errcode: &mut ChemAppInt, cstatus_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &indexc, &mut cstatus[0], &mut errcode, NAME_LENGTH_MAX);
+			func(&indexp, &indexc, &mut cstatus[0], &mut errcode, NAME_NATIVE_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
 		return wrap_result(fixed_fortran_string(&cstatus, NAME_LENGTH_MAX)?, errcode);
@@ -1458,19 +1502,19 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(indexp, indexc);
 		let cstatus: CString = CString::new(status)?;
-		let cstatus_length = status.len();
+		let cstatus_length = cstring_character_input(&cstatus)?.1;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexp: &ChemAppInt, indexc: &ChemAppInt, status: &u8, status_length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &indexc, &cstatus.as_bytes()[0], cstatus_length, &mut errcode);
+			let func: Symbol<extern "system" fn(indexp: &ChemAppInt, indexc: &ChemAppInt, status: *const u8, status_length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
+			func(&indexp, &indexc, cstring_character_input(&cstatus)?.0, cstatus_length, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, indexc: &ChemAppInt, status: &u8, errcode: &mut ChemAppInt, status_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &indexc, &cstatus.as_bytes()[0], &mut errcode, cstatus_length);
+			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, indexc: &ChemAppInt, status: *const u8, errcode: &mut ChemAppInt, status_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(&indexp, &indexc, cstring_character_input(&cstatus)?.0, &mut errcode, cstatus_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -1483,21 +1527,21 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(indexp, indexc);
 		let coption: CString = CString::new(option)?;
-		let option_length = option.len();
+		let option_length = cstring_character_input(&coption)?.1;
 		let mut numcon  = 0;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_length: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, val: &f64, numcon: &mut ChemAppInt, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_length: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, val: &f64, numcon: &mut ChemAppInt, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &val, &mut numcon, &mut errcode);
+			func(cstring_character_input(&coption)?.0, option_length, &indexp, &indexc, &val, &mut numcon, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, indexp: &ChemAppInt, indexc: &ChemAppInt, val: &f64, numcon: &mut ChemAppInt, errcode: &mut ChemAppInt, option_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &indexp, &indexc, &val, &mut numcon, &mut errcode, option_length);
+			let func: Symbol<extern "C" fn(option: *const u8, indexp: &ChemAppInt, indexc: &ChemAppInt, val: &f64, numcon: &mut ChemAppInt, errcode: &mut ChemAppInt, option_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &indexp, &indexc, &val, &mut numcon, &mut errcode, option_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result(numcon, errcode);
@@ -1536,14 +1580,14 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(idents: &u8, idents_len: ChemAppLen, vals: &f64, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&cidents.as_bytes()[0], idents.len(), &vals_[0], &mut errcode);
+			let func: Symbol<extern "system" fn(idents: *const u8, idents_len: ChemAppLen, vals: &f64, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cidents)?.0, cstring_character_input(&cidents)?.1, &vals_[0], &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(idents: &u8, vals: &f64, errcode: &mut ChemAppInt, idents_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&cidents.as_bytes()[0], &vals_[0], &mut errcode, idents.len());
+			let func: Symbol<extern "C" fn(idents: *const u8, vals: &f64, errcode: &mut ChemAppInt, idents_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cidents)?.0, &vals_[0], &mut errcode, cstring_character_input(&cidents)?.1);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -1560,15 +1604,15 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(idents: &u8, idents_len: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, val: &f64, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(idents: *const u8, idents_len: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, val: &f64, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&cidents.as_bytes()[0], idents.len(), &indexp, &indexc, &val, &mut errcode);
+			func(cstring_character_input(&cidents)?.0, cstring_character_input(&cidents)?.1, &indexp, &indexc, &val, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(idents: &u8, indexp: &ChemAppInt, indexc: &ChemAppInt, val: &f64, errcode: &mut ChemAppInt, idents_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&cidents.as_bytes()[0], &indexp, &indexc, &val, &mut errcode, idents.len());
+			let func: Symbol<extern "C" fn(idents: *const u8, indexp: &ChemAppInt, indexc: &ChemAppInt, val: &f64, errcode: &mut ChemAppInt, idents_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cidents)?.0, &indexp, &indexc, &val, &mut errcode, cstring_character_input(&cidents)?.1);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -1585,15 +1629,15 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_len: ChemAppLen, indexp: &ChemAppInt, val: &f64, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_len: ChemAppLen, indexp: &ChemAppInt, val: &f64, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option.len(), &indexp, &val, &mut errcode);
+			func(cstring_character_input(&coption)?.0, cstring_character_input(&coption)?.1, &indexp, &val, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, indexp: &ChemAppInt, val: &f64, errcode: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &indexp, &val, &mut errcode, option.len());
+			let func: Symbol<extern "C" fn(option: *const u8, indexp: &ChemAppInt, val: &f64, errcode: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &indexp, &val, &mut errcode, cstring_character_input(&coption)?.1);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -1610,14 +1654,14 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(idents: &u8, idents_len: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&cidents.as_bytes()[0], idents.len(), &mut errcode);
+			let func: Symbol<extern "system" fn(idents: *const u8, idents_len: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cidents)?.0, cstring_character_input(&cidents)?.1, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(idents: &u8, errcode: &mut ChemAppInt, idents_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&cidents.as_bytes()[0], &mut errcode, idents.len());
+			let func: Symbol<extern "C" fn(idents: *const u8, errcode: &mut ChemAppInt, idents_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cidents)?.0, &mut errcode, cstring_character_input(&cidents)?.1);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -1630,21 +1674,21 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(indexp, indexc);
 		let coption: CString = CString::new(option)?;
-		let option_length = option.len();
+		let option_length = cstring_character_input(&coption)?.1;
 		let vals_ : [f64;2] = [vals.0, vals.1];
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_length: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_length: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &vals_[0], &mut errcode);
+			func(cstring_character_input(&coption)?.0, option_length, &indexp, &indexc, &vals_[0], &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt, option_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &indexp, &indexc, &vals_[0], &mut errcode, option_length);
+			let func: Symbol<extern "C" fn(option: *const u8, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt, option_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &indexp, &indexc, &vals_[0], &mut errcode, option_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -1657,21 +1701,21 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(indexp, indexc);
 		let coption: CString = CString::new(option)?;
-		let option_length = option.len();
+		let option_length = cstring_character_input(&coption)?.1;
 		let vals_ : [f64;2] = [vals.0, vals.1];
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_length: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_length: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &vals_[0], &mut errcode);
+			func(cstring_character_input(&coption)?.0, option_length, &indexp, &indexc, &vals_[0], &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt, option_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &indexp, &indexc, &vals_[0], &mut errcode, option_length);
+			let func: Symbol<extern "C" fn(option: *const u8, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt, option_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &indexp, &indexc, &vals_[0], &mut errcode, option_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -1684,21 +1728,21 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(indexp, indexc);
 		let coption: CString = CString::new(option)?;
-		let option_length = option.len();
+		let option_length = cstring_character_input(&coption)?.1;
 		let vals_ : [f64;2] = [vals.0, vals.1];
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_length: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_length: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &vals_[0], &mut errcode);
+			func(cstring_character_input(&coption)?.0, option_length, &indexp, &indexc, &vals_[0], &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt, option_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &indexp, &indexc, &vals_[0], &mut errcode, option_length);
+			let func: Symbol<extern "C" fn(option: *const u8, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt, option_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &indexp, &indexc, &vals_[0], &mut errcode, option_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -1711,21 +1755,21 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(indexp, indexc);
 		let coption: CString = CString::new(option)?;
-		let option_length = option.len();
+		let option_length = cstring_character_input(&coption)?.1;
 		let vals_ : [f64;2] = [vals.0, vals.1];
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_length: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_length: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &vals_[0], &mut errcode);
+			func(cstring_character_input(&coption)?.0, option_length, &indexp, &indexc, &vals_[0], &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt, option_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &indexp, &indexc, &vals_[0], &mut errcode, option_length);
+			let func: Symbol<extern "C" fn(option: *const u8, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, errcode: &mut ChemAppInt, option_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &indexp, &indexc, &vals_[0], &mut errcode, option_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -1744,15 +1788,15 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_len: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, icont: &mut ChemAppInt, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_len: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, icont: &mut ChemAppInt, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option.len(), &indexp, &indexc, &vals_[0], &mut icont, &mut errcode);
+			func(cstring_character_input(&coption)?.0, cstring_character_input(&coption)?.1, &indexp, &indexc, &vals_[0], &mut icont, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, icont: &mut ChemAppInt, errcode: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &indexp, &indexc, &vals_[0], &mut icont, &mut errcode, option.len());
+			let func: Symbol<extern "C" fn(option: *const u8, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, icont: &mut ChemAppInt, errcode: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &indexp, &indexc, &vals_[0], &mut icont, &mut errcode, cstring_character_input(&coption)?.1);
 		}
 		/******************************************************************************************************/
 		return wrap_nonnegative_result(icont, errcode);
@@ -1771,15 +1815,15 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_len: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, icont: &mut ChemAppInt, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_len: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, icont: &mut ChemAppInt, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option.len(), &indexp, &indexc, &vals_[0], &mut icont, &mut errcode);
+			func(cstring_character_input(&coption)?.0, cstring_character_input(&coption)?.1, &indexp, &indexc, &vals_[0], &mut icont, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, icont: &mut ChemAppInt, errcode: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &indexp, &indexc, &vals_[0], &mut icont, &mut errcode, option.len());
+			let func: Symbol<extern "C" fn(option: *const u8, indexp: &ChemAppInt, indexc: &ChemAppInt, vals: &f64, icont: &mut ChemAppInt, errcode: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &indexp, &indexc, &vals_[0], &mut icont, &mut errcode, cstring_character_input(&coption)?.1);
 		}
 		/******************************************************************************************************/
 		return wrap_nonnegative_result(icont, errcode);
@@ -1791,20 +1835,20 @@ impl Engine {
 	pub fn tqclim(&self, option: &str, val: f64) -> Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
 		let coption: CString = CString::new(option)?;
-		let option_length = option.len();
+		let option_length = cstring_character_input(&coption)?.1;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_length: ChemAppLen, val: &f64, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_length: ChemAppLen, val: &f64, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option_length, &val, &mut errcode);
+			func(cstring_character_input(&coption)?.0, option_length, &val, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, val: &f64, errcode: &mut ChemAppInt, option_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &val, &mut errcode, option_length);
+			let func: Symbol<extern "C" fn(option: *const u8, val: &f64, errcode: &mut ChemAppInt, option_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &val, &mut errcode, option_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -1839,21 +1883,21 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(indexp, indexc);
 		let coption: CString = CString::new(option)?;
-		let option_length = option.len();
+		let option_length = cstring_character_input(&coption)?.1;
 		let mut value = 0.0f64;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_length: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, value: &mut f64, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_length: ChemAppLen, indexp: &ChemAppInt, indexc: &ChemAppInt, value: &mut f64, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option_length, &indexp, &indexc, &mut value, &mut errcode);
+			func(cstring_character_input(&coption)?.0, option_length, &indexp, &indexc, &mut value, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, indexp: &ChemAppInt, indexc: &ChemAppInt, value: &mut f64, errcode: &mut ChemAppInt, option_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &indexp, &indexc, &mut value, &mut errcode, option_length);
+			let func: Symbol<extern "C" fn(option: *const u8, indexp: &ChemAppInt, indexc: &ChemAppInt, value: &mut f64, errcode: &mut ChemAppInt, option_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &indexp, &indexc, &mut value, &mut errcode, option_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result(value, errcode);
@@ -1871,15 +1915,15 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(option: &u8, option_len: ChemAppLen, indexp: &ChemAppInt, index: &ChemAppInt, fval: &mut f64, errcode: &mut ChemAppInt)->()>
+			let func: Symbol<extern "system" fn(option: *const u8, option_len: ChemAppLen, indexp: &ChemAppInt, index: &ChemAppInt, fval: &mut f64, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], option.len(), &indexp, &index, &mut fval, &mut errcode);
+			func(cstring_character_input(&coption)?.0, cstring_character_input(&coption)?.1, &indexp, &index, &mut fval, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(option: &u8, indexp: &ChemAppInt, index: &ChemAppInt, fval: &mut f64, errcode: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&coption.as_bytes()[0], &indexp, &index, &mut fval, &mut errcode, option.len());
+			let func: Symbol<extern "C" fn(option: *const u8, indexp: &ChemAppInt, index: &ChemAppInt, fval: &mut f64, errcode: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&coption)?.0, &indexp, &index, &mut fval, &mut errcode, cstring_character_input(&coption)?.1);
 		}
 		/******************************************************************************************************/
 		return wrap_result(fval, errcode);
@@ -1897,15 +1941,15 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func : Symbol<extern "system" fn(idents: &u8, idents_len: ChemAppLen, option: &u8, option_len: ChemAppLen, fval: &mut f64, errcode: &mut ChemAppInt)->()>
+			let func : Symbol<extern "system" fn(idents: *const u8, idents_len: ChemAppLen, option: *const u8, option_len: ChemAppLen, fval: &mut f64, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&cidents.as_bytes()[0], idents.len(), &coption.as_bytes()[0], option.len(), &mut fval, &mut errcode);
+			func(cstring_character_input(&cidents)?.0, cstring_character_input(&cidents)?.1, cstring_character_input(&coption)?.0, cstring_character_input(&coption)?.1, &mut fval, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(idents: &u8, option: &u8, fval: &mut f64, errcode: &mut ChemAppInt, idents_len: ChemAppLen, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&cidents.as_bytes()[0], &coption.as_bytes()[0], &mut fval, &mut errcode, idents.len(), option.len());
+			let func: Symbol<extern "C" fn(idents: *const u8, option: *const u8, fval: &mut f64, errcode: &mut ChemAppInt, idents_len: ChemAppLen, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cidents)?.0, cstring_character_input(&coption)?.0, &mut fval, &mut errcode, cstring_character_input(&cidents)?.1, cstring_character_input(&coption)?.1);
 		}
 		/******************************************************************************************************/
 		return wrap_result(fval, errcode);
@@ -1974,13 +2018,13 @@ impl Engine {
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(message: &mut u8, message_len: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cmess[0], TQERR_RECORD_LENGTH, &mut errcode);
+			func(&mut cmess[0], TQERR_NATIVE_RECORD_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(message: &mut u8, errcode: &mut ChemAppInt, message_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cmess[0], &mut errcode, TQERR_RECORD_LENGTH);
+			func(&mut cmess[0], &mut errcode, TQERR_NATIVE_RECORD_LENGTH);
 		}
 		/******************************************************************************************************/
 		return wrap_result(tqerr_message(&cmess)?, errcode);
@@ -1999,15 +2043,15 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func : Symbol<extern "system" fn(indexp: &ChemAppInt, indexc: &ChemAppInt, option: &u8, option_len: ChemAppLen, indexr: &ChemAppInt, nfval: &mut ChemAppInt, fval: &mut f64, errcode: &mut ChemAppInt)->()>
+			let func : Symbol<extern "system" fn(indexp: &ChemAppInt, indexc: &ChemAppInt, option: *const u8, option_len: ChemAppLen, indexr: &ChemAppInt, nfval: &mut ChemAppInt, fval: &mut f64, errcode: &mut ChemAppInt)->()>
 				= self.library.get(fname.as_bytes())?;
-			func(&indexp, &indexc, &coption.as_bytes()[0], option.len(), &indexr, &mut nfval, &mut fval[0], &mut errcode);
+			func(&indexp, &indexc, cstring_character_input(&coption)?.0, cstring_character_input(&coption)?.1, &indexr, &mut nfval, &mut fval[0], &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, indexc: &ChemAppInt, option: &u8, indexr: &ChemAppInt, nfval: &mut ChemAppInt, fval: &mut f64, errcode: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &indexc, &coption.as_bytes()[0], &indexr, &mut nfval, &mut fval[0], &mut errcode, option.len());
+			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, indexc: &ChemAppInt, option: *const u8, indexr: &ChemAppInt, nfval: &mut ChemAppInt, fval: &mut f64, errcode: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(&indexp, &indexc, cstring_character_input(&coption)?.0, &indexr, &mut nfval, &mut fval[0], &mut errcode, cstring_character_input(&coption)?.1);
 		}
 		/******************************************************************************************************/
 		wrap_result((), errcode)?;
@@ -2032,14 +2076,14 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func : Symbol<extern "system" fn(indexp: &ChemAppInt, option: &u8, option_len: ChemAppLen, nopar: &mut ChemAppInt, chrpar: &mut u8, chrpar_len: ChemAppLen, lgtpar: &mut ChemAppInt, noerr: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &coption.as_bytes()[0],option.len(),&mut nopar, &mut chrpar[0][0], 156, &mut lgtpar[0], &mut errcode);
+			let func : Symbol<extern "system" fn(indexp: &ChemAppInt, option: *const u8, option_len: ChemAppLen, nopar: &mut ChemAppInt, chrpar: &mut u8, chrpar_len: ChemAppLen, lgtpar: &mut ChemAppInt, noerr: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
+			func(&indexp, cstring_character_input(&coption)?.0,cstring_character_input(&coption)?.1,&mut nopar, &mut chrpar[0][0], TQLPAR_NATIVE_RECORD_LENGTH, &mut lgtpar[0], &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, option: &u8, nopar: &mut ChemAppInt, chrpar: &mut u8, lgtpar: &mut ChemAppInt, noerr: &mut ChemAppInt, option_len: ChemAppLen, chrpar_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &coption.as_bytes()[0], &mut nopar, &mut chrpar[0][0], &mut lgtpar[0], &mut errcode, option.len(), 156);
+			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, option: *const u8, nopar: &mut ChemAppInt, chrpar: &mut u8, lgtpar: &mut ChemAppInt, noerr: &mut ChemAppInt, option_len: ChemAppLen, chrpar_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(&indexp, cstring_character_input(&coption)?.0, &mut nopar, &mut chrpar[0][0], &mut lgtpar[0], &mut errcode, cstring_character_input(&coption)?.1, TQLPAR_NATIVE_RECORD_LENGTH);
 		}
 		/******************************************************************************************************/
 		wrap_result((), errcode)?;
@@ -2064,14 +2108,14 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func : Symbol<extern "system" fn(indexp: &ChemAppInt, option: &u8, option_len: ChemAppLen, indexx: &ChemAppInt, noexpr: &mut ChemAppInt, nvala: &mut ChemAppInt, vala: &mut f64, noerr: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &coption.as_bytes()[0], option.len(), &indexx, &mut noexpr, &mut nvala, &mut vala[0][0], &mut errcode);
+			let func : Symbol<extern "system" fn(indexp: &ChemAppInt, option: *const u8, option_len: ChemAppLen, indexx: &ChemAppInt, noexpr: &mut ChemAppInt, nvala: &mut ChemAppInt, vala: &mut f64, noerr: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
+			func(&indexp, cstring_character_input(&coption)?.0, cstring_character_input(&coption)?.1, &indexx, &mut noexpr, &mut nvala, &mut vala[0][0], &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, option: &u8, indexx: &ChemAppInt, noexpr: &mut ChemAppInt, nvala: &mut ChemAppInt, vala: &mut f64, noerr: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, &coption.as_bytes()[0], &indexx, &mut noexpr, &mut nvala, &mut vala[0][0], &mut errcode, option.len());
+			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, option: *const u8, indexx: &ChemAppInt, noexpr: &mut ChemAppInt, nvala: &mut ChemAppInt, vala: &mut f64, noerr: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(&indexp, cstring_character_input(&coption)?.0, &indexx, &mut noexpr, &mut nvala, &mut vala[0][0], &mut errcode, cstring_character_input(&coption)?.1);
 		}
 		/******************************************************************************************************/
 		wrap_result((), errcode)?;
@@ -2120,19 +2164,19 @@ impl Engine {
 	pub fn tqwasc(&self, file: &str)->Result<(),ChemAppError>{
 		let fname = func_alias(function_name!());
 		let cfile = CString::new(file)?;
-		let cfile_length = file.len();
+		let cfile_length = cstring_character_input(&cfile)?.1;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe{
-			let func: Symbol<extern "system" fn(cfile: &u8, cfile_length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&cfile.as_bytes()[0], cfile_length, &mut errcode);
+			let func: Symbol<extern "system" fn(cfile: *const u8, cfile_length: ChemAppLen, errcode: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cfile)?.0, cfile_length, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(cfile: &u8, errcode: &mut ChemAppInt, cfile_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&cfile.as_bytes()[0], &mut errcode, cfile_length);
+			let func: Symbol<extern "C" fn(cfile: *const u8, errcode: &mut ChemAppInt, cfile_length: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
+			func(cstring_character_input(&cfile)?.0, &mut errcode, cfile_length);
 		}
 		/******************************************************************************************************/
 		return wrap_result((), errcode);
@@ -2193,9 +2237,40 @@ mod tests {
 	}
 
 	#[test]
-	fn tqgsu_input_length_excludes_only_the_cstring_nul() {
-		assert_eq!(cstring_character_length(&CString::new("").unwrap()), 0);
-		assert_eq!(cstring_character_length(&CString::new("Pressure").unwrap()), 8);
+	fn cstring_input_preserves_an_empty_character_pointer_and_length() {
+		let empty = CString::new("").unwrap();
+		let (pointer, length) = cstring_character_input(&empty).unwrap();
+		assert_eq!(length, 0);
+		assert!(!pointer.is_null());
+		assert_eq!(unsafe { *pointer }, 0);
+
+		let pressure = CString::new("Pressure").unwrap();
+		assert_eq!(cstring_character_input(&pressure).unwrap().1, 8);
+	}
+
+	#[test]
+	fn signed_fortran_character_length_conversion_is_checked() {
+		assert_eq!(usize_to_i32_character_length(0).unwrap(), 0);
+		assert_eq!(usize_to_i32_character_length(i32::MAX as usize).unwrap(), i32::MAX);
+		assert!(usize_to_i32_character_length(i32::MAX as usize + 1).is_err());
+	}
+
+	#[cfg(target_family = "unix")]
+	#[test]
+	fn unix_fortran_character_length_is_32_bit() {
+		assert_eq!(std::mem::size_of::<ChemAppLen>(), 4);
+	}
+
+	#[cfg(all(target_family = "windows", target_pointer_width = "64"))]
+	#[test]
+	fn win64_fortran_character_length_is_pointer_sized() {
+		assert_eq!(std::mem::size_of::<ChemAppLen>(), 8);
+	}
+
+	#[cfg(all(target_family = "windows", target_pointer_width = "32"))]
+	#[test]
+	fn win32_fortran_character_length_is_32_bit() {
+		assert_eq!(std::mem::size_of::<ChemAppLen>(), 4);
 	}
 
 	#[test]

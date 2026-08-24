@@ -112,7 +112,10 @@ distinct roles using raw `ChemAppInt = i32` and target-specific
 former common Win64 ABI-ISSUE, but no wrapper is promoted to Win64 VERIFIED
 without complete per-routine evidence: 74 rows remain UNVERIFIED and
 `TQGETR` remains INCOMPLETE. Linux/i386 has 68 UNVERIFIED wrappers and 7
-absent exports; Unix64 has no checked binary.
+absent exports; Unix64 has no checked binary. A subsequent CHARACTER-boundary
+hardening pass keeps Windows `LNT` pointer-sized while representing UNIX
+`ftnlen` as checked signed 32-bit storage from the transition source, and
+passes every input `CString` as a raw pointer plus its matching byte length.
 
 The checked Win64 `maindemo` run observed a non-empty TQGTNM result containing
 internal spaces with no trailing padding. It also executed the canonical

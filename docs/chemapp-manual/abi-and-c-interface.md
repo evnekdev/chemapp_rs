@@ -154,7 +154,15 @@ integer and raw string-length types remain separate in current code:
 `ChemAppInt` is 32-bit for `LI`/`LIP`/`NOERR`, while `ChemAppLen` is the
 64-bit value representation for Windows `LNT`. The bridge establishes
 interleaved lengths for non-UNIX and appended `ftnlen` values for UNIX.
-Unix64 remains unverified.
+The checked transition header declares UNIX/i386 `ftnlen` as 32-bit `long`
+and its UNIX/x86-64 branch as 32-bit `int`; current code therefore uses a
+checked signed 32-bit Unix `ChemAppLen`. That source declaration is not a
+Unix64 runtime verification, because no checked Unix64 ChemApp binary exists.
+
+Input CHARACTER arguments are raw pointers, not Rust references to an assumed
+first data byte. `CString::as_ptr()` remains valid for an empty `CString`
+because the allocation contains its terminating NUL; the matching native
+length is the checked `as_bytes().len()` and never includes that NUL.
 
 For fixed Fortran CHARACTER outputs, buffer capacity and the hidden declared
 length are independent facts: an oversized Rust buffer does not authorize an

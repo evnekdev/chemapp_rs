@@ -201,6 +201,11 @@ Win64 DLL and checked C header establish signed 32-bit `LI`/`LIP`/`NOERR`,
 while Win64 non-UNIX `LNT` is a 64-bit `size_t` value. Native declarations
 must therefore use distinct raw ABI types: `ChemAppInt = i32` for native
 integers and a target-specific CHARACTER-length alias for `LNT`/`ftnlen`.
+The checked UNIX transition source gives `ftnlen` a signed 32-bit
+representation on both represented UNIX architecture branches; that is not
+evidence of Unix64 runtime support. Input `CString` CHARACTER arguments must
+cross the raw boundary as pointers plus a length from the same C string, never
+by indexing `as_bytes()[0]` (which panics for an empty input).
 Public `usize` inputs require checked conversion; a native negative selector
 must not silently become a large unsigned Rust value. A successful call is
 supporting evidence, not a substitute for this target/build-specific record.
