@@ -46,6 +46,7 @@ This material is a paraphrased engineering reference. Do not copy substantial po
 - [Direct Fortran ABI and the ChemApp C transition layer](abi-and-c-interface.md)
 - [Subroutine index](subroutine-index.md)
 - [Entities, snapshots, tables, and mapping](entities-and-snapshots.md)
+- [Interaction inspection and name resolution](interactions.md)
 - [Development policy](development-policy.md)
 - [Current conformance notes](conformance.md)
 

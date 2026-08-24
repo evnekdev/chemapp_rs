@@ -25,6 +25,13 @@ pub use crate::calculator::Calculator;
 pub use crate::entities::bond::{Bond, BondKind};
 pub use crate::entities::species::{Species, SpeciesRef};
 pub use crate::error::ChemAppError;
+pub use crate::interactions::{
+    Interaction, InteractionChannel, InteractionDescriptor, InteractionDescriptorRecovery,
+    InteractionDescriptorSource, InteractionMember, InteractionOrder, InteractionRaw,
+    InteractionRecoveryRequest, InteractionResolution, NativeInteractionIndex,
+    NativePoweredMember, PhaseInteractionReport, ResolvedInteractionDescriptor,
+    ResolvedPoweredMember,
+};
 pub use crate::iterator::{
     BondIterator, ConstituentIterator, PhaseIterator, SpeciesIterator, SystemComponentIterator,
 };
@@ -38,6 +45,7 @@ pub mod calculator;
 pub mod defs;
 pub mod entities;
 pub mod error;
+pub mod interactions;
 pub mod iterator;
 pub mod native;
 pub mod parse;

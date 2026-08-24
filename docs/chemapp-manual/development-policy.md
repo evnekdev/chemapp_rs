@@ -241,3 +241,27 @@ specify duplicate creation semantics. `Calculator` must therefore lease a
 name to at most one live high-level `Stream`; consuming explicit removal
 reports native errors and disables best-effort destructor cleanup. Direct
 `Engine` calls intentionally remain outside this ergonomic ownership rule.
+
+## 22. Interaction inspection is raw, parsed, then resolved
+
+The exact TQLPAR descriptor and all TQGPAR values remain owned by every
+high-level interaction record. Structural parsing and model-aware name
+resolution are additive layers, never replacements for the native evidence.
+Unknown grammar is a supported diagnostic state, not a reason to panic or
+silently discard a row.
+
+Because TQLPAR may corrupt two-digit order text, optional ASCII-DAT recovery
+must expose provenance, retain the original native string, and leave live
+TQGPAR values authoritative. The recovery provider must establish a
+deterministic phase/channel/index mapping by cross-validating healthy rows; it
+must not use approximate text matching. The base crate must not require private
+parser credentials, and DAT recovery remains inapplicable to BIN/CST unless a
+compatible source model is supplied separately.
+
+Parsing identifies the native indexed structure. Resolution separately uses
+`TQMODL` and ChemApp metadata to choose between phase constituents and
+sublattice-local species. Flattened sublattice namespaces use cumulative
+checked ranges and must support more than two sublattices. Interactions belong
+to the loaded thermodynamic model, so they are not duplicated into each
+equilibrium or mapping snapshot. `ParameterCache` may consume the inspection
+layer, but model-specific TQCDAT mutation semantics require separate evidence.

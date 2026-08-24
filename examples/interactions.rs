@@ -1,3 +1,7 @@
+//! Prints every Gibbs and magnetic interaction in a loaded multicomponent DAT
+//! model, including native TQLPAR text, name-resolved structure, live TQGPAR
+//! values, and descriptor provenance.
+
 use std::path::{Path, PathBuf};
 
 use chemapp_rs::{Calculator, ChemAppError};
@@ -39,9 +43,21 @@ fn main() -> Result<(), ChemAppError> {
             .ok_or_else(|| ChemAppError::OtherError("data-file path is not UTF-8".to_owned()))?,
     )?;
 
-    for mut report in calculator.interaction_report()? {
-        report.gibbs.clear();
-        if !report.magnetic.is_empty() {
+    eprintln!(
+        "Descriptor recovery: not configured (native TQLPAR parsing only; use \
+         interaction_report_with_recovery for a compatible ASCII DAT provider)."
+    );
+
+    for report in calculator.interaction_report()? {
+        println!(
+            "Phase {} [{}], model {}: {} Gibbs, {} magnetic",
+            report.phase_name,
+            report.phase_index,
+            report.model,
+            report.gibbs.len(),
+            report.magnetic.len()
+        );
+        if !report.gibbs.is_empty() || !report.magnetic.is_empty() {
             println!("{}", report.table_string());
         }
     }

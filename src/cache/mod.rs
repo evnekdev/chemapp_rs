@@ -7,6 +7,7 @@ use std::collections::{HashMap};
 
 use super::calculator::{Calculator};
 use crate::error::{ChemAppError};
+use crate::interactions::InteractionChannel;
 use crate::{Engine};
 
 /*******************************************************************************************************************************************************************************************************************************/
@@ -165,16 +166,24 @@ impl ParameterCache {
 	/// load excess Gibbs interactions for a solution phase
 	pub fn load_interactions_ge(calculator: &Calculator, phasename: &str)->Result<Vec<InteractionGEMQM>,ChemAppError>{
 		let indexp = calculator.engine.tqinp(phasename)?;
-		let sinteractions : Vec<String> = calculator.interactions_ge_expanded(indexp)?;
+		let source = crate::interactions::load_phase_interactions(
+			&calculator.engine,
+			indexp,
+			InteractionChannel::GibbsExcess,
+		)?;
 		let mut interactions : Vec<InteractionGEMQM> = Vec::new();
-		for k in 0..sinteractions.len(){
-			let values = [0.0f64;6];
-			let values : Vec<f64> = calculator.engine.tqgpar(indexp,"G",k+1)?[0].clone();
+		for interaction in source {
+			let values = interaction.raw.values.first().cloned().ok_or_else(|| {
+				ChemAppError::OtherError(format!(
+					"TQGPAR returned no value row for phase {phasename} interaction {}",
+					interaction.raw.parameter_index
+				))
+			})?;
 			interactions.push(InteractionGEMQM {
 				indexp: indexp,
-				index: k+1,
+				index: interaction.raw.parameter_index,
 				phasename: phasename.to_string(),
-				text: sinteractions[k].to_string(),
+				text: interaction.resolved_text(),
 				values: values,
 			});
 		}

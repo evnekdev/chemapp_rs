@@ -196,11 +196,24 @@ exact binary evidence, and C/Rust demo coverage are in
 
 The manual also limits thermodynamic data modification to appropriate data-file formats/models. This layer should validate those prerequisites rather than assuming arbitrary loaded systems are mutable.
 
-### Interaction parsing — experimental
+### Interaction inspection — runtime-observed for the EN22 model set
 
-Gibbs interaction text parsing is implemented for several forms, but magnetic interaction conversion still contains `todo!()` paths.
+The authoritative path preserves every raw TQLPAR descriptor and TQGPAR
+coefficient matrix before parsing or name resolution. Typed parsing and
+model-aware resolution cover the runtime-observed `SUBQ`, `SUBL`, `SUBLM`,
+`QKTO`, and `QKTOM` grammars, including magnetic `SUBLM`. The EN22 run produced
+657 Gibbs and 35 magnetic rows; all 692 were retained, syntactically parsed,
+and name-resolved, with zero silently discarded. Cross-validation against the
+ASCII DAT semantic model found 25 known TQLPAR multi-digit-order corruptions:
+20 SUBQ/G and 5 QKTO/G rows printed `[*]` instead of orders 10–15. The other
+667 structures matched by phase/channel/position. An optional recovery-provider
+boundary now marks recovered provenance while preserving native text and live
+TQGPAR values. Unknown future syntax remains explicitly unparsed. See
+[Interaction inspection and name resolution](interactions.md).
 
-Parsing ChemApp's human-readable interaction output is inherently version/model sensitive. Tests should be based on representative official/known data-files and preserve the original unparsed string when interpretation fails.
+That run also exposed and corrected TQGPAR's Rust-side matrix adaptation:
+native Fortran column-major storage is reconstructed as logical
+`NOEXPR × NVALA` rows. TQLPAR now honors each returned `LGTPAR` record length.
 
 ### Entity, snapshot, table, and mapping layer — implemented
 
@@ -253,11 +266,11 @@ Do not mix these into one compatibility assumption.
 
 ## Next recommended milestone
 
-The scalar `TQGETR` wrapper is an intentional, verified subset; aggregate
-retrieval is an optional additive API only when a concrete use case requires
-it. The next milestone should instead follow actual project needs. Native
-TQBOND model conformance remains limited by the absence of a non-proprietary
-SUBG/QUAS/QSOL data set.
+The interaction inspection layer is complete for the models observed in EN22.
+The next interaction milestone should verify model-specific TQCDAT
+mutation/reset addressing before broadening `ParameterCache`, especially its
+magnetic path. Native TQBOND runtime conformance remains limited by the absence
+of a non-proprietary SUBG/QUAS/QSOL data set.
 
 The routine-by-routine native ABI audit is already complete for the current
 75-wrapper surface; platform-specific binary verification remains a separate,

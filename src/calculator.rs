@@ -12,9 +12,11 @@ use tempfile::NamedTempFile;
 
 use crate::cache::ParameterCache;
 use crate::entities::system::System;
+use crate::interactions::{
+    InteractionChannel, InteractionDescriptorRecovery, PhaseInteractionReport,
+};
 use crate::iterator::PhaseIterator;
 use crate::iterator::SystemComponentIterator;
-use crate::parse::*;
 use crate::snapshot::{CalculatorSnapshot, SnapshotOptions};
 use crate::{error::ChemAppError, Engine};
 
@@ -597,77 +599,97 @@ impl Calculator {
     /***************************************************************************************************************************************************************************************************************************/
     /***************************************************************************************************************************************************************************************************************************/
 
-    /// Lists the Gibbs free energy excess interactions in a phase as-is (species indices are used which are subject to change from a datafile to a datafile)
+    /// Lists name-resolved Gibbs interactions through the typed interaction pipeline.
+    #[deprecated(note = "use Phase::gibbs_interactions or Calculator::interaction_report")]
     pub fn interactions_ge_expanded(&self, indexp: usize) -> Result<Vec<String>, ChemAppError> {
-        let interactions0: Vec<String> = self.engine.tqlpar(indexp, "G")?;
-        let mut interactions: Vec<String> = Vec::with_capacity(interactions0.len());
-        for k in 0..interactions0.len() {
-            match convert_ge_interaction(&self.engine, indexp, &interactions0[k]) {
-                Ok(s) => {
-                    interactions.push(s.1);
-                }
-                Err(_) => {
-                    continue;
-                }
-            }
-        }
-        return Ok(interactions);
+        Ok(crate::interactions::load_phase_interactions(
+            &self.engine,
+            indexp,
+            InteractionChannel::GibbsExcess,
+        )?
+        .into_iter()
+        .map(|interaction| interaction.resolved_text())
+        .collect())
     }
 
-    /// Lists the magnetic interactions in a phase as-is (species indices are used which are subject to change from a datafile to a datafile)
+    /// Lists name-resolved magnetic interactions through the typed interaction pipeline.
+    #[deprecated(note = "use Phase::magnetic_interactions or Calculator::interaction_report")]
     pub fn interactions_magn_expanded(&self, indexp: usize) -> Result<Vec<String>, ChemAppError> {
-        let interactions0: Vec<String> = self.engine.tqlpar(indexp, "M")?;
-        let mut interactions: Vec<String> = Vec::with_capacity(interactions0.len());
-        for k in 0..interactions0.len() {
-            match convert_magn_interaction(&self.engine, indexp, &interactions0[k]) {
-                Ok(s) => {
-                    interactions.push(s.1);
-                }
-                Err(_) => {
-                    continue;
-                }
-            }
-        }
-        return Ok(interactions);
+        Ok(crate::interactions::load_phase_interactions(
+            &self.engine,
+            indexp,
+            InteractionChannel::Magnetic,
+        )?
+        .into_iter()
+        .map(|interaction| interaction.resolved_text())
+        .collect())
     }
 
-    /// Lists post-processed Gibbs free energy excess interactions in a phase (species indices are replaced by species names).
+    /// Compatibility view of resolved Gibbs rows.
+    #[deprecated(note = "use Phase::gibbs_interactions")]
     pub fn interactions_ge_expanded_species(
         &self,
         indexp: usize,
     ) -> Result<Vec<Vec<String>>, ChemAppError> {
-        let interactions0: Vec<String> = self.engine.tqlpar(indexp, "G")?;
-        let mut interactions: Vec<Vec<String>> = Vec::with_capacity(interactions0.len());
-        for k in 0..interactions0.len() {
-            match convert_ge_interaction_species(&self.engine, indexp, &interactions0[k]) {
-                Ok(s) => {
-                    interactions.push(s.1);
-                }
-                Err(_) => {
-                    continue;
-                }
-            }
-        }
-        return Ok(interactions);
+        Ok(crate::interactions::load_phase_interactions(
+            &self.engine,
+            indexp,
+            InteractionChannel::GibbsExcess,
+        )?
+        .into_iter()
+        .map(|interaction| vec![interaction.resolved_text()])
+        .collect())
     }
-    /// Lists post-processed magnetic excess interactions in a phase (species indices are replaced by species names).
+    /// Compatibility view of resolved magnetic rows.
+    #[deprecated(note = "use Phase::magnetic_interactions")]
     pub fn interactions_magn_expanded_species(
         &self,
         indexp: usize,
     ) -> Result<Vec<Vec<String>>, ChemAppError> {
-        let interactions0: Vec<String> = self.engine.tqlpar(indexp, "M")?;
-        let mut interactions: Vec<Vec<String>> = Vec::with_capacity(interactions0.len());
-        for k in 0..interactions0.len() {
-            match convert_magn_interaction_species(&self.engine, indexp, &interactions0[k]) {
-                Ok(s) => {
-                    interactions.push(s.1);
-                }
-                Err(_) => {
-                    continue;
-                }
+        Ok(crate::interactions::load_phase_interactions(
+            &self.engine,
+            indexp,
+            InteractionChannel::Magnetic,
+        )?
+        .into_iter()
+        .map(|interaction| vec![interaction.resolved_text()])
+        .collect())
+    }
+
+    /// Collect both interaction channels for every non-PURE phase in the
+    /// loaded data-file. These static model parameters are intentionally not
+    /// duplicated into equilibrium snapshots.
+    pub fn interaction_report(&self) -> Result<Vec<PhaseInteractionReport>, ChemAppError> {
+        self.interaction_report_with_optional_recovery(None)
+    }
+
+    /// Collect both channels using an optional ASCII-DAT structural recovery
+    /// provider. Recovery never replaces live TQGPAR numerical values and is
+    /// visibly marked on every affected row.
+    pub fn interaction_report_with_recovery(
+        &self,
+        recovery: &dyn InteractionDescriptorRecovery,
+    ) -> Result<Vec<PhaseInteractionReport>, ChemAppError> {
+        self.interaction_report_with_optional_recovery(Some(recovery))
+    }
+
+    fn interaction_report_with_optional_recovery(
+        &self,
+        recovery: Option<&dyn InteractionDescriptorRecovery>,
+    ) -> Result<Vec<PhaseInteractionReport>, ChemAppError> {
+        let mut reports = Vec::new();
+        for phase_index in 1..=self.engine.tqnop()? {
+            if self.engine.tqmodl(phase_index)? != "PURE" {
+                reports.push(
+                    crate::interactions::load_phase_interaction_report_with_recovery(
+                        &self.engine,
+                        phase_index,
+                        recovery,
+                    )?,
+                );
             }
         }
-        return Ok(interactions);
+        Ok(reports)
     }
 
     /***************************************************************************************************************************************************************************************************************************/

@@ -32,7 +32,7 @@ fn vector(values: &[f64]) -> String {
     )
 }
 
-fn render(title: &str, headers: &[String], rows: Vec<Vec<String>>) -> String {
+pub(crate) fn render(title: &str, headers: &[String], rows: Vec<Vec<String>>) -> String {
     let mut table = Table::new();
     table.load_style(UTF8_FULL_CONDENSED);
     table.set_header(headers.to_vec());

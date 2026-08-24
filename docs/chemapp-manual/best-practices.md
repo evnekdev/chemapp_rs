@@ -188,3 +188,25 @@ does not define duplicate `TQSTTP` identifier behavior, so a high-level
 same name. Use one live owner, `Stream::remove(self)` when cleanup errors must
 be observed, and regard `Drop` as a best-effort fallback. An owned
 `StreamSnapshot` remains valid after stream removal.
+
+## 16. Preserve native interaction evidence before interpretation
+
+`TQLPAR` text is authoritative evidence of what the native library returned;
+`TQGPAR` is authoritative for numerical values in the live Engine. Keep both
+the exact descriptor and coefficient matrix even when typed parsing or
+model-aware name resolution succeeds. Query Gibbs and magnetic channels
+independently, use `TQMODL` to choose the native index namespace, and resolve
+names through `TQGNPC` or `TQGNLC` rather than parsing a thermodynamic data
+file. Unknown syntax must remain visible as unparsed or unresolved data; it
+must never disappear from a report.
+
+TQLPAR itself has a known textual defect for multi-digit interaction orders:
+valid-looking `[*]` output (or another incomplete fragment) may replace the
+actual numeric order. When a compatible ASCII DAT source is available, compare
+it deterministically by phase/channel/parameter index and mark any recovered
+structure visibly. Never guess from the corrupted fragment, and never replace
+live TQGPAR values with DAT coefficients.
+
+Treat the TQGPAR buffer as a Fortran array: reconstruct logical expression
+rows using its column-major layout and fixed leading dimension. Do not assume
+that a Rust nested array's row-major indexing has the same meaning.

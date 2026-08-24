@@ -11,6 +11,10 @@
     including active units and full phase descendants
   - deterministic shared live/snapshot tables using `comfy-table`
   - model-aware TQBOND pair/quadruplet entities and combinatorial iterators
+  - typed raw → parsed → name-resolved Gibbs and magnetic interaction
+    inspection through `Phase` and `Calculator`, with diagnostic tables
+  - an optional, dependency-neutral ASCII-DAT interaction recovery boundary
+    with explicit native versus recovered descriptor provenance
 
 ### Changed
   - `usize` in `tqgthi` output to `i32`
@@ -73,3 +77,14 @@
     two-bound order retries the complete reverse ordering once.
   - made examples select only architecture-matched bundled ChemApp binaries,
     with `CHEMAPP_LIBRARY` and optional `CHEMAPP_DATAFILE` overrides.
+  - made the interaction examples portable and fallible, with
+    `CHEMAPP_INTERACTION_DATAFILE` support and structured raw/resolved tables.
+  - corrected `TQLPAR` output adaptation to honor each returned descriptor
+    length and corrected `TQGPAR` multi-expression values from native Fortran
+    column-major storage into logical Rust rows.
+  - replaced the partial interaction parser path with typed, model-aware
+    parsing and native-metadata name resolution; unknown syntax is retained
+    explicitly rather than dropped.
+  - detect valid-looking structural differences through optional DAT recovery,
+    covering ChemApp's known multi-digit-order TQLPAR text corruption without
+    replacing live TQGPAR values.

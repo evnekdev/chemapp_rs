@@ -42,6 +42,8 @@ const TQGTRH_USER_ID_NATIVE_LENGTH: ChemAppLen = 255;
 const TQGTRH_TEXT_NATIVE_LENGTH: ChemAppLen = 80;
 const TQERR_NATIVE_RECORD_LENGTH: ChemAppLen = 80;
 const TQLPAR_NATIVE_RECORD_LENGTH: ChemAppLen = 156;
+const TQGPAR_EXPRESSION_CAPACITY: usize = 20;
+const TQGPAR_VALUE_CAPACITY: usize = 28;
 
 /*********************************************************************************************************************************************************************************************************/
 /*********************************************************************************************************************************************************************************************************/
@@ -103,6 +105,24 @@ fn tqerr_message(buffer: &[u8]) -> Result<String, ChemAppError> {
 		}
 	}
 	return Ok(records.join("\n"));
+}
+
+/// Reconstructs logical TQGPAR expression rows from Fortran column-major
+/// storage. The compiled expression leading dimension is fixed even when the
+/// returned `NOEXPR` is smaller.
+fn tqgpar_values(raw: &[f64], noexpr: usize, nvala: usize) -> Result<Vec<Vec<f64>>, ChemAppError> {
+	if noexpr > TQGPAR_EXPRESSION_CAPACITY || nvala > TQGPAR_VALUE_CAPACITY {
+		return Err(ChemAppError::OtherError(format!(
+			"TQGPAR returned dimensions {noexpr}x{nvala} for a {TQGPAR_EXPRESSION_CAPACITY}x{TQGPAR_VALUE_CAPACITY} buffer"
+		)));
+	}
+	Ok((0..noexpr)
+		.map(|expression| {
+			(0..nvala)
+				.map(|value| raw[expression + value * TQGPAR_EXPRESSION_CAPACITY])
+				.collect()
+		})
+		.collect())
 }
 
 macro_rules! raw_chemapp_ints {
@@ -2069,7 +2089,18 @@ impl Engine {
 		if nopar > chrpar.len() {
 			return Err(ChemAppError::OtherError(format!("TQLPAR returned {nopar} parameters for a {}-parameter buffer", chrpar.len())));
 		}
-		return Ok(chrpar.iter().take(nopar).map(|bytes| String::from_utf8_lossy(bytes).trim().to_string()).collect());
+		let mut descriptors = Vec::with_capacity(nopar);
+		for (record, raw_length) in chrpar.iter().zip(lgtpar.iter()).take(nopar) {
+			let length = chemapp_int_to_usize(*raw_length)?;
+			if length > record.len() {
+				return Err(ChemAppError::OtherError(format!(
+					"TQLPAR returned record length {length} for a {}-byte record",
+					record.len()
+				)));
+			}
+			descriptors.push(fixed_fortran_string(record, length)?);
+		}
+		return Ok(descriptors);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -2082,35 +2113,26 @@ impl Engine {
 		let coption: CString = CString::new(option)?;
 		let mut noexpr: ChemAppInt = 0;
 		let mut nvala: ChemAppInt = 0;
-		let mut vala : [[f64;20];28] = [[0.0;20];28];
+		// Fortran stores VALA(expression, value) column-major with a fixed
+		// expression leading dimension. Adapt that layout after the native call.
+		let mut vala = [0.0; TQGPAR_EXPRESSION_CAPACITY * TQGPAR_VALUE_CAPACITY];
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(indexp: &ChemAppInt, option: *const u8, option_len: ChemAppLen, indexx: &ChemAppInt, noexpr: &mut ChemAppInt, nvala: &mut ChemAppInt, vala: &mut f64, noerr: &mut ChemAppInt)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, cstring_character_input(&coption)?.0, cstring_character_input(&coption)?.1, &indexx, &mut noexpr, &mut nvala, &mut vala[0][0], &mut errcode);
+			func(&indexp, cstring_character_input(&coption)?.0, cstring_character_input(&coption)?.1, &indexx, &mut noexpr, &mut nvala, &mut vala[0], &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(indexp: &ChemAppInt, option: *const u8, indexx: &ChemAppInt, noexpr: &mut ChemAppInt, nvala: &mut ChemAppInt, vala: &mut f64, noerr: &mut ChemAppInt, option_len: ChemAppLen)->()> = self.library.get(fname.as_bytes())?;
-			func(&indexp, cstring_character_input(&coption)?.0, &indexx, &mut noexpr, &mut nvala, &mut vala[0][0], &mut errcode, cstring_character_input(&coption)?.1);
+			func(&indexp, cstring_character_input(&coption)?.0, &indexx, &mut noexpr, &mut nvala, &mut vala[0], &mut errcode, cstring_character_input(&coption)?.1);
 		}
 		/******************************************************************************************************/
 		wrap_result((), errcode)?;
 		let noexpr = chemapp_int_to_usize(noexpr)?;
 		let nvala = chemapp_int_to_usize(nvala)?;
-		if noexpr > vala.len() || nvala > vala[0].len() {
-			return Err(ChemAppError::OtherError(format!("TQGPAR returned dimensions {noexpr}x{nvala} for a {}x{} buffer", vala.len(), vala[0].len())));
-		}
-		let mut vecc : Vec<Vec<f64>> = Vec::new();
-		for k in 0..noexpr {
-			let mut vec : Vec<f64> = Vec::new();
-			for m in 0..nvala {
-				vec.push(vala[k][m]);
-			}
-			vecc.push(vec);
-		}
-		return Ok(vecc);
+		return tqgpar_values(&vala, noexpr, nvala);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -2217,6 +2239,19 @@ mod tests {
 	#[test]
 	fn tqchar_exposes_the_native_double_precision_result() {
 		let _: fn(&Engine, usize, usize) -> Result<f64, ChemAppError> = Engine::tqchar;
+	}
+
+	#[test]
+	fn tqgpar_reconstructs_fortran_column_major_rows() {
+		let mut raw = [0.0; TQGPAR_EXPRESSION_CAPACITY * TQGPAR_VALUE_CAPACITY];
+		raw[0] = 10.0;
+		raw[1] = 20.0;
+		raw[TQGPAR_EXPRESSION_CAPACITY] = 11.0;
+		raw[TQGPAR_EXPRESSION_CAPACITY + 1] = 21.0;
+		assert_eq!(
+			tqgpar_values(&raw, 2, 2).unwrap(),
+			vec![vec![10.0, 11.0], vec![20.0, 21.0]]
+		);
 	}
 
 	#[test]

@@ -4,6 +4,7 @@ use crate::calculator::Calculator;
 use crate::error::ChemAppError;
 use crate::iterator::{BondIterator, ConstituentIterator, SpeciesIterator};
 use crate::snapshot::PhaseSnapshot;
+use crate::{Interaction, InteractionChannel, InteractionDescriptorRecovery};
 
 /// One-based ChemApp phase identity tied to a live calculator.
 #[derive(Debug)]
@@ -49,6 +50,44 @@ impl<'a> Phase<'a> {
 
     pub fn constituents(&self) -> Result<ConstituentIterator<'a>, ChemAppError> {
         ConstituentIterator::new(self.calculator, self.index)
+    }
+
+    /// Inspect one channel of static interaction-model data for this phase.
+    ///
+    /// Every row retains its raw TQLPAR descriptor and TQGPAR values. Parsing
+    /// and model-aware name resolution are additive and never silently drop an
+    /// unknown descriptor.
+    pub fn interactions(
+        &self,
+        channel: InteractionChannel,
+    ) -> Result<Vec<Interaction>, ChemAppError> {
+        crate::interactions::load_phase_interactions(&self.calculator.engine, self.index, channel)
+    }
+
+    /// Inspect one channel with an optional ASCII-DAT structural recovery
+    /// provider. Native TQLPAR text and live TQGPAR values are always retained,
+    /// and each recovered row exposes its provenance.
+    pub fn interactions_with_recovery(
+        &self,
+        channel: InteractionChannel,
+        recovery: &dyn InteractionDescriptorRecovery,
+    ) -> Result<Vec<Interaction>, ChemAppError> {
+        crate::interactions::load_phase_interactions_with_recovery(
+            &self.calculator.engine,
+            self.index,
+            channel,
+            Some(recovery),
+        )
+    }
+
+    /// Inspect excess Gibbs-energy interactions for this phase.
+    pub fn gibbs_interactions(&self) -> Result<Vec<Interaction>, ChemAppError> {
+        self.interactions(InteractionChannel::GibbsExcess)
+    }
+
+    /// Inspect excess magnetic interactions for this phase.
+    pub fn magnetic_interactions(&self) -> Result<Vec<Interaction>, ChemAppError> {
+        self.interactions(InteractionChannel::Magnetic)
     }
 
     pub fn is_valid(&self) -> Result<bool, ChemAppError> {

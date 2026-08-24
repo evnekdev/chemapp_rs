@@ -111,8 +111,8 @@ Important: global conditions and streams are distinct input modes. `TQSETC` and 
 | Native routine | Purpose | `chemapp_rs` status |
 | --- | --- | --- |
 | `TQGDAT` | read selected thermodynamic data | wrapped |
-| `TQLPAR` | list interaction/model parameter descriptions | wrapped |
-| `TQGPAR` | get parameter values | wrapped |
+| `TQLPAR` | list interaction/model parameter descriptions | wrapped; typed high-level raw/parsed/resolved inspection |
+| `TQGPAR` | get parameter values | wrapped; Fortran column-major values adapted to logical rows |
 | `TQCDAT` | change thermodynamic data | wrapped |
 | `TQWASC` | write ASCII thermochemical data-file | wrapped |
 
