@@ -2,12 +2,12 @@
 
 ## Executive summary
 
-This is a documentation-only hardening pass over all **75** `Engine::tq...`
-wrappers in `src/native.rs`, at repository revision
-`5c3e1c350e97c314d7e84b5cb8bfd8461b3b9d74`.  The production source audited
-here is unchanged from `2227e9210f98a298a4c23e16bd2b4322c55c2c02`.  No FFI
-declaration, reference source, proprietary binary, data-file, or demo was
-changed by this audit.
+This audit began as a documentation-only hardening pass over all **75**
+`Engine::tq...` wrappers. The hardened-audit baseline was
+`ad5fbbfd71d8e5282b8c2bc63b39d193d9d678d7`. The first correction milestone
+subsequently fixed the nine confirmed Win32/x86 findings described below in
+`src/native.rs`; the historical evidence is retained so a later platform
+correction does not need to rediscover it.
 
 The strongest conclusion is deliberately scoped: the checked-in 32-bit
 Windows DLL and the checked-in C bridge agree on exported decorated symbols,
@@ -16,27 +16,25 @@ CHARACTER-length convention for most wrappers.  That is strong evidence for
 the stated **Win32/x86/2013** build only.  It is not a certification of the
 checked-in Win64 DLL or the older Linux/i386 DLL.
 
-The earlier single-primary-verdict totals are withdrawn.  They incorrectly
+The earlier single-primary-verdict totals are withdrawn. They incorrectly
 made a Win32 conclusion look cross-platform and also marked `TQGTHI` VERIFIED
 while recording a conflicting raw length.  Status is now recorded separately
 for each represented build.  At routine level, the confirmed findings are
-**6 machine-ABI defects**, **1 Rust FFI-soundness declaration defect**, **2
-semantic/API defects**, and **1 incomplete API**; the checked Linux/i386
-library also lacks **7** represented exports.  Win64 has **75 UNVERIFIED**
-wrappers because the 2014 transition source does not prove the 2017 x64 ABI;
-Unix64 has no checked binary.
+**6 machine-ABI defects**, **1 Rust FFI-soundness declaration defect**, and
+**2 semantic/API defects**. All nine are now **FIXED IN CURRENT MASTER** for
+the source-level rules established by the checked Win32 bridge. `tqgetr`
+remains the sole **INCOMPLETE** Win32 wrapper. The checked Linux/i386 library
+also lacks **7** represented exports. Win64 has **75 UNVERIFIED** wrappers
+because the 2014 transition source does not prove the 2017 x64 ABI; Unix64
+has no checked binary.
 
-There is one CRITICAL finding: `Engine::tqchar` declares the native output as
-`&mut i32`, but the matching C header and bridge pass a `DBP` (`double *`).
-The native routine can write eight bytes into a four-byte Rust object.  This
-is a likely memory-corruption bug on the verified Win32 ABI.  Do not call it
-until a separate correction task fixes and tests it.
-
-High findings are the fixed-length mismatches in `tqgtid`, `tqgtpi`,
-`tqgthi`, `tqgtrh`, and `tqerr`, the truncated `tqgsu` option, and swallowed
-`tqgpar` errors.  `tqgspc` is a MEDIUM Rust FFI-soundness defect: the native
-output pointer is declared immutable in the Rust function type, but that does
-not change the machine pointer layout or by itself establish stack corruption.
+**ORIGINAL AUDIT FINDING / FIXED IN CURRENT MASTER:** `Engine::tqchar`
+previously declared the native `DBP` (`double *`) output as `&mut i32`, which
+could write eight bytes into four-byte Rust storage. It now uses `&mut f64`
+and returns `Result<f64, ChemAppError>`. The fixed-length calls (`tqgtid`,
+`tqgtpi`, `tqgthi`, `tqgtrh`, `tqerr`), `tqgsu`, `tqgspc`, and `tqgpar` are
+also corrected and have focused structural tests. These changes do not verify
+the unresolved Win64 integer/length ABI.
 The Windows x64 `LI`/`LIP` question remains HIGH-RISK **UNVERIFIED**, not a
 confirmed defect, because the available bridge is from 2013 and the checked
 x64 DLL is from 2017.
@@ -77,11 +75,14 @@ directly, not the C functions in those files.
 | Win64 calling convention | export inspection plus successful demo run | `extern "system"` loads/runs for the exercised path.  Widths and raw string-length types remain unverified against a version-matched bridge or disassembly/conformance harness. |
 | Unix64 | represented by `defs.rs` only | Not represented by a checked-in binary and not verified. |
 
-The Win64 smoke run initialized the library, read `data/cosi.dat`, made
-component/phase/condition/equilibrium/target/mapping/stream/license calls,
-and wrote the demo result table.  The temporary `result` artifact was removed
-afterward.  It skipped optional files when unavailable.  A successful call
-sequence is **not** proof of the raw ABI.
+The correction milestone repeated the Win64 smoke run after the source
+changes. It initialized the library, read `data/cosi.dat`, exercised
+`tqgtid`, `tqgtpi`, `tqgthi`, and `tqgsu` through the broad translated demo,
+then made component/phase/condition/equilibrium/target/mapping/stream/license
+calls and wrote the demo result table. The temporary `result` artifact was
+removed afterward. It skipped optional files when unavailable. `tqgtrh`,
+`tqerr`, and `tqchar` lacked their required safe demo conditions. A successful
+call sequence is **not** proof of the raw ABI.
 
 ## Shared ABI notation
 
@@ -121,7 +122,7 @@ named build only. `ABI-ISSUE` denotes a machine declaration conflict;
 
 | Build | VERIFIED | ABI-ISSUE | FFI-SOUNDNESS | SEMANTICS-ISSUE | INCOMPLETE | UNVERIFIED | PLATFORM-UNAVAILABLE | NOT-REPRESENTED |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| checked Win32/x86 DLL | 65 | 6 | 1 | 2 | 1 | 0 | 0 | 0 |
+| checked Win32/x86 DLL | 74 | 0 | 0 | 0 | 1 | 0 | 0 | 0 |
 | checked Win64/x64 DLL | 0 | 0 | 0 | 0 | 0 | 75 | 0 | 0 |
 | checked Linux/i386 SO | 0 | 0 | 0 | 0 | 0 | 68 | 7 | 0 |
 | Unix64 mapping in `defs.rs` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 75 |
@@ -135,9 +136,7 @@ verified because the checked SO is older (2003) than the 2013 bridge source.
 
 | Wrapper(s) | Win32/x86 checked DLL | Win64/x64 checked DLL | Linux/i386 checked SO | Unix64 mapping |
 |---|---|---|---|---|
-| `tqgtid`, `tqgtpi`, `tqgthi`, `tqgtrh`, `tqchar`, `tqerr` | ABI-ISSUE | UNVERIFIED | UNVERIFIED except `tqchar` absent | NOT-REPRESENTED |
-| `tqgspc` | FFI-SOUNDNESS (MEDIUM) | UNVERIFIED | UNVERIFIED | NOT-REPRESENTED |
-| `tqgsu`, `tqgpar` | SEMANTICS-ISSUE | UNVERIFIED | UNVERIFIED except `tqgpar` absent | NOT-REPRESENTED |
+| `tqgtid`, `tqgtpi`, `tqgthi`, `tqgtrh`, `tqchar`, `tqerr`, `tqgspc`, `tqgsu`, `tqgpar` | VERIFIED (corrected source; checked Win32 bridge evidence) | UNVERIFIED | UNVERIFIED except unavailable `tqchar`/`tqgpar` | NOT-REPRESENTED |
 | `tqgetr` | INCOMPLETE | UNVERIFIED | UNVERIFIED | NOT-REPRESENTED |
 | `tqconf`, `tqgdat`, `tqlpar`, `tqcdat`, `tqwasc` | VERIFIED | UNVERIFIED | PLATFORM-UNAVAILABLE | NOT-REPRESENTED |
 | all remaining 60 wrappers | VERIFIED | UNVERIFIED | UNVERIFIED | NOT-REPRESENTED |
@@ -158,10 +157,10 @@ PLATFORM-UNAVAILABLE, `N` NOT-REPRESENTED.
 | `tqvers` | V | U | U | N |
 | `tqcprt` | V | U | U | N |
 | `tqlite` | V | U | U | N |
-| `tqgtid` | A | U | U | N |
+| `tqgtid` | V | U | U | N |
 | `tqgtnm` | V | U | U | N |
-| `tqgtpi` | A | U | U | N |
-| `tqgthi` | A | U | U | N |
+| `tqgtpi` | V | U | U | N |
+| `tqgthi` | V | U | U | N |
 | `tqgted` | V | U | U | N |
 | `tqconf` | V | U | P | N |
 | `tqsize` | V | U | U | N |
@@ -177,8 +176,8 @@ PLATFORM-UNAVAILABLE, `N` NOT-REPRESENTED.
 | `tqopnb` | V | U | U | N |
 | `tqopnt` | V | U | U | N |
 | `tqclos` | V | U | U | N |
-| `tqgtrh` | A | U | U | N |
-| `tqgsu` | S | U | U | N |
+| `tqgtrh` | V | U | U | N |
+| `tqgsu` | V | U | U | N |
 | `tqcsu` | V | U | U | N |
 | `tqinsc` | V | U | U | N |
 | `tqgnsc` | V | U | U | N |
@@ -195,14 +194,14 @@ PLATFORM-UNAVAILABLE, `N` NOT-REPRESENTED.
 | `tqpcis` | V | U | U | N |
 | `tqnopc` | V | U | U | N |
 | `tqstpc` | V | U | U | N |
-| `tqchar` | A | U | P | N |
+| `tqchar` | V | U | P | N |
 | `tqinlc` | V | U | U | N |
 | `tqgnlc` | V | U | U | N |
 | `tqnosl` | V | U | U | N |
 | `tqnolc` | V | U | U | N |
 | `tqgsp` | V | U | U | N |
 | `tqcsp` | V | U | U | N |
-| `tqgspc` | F | U | U | N |
+| `tqgspc` | V | U | U | N |
 | `tqcspc` | V | U | U | N |
 | `tqsetc` | V | U | U | N |
 | `tqremc` | V | U | U | N |
@@ -223,10 +222,10 @@ PLATFORM-UNAVAILABLE, `N` NOT-REPRESENTED.
 | `tqstxp` | V | U | U | N |
 | `tqgtlc` | V | U | U | N |
 | `tqbond` | V | U | U | N |
-| `tqerr` | A | U | U | N |
+| `tqerr` | V | U | U | N |
 | `tqgdat` | V | U | P | N |
 | `tqlpar` | V | U | P | N |
-| `tqgpar` | S | U | P | N |
+| `tqgpar` | V | U | P | N |
 | `tqcdat` | V | U | P | N |
 | `tqwasc` | V | U | P | N |
 
@@ -249,10 +248,10 @@ means it was not exercised.
 | TQVERS `tqvers` | §2.3; O version, O error; after init. | `tqvers(LIP,LIP)`; F-W/U same. | none; Rust `i32*,usize*`. | `_TQVERS@8` / `TQVERS` / `tqvers_`; C/R; yes. | Win32/x86: VERIFIED / — (Win32 version output is 32-bit). |
 | TQCPRT `tqcprt` | §2.2; writes copyright into native message buffer. | `tqcprt(LIP)`; F-W/U same. | none. | `_TQCPRT@4` / `TQCPRT` / `tqcprt_`; C/R (commented in Rust); no. | Win32/x86: VERIFIED / —. |
 | TQLITE `tqlite` | §2.4; O Light flag; phase targets/maps unavailable in Light. | `tqlite(LIP,LIP)`; F-W/U same. | none; Rust bool from `i32`. | `_TQLITE@8` / `TQLITE` / `tqlite_`; C/R; yes. | Win32/x86: VERIFIED / —. |
-| TQGTID `tqgtid` | §2.5; O license user ID; after init. | `tqgtid(CHP,LIP)`; F-W `(ID,255,NOERR)`, F-U `(ID,NOERR,ftnlen=255)`. | C(255); Rust sends 256. | `_TQGTID@12` / `TQGTID` / `tqgtid_`; C/R; yes. | Win32/x86: ABI-ISSUE / HIGH: raw length is 255, not 256. |
+| TQGTID `tqgtid` | §2.5; O license user ID; after init. | `tqgtid(CHP,LIP)`; F-W `(ID,255,NOERR)`, F-U `(ID,NOERR,ftnlen=255)`. | C(255); Rust now allocates and passes 255. | `_TQGTID@12` / `TQGTID` / `tqgtid_`; C/R; yes. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; original hidden length was 256. Other builds UNVERIFIED. |
 | TQGTNM `tqgtnm` | §2.6; O license-holder name. | `tqgtnm(CHP,LIP)`; F-W `(NAME,80,NOERR)`, F-U appended 80. | C(80); Rust `u8[80]`. | `_TQGTNM@12` / `TQGTNM` / `tqgtnm_`; C/R; yes. | Win32/x86: VERIFIED / —. |
-| TQGTPI `tqgtpi` | §2.7; O program ID. | `tqgtpi(CHP,LIP)`; bridge passes `TQSTRLEN=25`. | C(25); Rust `u8[80]`, sends 80. | `_TQGTPI@12` / `TQGTPI` / `tqgtpi_`; C/R; yes. | Win32/x86: ABI-ISSUE / HIGH: length differs from bridge. |
-| TQGTHI `tqgthi` | §2.8; O HASP type and ID; meaningful only for relevant licensing. | `tqgthi(CHP,LIP,LIP)`; F-W `(text,25,id,noerr)`, F-U appended 25. | C(25); Rust allocates `u8[80]` **and passes 80**, with `i32*` ID. Capacity is adequate but hidden declared length is not. | `_TQGTHI@16` / `TQGTHI` / `tqgthi_`; C/R; yes. | Win32/x86: ABI-ISSUE / HIGH: bridge passes `TQSTRLEN` (25), not 80. |
+| TQGTPI `tqgtpi` | §2.7; O program ID. | `tqgtpi(CHP,LIP)`; bridge passes `TQSTRLEN=25`. | C(25); Rust now allocates/passes 25. | `_TQGTPI@12` / `TQGTPI` / `tqgtpi_`; C/R; yes. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; original hidden length was 80. Other builds UNVERIFIED. |
+| TQGTHI `tqgthi` | §2.8; O HASP type and ID; meaningful only for relevant licensing. | `tqgthi(CHP,LIP,LIP)`; F-W `(text,25,id,noerr)`, F-U appended 25. | C(25); Rust now allocates/passes 25, with `i32*` ID. | `_TQGTHI@16` / `TQGTHI` / `tqgthi_`; C/R; yes. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; original hidden length was 80. Other builds UNVERIFIED. |
 | TQGTED `tqgted` | §2.9; O expiry month/year. | `tqgted(LIP,LIP,LIP)`; F-W/U same. | none; Rust `u32*`. | `_TQGTED@12` / `TQGTED` / `tqgted_`; C/R; yes. | Win32/x86: VERIFIED / — (non-negative fields). |
 | TQCONF `tqconf` | §2.10; I option and three indices; config mutates engine. | `tqconf(CHP,LI,LI,LI,LIP)`; F-W interleaves option length, F-U appends it. | C(OPTION); Rust `usize*` values. | `_TQCONF@24` / `TQCONF` / **absent**; -/-/crate; no. | Win32/x86: VERIFIED; Linux/i386: PLATFORM-UNAVAILABLE / MEDIUM. |
 | TQSIZE `tqsize` | §2.11; eleven O capacity dimensions plus error; after init. | `tqsize(12×LIP)`; F-W/U same. | none; Rust eleven `i32*`, `usize*` error. | `_TQSIZE@48` / `TQSIZE` / `tqsize_`; C/R; yes. | Win32/x86: VERIFIED / —. |
@@ -268,8 +267,8 @@ means it was not exercised.
 | TQOPNB `tqopnb` | §2.21; I binary filename/unit; precedes TQRBIN. | `tqopnb(CHP,LI,LIP)`; interleaved/appended length. | C(FILE). | `_TQOPNB@16` / `TQOPNB` / `tqopnb_`; -/-/crate; no. | Win32/x86: VERIFIED / LOW. |
 | TQOPNT `tqopnt` | §2.22; I transparent filename/unit; precedes TQRCST. | `tqopnt(CHP,LI,LIP)`; interleaved/appended length. | C(FILE). | `_TQOPNT@16` / `TQOPNT` / `tqopnt_`; C/R/crate; optional skip. | Win32/x86: VERIFIED / —. |
 | TQCLOS `tqclos` | §2.23; I unit; closes ChemApp-associated file. | `tqclos(LI,LIP)`; F-W/U same. | none; Rust `usize*`. | `_TQCLOS@8` / `TQCLOS` / `tqclos_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
-| TQGTRH `tqgtrh` | §2.24; ten O header fields after TQRCST: version, names, version/date arrays, ID, user, remark. | Header form shown in `cacint.h`; F-W interleaves 40,40,255,80,80; F-U appends them. | C(40,40,255,80,80); Rust sends 41,41,256,81,81. | `_TQGTRH@64` / `TQGTRH` / `tqgtrh_`; C/R; optional skip. | Win32/x86: ABI-ISSUE / HIGH: all five raw lengths are off by one. |
-| TQGSU `tqgsu` | §2.25; I unit class; O active unit; units are mutable engine state. | `tqgsu(CHP,CHP,LIP)`; F-W option length/unit length interleaved; F-U appended. | C(option,25); Rust computes `option.len()-1`. | `_TQGSU@20` / `TQGSU` / `tqgsu_`; C/R/crate; yes. | Win32/x86: SEMANTICS-ISSUE / HIGH: passes a truncated option and underflows for empty input. |
+| TQGTRH `tqgtrh` | §2.24; ten O header fields after TQRCST: version, names, version/date arrays, ID, user, remark. | Header form shown in `cacint.h`; F-W interleaves 40,40,255,80,80; F-U appends them. | C(40,40,255,80,80); Rust now allocates/passes those exact lengths. | `_TQGTRH@64` / `TQGTRH` / `tqgtrh_`; C/R; optional skip. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; original values were 41,41,256,81,81. Other builds UNVERIFIED. |
+| TQGSU `tqgsu` | §2.25; I unit class; O active unit; units are mutable engine state. | `tqgsu(CHP,CHP,LIP)`; F-W option length/unit length interleaved; F-U appended. | C(option,25); Rust now uses the `CString` byte length, matching `strlen(OPTION)`. | `_TQGSU@20` / `TQGSU` / `tqgsu_`; C/R/crate; yes. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; original code truncated options and underflowed when empty. Other builds UNVERIFIED. |
 | TQCSU `tqcsu` | §2.26; I unit class and unit string; changes active system units. | `tqcsu(CHP,CHP,LIP)`; F-W interleaved, F-U appended. | C(option,unit). | `_TQCSU@20` / `TQCSU` / `tqcsu_`; C/R; yes. | Win32/x86: VERIFIED / —. |
 
 ### System identity, status, and sublattices (manual 3.x)
@@ -291,14 +290,14 @@ means it was not exercised.
 | TQPCIS `tqpcis` | §3.14; I phase/constituent, O permitted-as-incoming flag. | `(LI,LI,LIP,LIP)`. | none. | `_TQPCIS@16` / `TQPCIS` / `tqpcis_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQNOPC `tqnopc` | §3.15; I phase, O number of constituents. | `(LI,LIP,LIP)`. | none. | `_TQNOPC@12` / `TQNOPC` / `tqnopc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQSTPC `tqstpc` | §3.16; I phase/constituent; O stoichiometry and molecular mass, active-unit dependent. | `(LI,LI,DBP,DBP,LIP)`. | DB array; Rust allocates component count. | `_TQSTPC@20` / `TQSTPC` / `tqstpc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
-| TQCHAR `tqchar` | §3.17; I phase/constituent; O charge as real value. | Header/bridge `(LI,LI,DBP,LIP)`. | no CHAR; Rust uses `i32*` where raw is `double*`. | `_TQCHAR@16` / `TQCHAR` / **absent**; -/-/crate; no. | Win32/x86: ABI-ISSUE / **CRITICAL**: likely eight-byte native write into four-byte object. |
+| TQCHAR `tqchar` | §3.17; I phase/constituent; O charge as real value. | Header/bridge `(LI,LI,DBP,LIP)`. | no CHAR; Rust now uses `f64*`, matching raw `double*`. | `_TQCHAR@16` / `TQCHAR` / **absent**; -/-/crate; no. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; original `i32*` was a CRITICAL eight-byte-write risk. Linux/i386 unavailable; other builds UNVERIFIED. |
 | TQINLC `tqinlc` | §3.18; I name/phase/sublattice; O constituent index. | `(CHP,LI,LI,LIP,LIP)`. | C(NAME). | `_TQINLC@24` / `TQINLC` / `tqinlc_`; C/R; yes. | Win32/x86: VERIFIED / —. |
 | TQGNLC `tqgnlc` | §3.19; I phase/sublattice/constituent; O name. | `(LI,LI,LI,CHP,LIP)`; output len 25. | C(25). | `_TQGNLC@24` / `TQGNLC` / `tqgnlc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQNOSL `tqnosl` | §3.20; I phase; O number of sublattices. | `(LI,LIP,LIP)`. | none. | `_TQNOSL@12` / `TQNOSL` / `tqnosl_`; C/R; yes. | Win32/x86: VERIFIED / —. |
 | TQNOLC `tqnolc` | §3.21; I phase/sublattice; O constituent count. | `(LI,LI,LIP,LIP)`. | none. | `_TQNOLC@16` / `TQNOLC` / `tqnolc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQGSP `tqgsp` | §3.23; I phase; O status (`ENTERED`, `ELIMINATED`, etc.). | `(LI,CHP,LIP)`, output len 25. | C(25). | `_TQGSP@16` / `TQGSP` / `tqgsp_`; C/R/crate; yes. | Win32/x86: VERIFIED / LOW: returned padding retained. |
 | TQCSP `tqcsp` | §3.24; I phase/status; changes phase participation. | `(LI,CHP,LIP)`. | C(STATUS). | `_TQCSP@16` / `TQCSP` / `tqcsp_`; C/R; yes. | Win32/x86: VERIFIED / —. |
-| TQGSPC `tqgspc` | §3.25; I phase/constituent; O status. | `(LI,LI,CHP,LIP)`, output len 25. | C(25); Rust symbol type says `&u8`, although the bridge's `CHP` is a writable output pointer. | `_TQGSPC@20` / `TQGSPC` / `tqgspc_`; C/R/crate; yes. | Win32/x86: FFI-SOUNDNESS / MEDIUM: the pointer representation/stack layout is compatible, but a mutable foreign output is declared immutable. |
+| TQGSPC `tqgspc` | §3.25; I phase/constituent; O status. | `(LI,LI,CHP,LIP)`, output len 25. | C(25); Rust symbol type now uses `&mut u8` for the writable output pointer. | `_TQGSPC@20` / `TQGSPC` / `tqgspc_`; C/R/crate; yes. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; original immutable reference was an FFI-soundness defect, not a pointer-layout change. Other builds UNVERIFIED. |
 | TQCSPC `tqcspc` | §3.26; I phase/constituent/status; mutates status subject to model restrictions. | `(LI,LI,CHP,LIP)`. | C(STATUS). | `_TQCSPC@20` / `TQCSPC` / `tqcspc_`; C/R; yes. | Win32/x86: VERIFIED / —. |
 
 ### Conditions and streams (manual 4.x)
@@ -329,7 +328,7 @@ means it was not exercised.
 | TQSTXP `tqstxp` | §5.11; I stream ID/property option, O property; stream state/units apply. | `(CHP,CHP,DBP,LIP)`. | C(IDENTS,OPTION), F-U appends both lengths. | `_TQSTXP@24` / `TQSTXP` / `tqstxp_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQGTLC `tqgtlc` | §5.12; I phase/sublattice/constituent, O current calculated site fraction. | `(LI,LI,LI,DBP,LIP)`. | none. | `_TQGTLC@20` / `TQGTLC` / `tqgtlc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQBOND `tqbond` | §5.13; I phase and pair/quadruplet indexes, O current fraction; applicable models only. | `(LI,LI,LI,LI,LI,DBP,LIP)`. | none. | `_TQBOND@28` / `TQBOND` / `tqbond_`; -/-/crate; no. | Win32/x86: VERIFIED / LOW. |
-| TQERR `tqerr` | §5.14; O current three-line message; must be checked close to origin. | `(CHP,LIP)`; bridge raw calls length **80**, with a 3×80 buffer. | C(80) record length; Rust passes 240. | `_TQERR@12` / `TQERR` / `tqerr_`; C/R (commented Rust); no. | Win32/x86: ABI-ISSUE / HIGH: raw CHARACTER length must be 80, not total buffer size. |
+| TQERR `tqerr` | §5.14; O current three-line message; must be checked close to origin. | `(CHP,LIP)`; bridge raw calls length **80**, with a 3×80 buffer. | C(80) record length; Rust now retains 240-byte storage but passes 80 and joins trimmed records. | `_TQERR@12` / `TQERR` / `tqerr_`; C/R (commented Rust); no. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; original hidden length was 240. Other builds UNVERIFIED. |
 
 ### Thermodynamic data manipulation (manual 6.x)
 
@@ -337,16 +336,17 @@ means it was not exercised.
 |---|---|---|---|---|---|
 | TQGDAT `tqgdat` | §6.1; I phase/constituent/option/range; O count and value vector; ASCII data required; options define vector size. | `(LI,LI,CHP,LI,LIP,DBP,LIP)`. | C(OPTION); Rust fixed `[f64;25]`. | `_TQGDAT@32` / `TQGDAT` / **absent**; -/-/crate; no. | Win32/x86: VERIFIED; Linux/i386: PLATFORM-UNAVAILABLE / MEDIUM: fixed capacity still needs option-by-option bounds proof. |
 | TQLPAR `tqlpar` | §6.2; I phase/option; O parameter count, text records, lengths; ASCII/model dependent. | `(LI,CHP,LIP,CHP,LIP,LIP)`, text record len 156. | C(OPTION,156); Rust 1999×156, ignores returned lengths. | `_TQLPAR@32` / `TQLPAR` / **absent**; -/-/crate; no. | Win32/x86: VERIFIED; Linux/i386: PLATFORM-UNAVAILABLE / MEDIUM: lossy record-length handling noted. |
-| TQGPAR `tqgpar` | §6.3; I phase/option/index; O expression/value counts and values; ASCII/model dependent. | `(LI,CHP,LI,LIP,LIP,DBP,LIP)`. | C(OPTION); Rust fixed 28×20 and returns `Ok` without checking `errcode`. | `_TQGPAR@32` / `TQGPAR` / **absent**; -/-/crate; no. | Win32/x86: SEMANTICS-ISSUE / HIGH; Linux/i386: PLATFORM-UNAVAILABLE. |
+| TQGPAR `tqgpar` | §6.3; I phase/option/index; O expression/value counts and values; ASCII/model dependent. | `(LI,CHP,LI,LIP,LIP,DBP,LIP)`. | C(OPTION); Rust fixed 28×20 and now returns through `wrap_result`. | `_TQGPAR@32` / `TQGPAR` / **absent**; -/-/crate; no. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED for error propagation; fixed output capacities remain a later bounds audit. Linux/i386: PLATFORM-UNAVAILABLE. |
 | TQCDAT `tqcdat` | §6.4; five I integer selectors and I value; changes ASCII thermodynamic data. | `(LI,LI,LI,LI,LI,DB,LIP)`. | none. | `_TQCDAT@28` / `TQCDAT` / **absent**; -/-/crate; no. | Win32/x86: VERIFIED; Linux/i386: PLATFORM-UNAVAILABLE / MEDIUM. |
 | TQWASC `tqwasc` | §6.5; I output filename; writes ASCII data where capability permits. | `(CHP,LIP)` plus file length. | C(FILE). | `_TQWASC@12` / `TQWASC` / **absent**; -/-/-; no. | Win32/x86: VERIFIED; Linux/i386: PLATFORM-UNAVAILABLE / MEDIUM. |
 
 ## Separate semantic findings
 
-1. `tqgsu` at `src/native.rs:695` sends `option.len() - 1`.  The bridge uses
-   the actual `strlen(OPTION)`.  This truncates every non-empty option and
-   panics/underflows for empty input.  Severity: HIGH.
-2. `tqgetr` at `src/native.rs:1685` takes `usize` indices, allocates one
+1. **FIXED IN CURRENT MASTER:** `tqgsu` now derives its input length from
+   `CString::as_bytes()`, matching the bridge's `strlen(OPTION)` and allowing
+   an empty option without arithmetic underflow. The Win64 and Unix64 length
+   types remain unverified.
+2. `tqgetr` at `src/native.rs` takes `usize` indices, allocates one
    `f64`, and returns one scalar, but manual §5.9 requires `VAL` to be an
    array for `(INDEXP>0, INDEX<0)` (all constituents of a phase, or all
    system components of a phase for `XP`/`AP`), `(INDEXP<0, INDEX=0)` (all
@@ -355,9 +355,8 @@ means it was not exercised.
    be unsafe if the native array form were made reachable.  The high-level
    demo retrieves one fugacity at a time and does not expose the gap.
    Severity: MEDIUM / INCOMPLETE API.
-3. `tqgpar` at `src/native.rs:1886` builds the return value and uses
-   `return Ok(vecc)` rather than `wrap_result(vecc, errcode)`.  A native
-   error is silently discarded.  Severity: HIGH.
+3. **FIXED IN CURRENT MASTER:** `tqgpar` now calls `wrap_result(vecc,
+   errcode)`. Its documented output-capacity bounds remain a separate audit.
 4. `Calculator::load_datafile` hard-codes unit 10 rather than obtaining the
    configured `FILE` unit through TQGIO.  `Calculator` mapping helpers do not
    exhaust continuation results, and some entity/cache code is deliberately
@@ -400,27 +399,27 @@ Unix64 length types.
 |---|---|---|---|
 | `tqconf`, `tqgio`, `tqcio`, `tqopen`, `tqopna`, `tqopnb`, `tqopnt`, `tqwasc` | one input option/file; W: after it, U: final; `strlen(input)` | `CString`, `str.len()` excluding terminator; no blank padding | Win32 length value/order matches bridge. |
 | `tqinsc`, `tqcnsc`, `tqinp`, `tqinpc`, `tqinlc` | one input name; W interleaved/U appended; `strlen(input)` | `CString`, `str.len()` | Win32 match. |
-| `tqcsp`, `tqcspc`, `tqsetc`, `tqsttp`, `tqstca`, `tqstec`, `tqstrm`, `tqce`, `tqcel`, `tqcen`, `tqcenl`, `tqmap`, `tqmapl`, `tqclim`, `tqgetr`, `tqgdpc`, `tqgdat`, `tqlpar`, `tqgpar` | one input status/identifier/option; W interleaved/U appended; `strlen(input)` | `CString`, `str.len()` | Win32 match. `tqgetr` and `tqgpar` have separate API defects. |
+| `tqcsp`, `tqcspc`, `tqsetc`, `tqsttp`, `tqstca`, `tqstec`, `tqstrm`, `tqce`, `tqcel`, `tqcen`, `tqcenl`, `tqmap`, `tqmapl`, `tqclim`, `tqgetr`, `tqgdpc`, `tqgdat`, `tqlpar`, `tqgpar` | one input status/identifier/option; W interleaved/U appended; `strlen(input)` | `CString`, `str.len()` | Win32 match. `tqgetr` remains incomplete; `tqgpar` capacity bounds remain a separate audit. |
 | `tqcsc` | input 2-D character records; W length after pointer/U final; fixed 24 per record, bridge blank-pads C rows | Rust packs and space-pads 24-byte records, passes 24 | Win32 match; this unusual packing correctly follows raw ABI rather than public C shape. |
 | `tqwstr`, `tqstxp` | two inputs; W lengths interleaved in argument order/U both appended in argument order; `strlen` for each | two `CString`s; lengths use the corresponding `str.len()` | Win32 order/value match. |
 | `tqcsu` | two inputs (class, unit), W interleaved/U appended; both `strlen` | two `CString`s; both `str.len()` | Win32 match. |
-| `tqgsu` | input option (`strlen`) and output unit (fixed 25); W `(option,len,unit,25,noerr)`, U appends `(strlen,25)` | option `CString`, but Rust passes `option.len() - 1`; mutable 25-byte unit buffer, passes 25 | **SEMANTICS-ISSUE/HIGH**: option is truncated (and empty input underflows); output length/order are right. |
-| `tqgtid` | fixed output ID, 255; W `(id,255,noerr)`, U appended 255 | mutable 256-byte buffer; hidden length **256** | **ABI-ISSUE/HIGH**: capacity is safe, declared length is wrong. |
+| `tqgsu` | input option (`strlen`) and output unit (fixed 25); W `(option,len,unit,25,noerr)`, U appends `(strlen,25)` | `CString` byte length for option; mutable 25-byte unit buffer, passes 25 | **FIXED IN CURRENT MASTER:** Win32 length/order match; original code used `option.len()-1`. |
+| `tqgtid` | fixed output ID, 255; W `(id,255,noerr)`, U appended 255 | mutable 255-byte buffer; hidden length 255 | **FIXED IN CURRENT MASTER:** Win32 length/order match; original hidden length was 256. |
 | `tqgtnm` | fixed output name, 80 | mutable 80-byte buffer; hidden 80 | Win32 match. |
-| `tqgtpi`, `tqgthi` | each fixed output, `TQSTRLEN` = 25 | mutable 80-byte buffers; hidden **80** | **ABI-ISSUE/HIGH** for each: capacity does not change the Fortran declared length. |
+| `tqgtpi`, `tqgthi` | each fixed output, `TQSTRLEN` = 25 | mutable 25-byte buffers; hidden 25 | **FIXED IN CURRENT MASTER:** Win32 length/order match; original hidden length was 80. |
 | `tqgnsc`, `tqgnp`, `tqmodl`, `tqgnpc`, `tqgnlc`, `tqgsp` | fixed output name/model/status, 25 | mutable 25-byte buffer; hidden 25 | Win32 length/order match. Rust trimming is inconsistent but not a machine ABI difference. |
-| `tqgspc` | fixed writable output status, 25 | mutable 25-byte allocation and hidden 25, but `Symbol` type uses `&u8` | **FFI-SOUNDNESS/MEDIUM**: native writes through the pointer; layout is unchanged. |
-| `tqgtrh` | five fixed outputs 40, 40, 255, 80, 80; W interleaves each/U appends in that order | capacities and hidden values 41, 41, 256, 81, 81 | **ABI-ISSUE/HIGH**: every hidden declared length is one too large. |
-| `tqerr` | output is three 80-byte records; W `(mess,80,noerr)`, U final 80 | 240-byte allocation and hidden **240** | **ABI-ISSUE/HIGH**: total capacity is not the character record length. |
+| `tqgspc` | fixed writable output status, 25 | mutable 25-byte allocation, hidden 25, and `Symbol` uses `&mut u8` | **FIXED IN CURRENT MASTER:** Win32 soundness declaration now expresses the native write. |
+| `tqgtrh` | five fixed outputs 40, 40, 255, 80, 80; W interleaves each/U appends in that order | exact allocations and hidden values 40, 40, 255, 80, 80 | **FIXED IN CURRENT MASTER:** Win32 length/order match; original values were off by one. |
+| `tqerr` | output is three 80-byte records; W `(mess,80,noerr)`, U final 80 | 240-byte allocation, hidden 80, record-bounded conversion | **FIXED IN CURRENT MASTER:** total capacity remains distinct from CHARACTER record length. |
 
 Rust passes pointers to the first byte of `CString::as_bytes()` for inputs, so
 the NUL terminator is present in the allocation but excluded from the native
-length.  The bridge uses C `strlen` for those inputs; it does not blank-pad
-them.  Fixed outputs are Fortran blank-padded, are not required to be NUL
-terminated, and must be interpreted using their declared record size.  Rust's
-`from_utf8` conversion therefore preserves padding unless that wrapper calls
-`trim`; this conversion inconsistency is not evidence that the machine call is
-wrong.
+length. The bridge uses C `strlen` for those inputs; it does not blank-pad
+them. Fixed outputs are Fortran blank-padded, are not required to be NUL
+terminated, and must be interpreted using their declared record size. The
+corrected fixed-output wrappers inspect only that declared record, stop at an
+in-record NUL when present, and trim trailing Fortran blanks without removing
+internal spaces.
 
 ## Integer width and calling-convention findings
 
@@ -483,23 +482,20 @@ of comprehensive native coverage.
 
 ## Unknowns and recommended correction order
 
-1. **Stop/fix/test `tqchar` first.**  Correct its output to an ABI-proven
-   double representation and add a focused Win32 conformance test.
-2. Correct the five fixed CHARACTER-length calls: `tqgtid`, `tqgtpi`,
-   `tqgthi`, `tqgtrh`, and `tqerr`; test the exact declared length separately
-   from Rust buffer capacity and test blank-padding conversion.
-3. Correct `tqgsu`'s option length and `tqgpar`'s error propagation.  Correct
-   `tqgspc`'s Rust output-pointer mutability as a separate FFI-soundness
-   cleanup, without claiming a stack-layout change.
-4. Establish the actual Win64 Fortran integer/length ABI from a version-
+1. **FIXED IN CURRENT MASTER:** `tqchar`, the five fixed CHARACTER calls,
+   `tqgsu`, `tqgpar`, and `tqgspc` have focused structural tests. No production
+   correction has yet established a new non-Win32 ABI.
+2. Establish the actual Win64 Fortran integer/length ABI from a version-
    matched GTT transition source, compiler documentation, disassembly, or a
    narrowly scoped conformance harness.  Replace `usize` only with evidence.
-5. Split `tqgetr` into scalar and correctly sized array forms, retaining its
+3. Split `tqgetr` into scalar and correctly sized array forms, retaining its
    documented negative indices; bound-check data-manipulation buffers.
-6. Add capability/symbol detection for the older Linux/i386 binary, then
+4. Add capability/symbol detection for the older Linux/i386 binary, then
    decide its supported minimum ChemApp version.  Obtain a real Unix64 binary
    before claiming Unix64 support.
-7. Separately repair higher-level loader unit selection, error swallowing,
+5. Separately repair higher-level loader unit selection, error swallowing,
    mapping continuation, and state/unit documentation.
 
-No correction in this list was made by this audit.
+The recommended next production milestone is **Win64 native integer/length
+ABI verification**, not a global type rewrite. TQGETR redesign should follow
+once its scalar/array API can be designed from the manual semantics.

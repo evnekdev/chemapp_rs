@@ -151,6 +151,12 @@ oversized hidden length. In the checked bridge, `TQGTHI` and `TQGTPI` use 25,
 length of 80 despite its three-record output buffer. Record lengths must be
 retained per CHARACTER argument and per platform convention.
 
+The current `native.rs` correction follows this rule by interpreting fixed
+outputs only within their declared record length, then removing trailing
+Fortran blanks. A Rust allocation may be larger for convenience, but neither
+its capacity nor an incidental NUL byte may be used as the native CHARACTER
+length or as permission to scan past the declared record.
+
 The UNIX bridge's `CMT` spelling is `extern int`, while the manual describes
 subroutines and the bridge ignores any return value. On the checked i386 C
 calling convention, ignoring `EAX` with a Rust `-> ()` declaration does not

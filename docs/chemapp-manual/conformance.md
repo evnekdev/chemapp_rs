@@ -93,21 +93,22 @@ The current native layer contains a mixture of `usize`, `i32`, fixed `u8` buffer
 
 ## Native ABI audit summary (2026-08-24)
 
-The hardened audit covers all 75 `src/native.rs` wrappers at repository
-revision `5c3e1c350e97c314d7e84b5cb8bfd8461b3b9d74`.  It reports statuses per
-build rather than a misleading cross-platform primary verdict: Win32/x86 has
-65 verified wrappers, 6 confirmed machine-ABI defects, 1 Rust FFI-soundness
-declaration defect, 2 semantic/API defects, and 1 incomplete API.  All 75
-Win64 wrappers remain UNVERIFIED because the checked 2017 DLL lacks a
-version-matched raw-ABI source; Linux/i386 has 68 UNVERIFIED wrappers and 7
-absent exports; Unix64 has no checked binary.
+The hardened audit covers all 75 `src/native.rs` wrappers and reports status
+per build rather than a misleading cross-platform primary verdict. The first
+production correction milestone fixed the nine confirmed Win32/x86 findings:
+`TQCHAR` now uses `f64`/`double` storage; fixed CHARACTER calls use their
+documented bridge lengths; `TQGSPC` declares its writable pointer as mutable;
+`TQGSU` uses the actual input length; and `TQGPAR` propagates native errors.
+Win32/x86 therefore has 74 verified wrappers and one incomplete API
+(`TQGETR`). All 75 Win64 wrappers remain UNVERIFIED because the checked 2017
+DLL lacks a version-matched raw-ABI source; Linux/i386 has 68 UNVERIFIED
+wrappers and 7 absent exports; Unix64 has no checked binary.
 
-The CRITICAL finding remains `TQCHAR`: Rust supplies an `i32` output where the
-bridge requires `double *`, allowing an eight-byte native write into four-byte
-storage.  HIGH findings are the fixed CHARACTER-length mismatches in
-`TQGTID`, `TQGTPI`, `TQGTHI`, `TQGTRH`, and `TQERR`, plus the truncated `TQGSU`
-option and swallowed `TQGPAR` errors.  `TQGSPC` is a MEDIUM declaration-
-soundness defect, not evidence of a changed machine pointer layout.
+The former CRITICAL and HIGH defects above are **FIXED IN CURRENT MASTER** for
+the source rules supported by the checked Win32 bridge. This does not resolve
+the Win64 `LI`/`LIP`/hidden-length-width question. The next recommended
+production milestone is evidence-based Win64 integer/length ABI verification;
+the `TQGETR` scalar/array redesign remains separate.
 
 The checked Win32, Win64, and Linux/i386 exports were inspected.  A Win64
 `maindemo` smoke run succeeded, but it does not resolve the 32-bit C

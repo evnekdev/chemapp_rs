@@ -17,6 +17,12 @@ use crate::defs::{FUNCSWIN32,FUNCSWIN64,FUNCSUNIX32,FUNCSUNIX64};
 use crate::error::{ChemAppError};
 
 const NAME_LENGTH_MAX : usize = 25;
+const TQGTID_CHARACTER_LENGTH: usize = 255;
+const TQGTRH_PROGRAM_NAME_LENGTH: usize = 40;
+const TQGTRH_USER_ID_LENGTH: usize = 255;
+const TQGTRH_TEXT_LENGTH: usize = 80;
+const TQERR_RECORD_LENGTH: usize = 80;
+const TQERR_RECORD_COUNT: usize = 3;
 
 /*********************************************************************************************************************************************************************************************************/
 /*********************************************************************************************************************************************************************************************************/
@@ -46,8 +52,50 @@ fn clen(array: &[u8]) -> usize {
 	return length;
 }
 
-fn cu8array2string(cstring: &[u8])->String {
-	return from_utf8(&cstring[0..clen(&cstring)]).unwrap_or("<UNRECOGNIZED UTF8 SEQUENCE>").to_owned();
+/// Converts exactly one fixed-width Fortran CHARACTER result to a Rust string.
+///
+/// `character_length` is the Fortran declaration, not necessarily the Rust
+/// allocation length. ChemApp may blank-pad the record and is not required to
+/// NUL-terminate it, so this deliberately never examines a convenience byte
+/// beyond the declared record.
+fn fixed_fortran_string(buffer: &[u8], character_length: usize) -> Result<String, ChemAppError> {
+	if buffer.len() < character_length {
+		return Err(ChemAppError::OtherError(format!(
+			"Fortran CHARACTER buffer has length {}, but {} bytes are required",
+			buffer.len(), character_length
+		)));
+	}
+
+	let record = &buffer[..character_length];
+	let nul_end = record.iter().position(|byte| *byte == 0).unwrap_or(record.len());
+	let end = record[..nul_end]
+		.iter()
+		.rposition(|byte| *byte != b' ')
+		.map(|last| last + 1)
+		.unwrap_or(0);
+	return Ok(from_utf8(&record[..end])?.to_owned());
+}
+
+/// Converts TQERR's three 80-character Fortran records without treating the
+/// contiguous 240-byte Rust allocation as a single CHARACTER*240 value.
+fn tqerr_message(buffer: &[u8]) -> Result<String, ChemAppError> {
+	if buffer.len() < TQERR_RECORD_LENGTH * TQERR_RECORD_COUNT {
+		return Err(ChemAppError::OtherError("TQERR buffer is too short".to_owned()));
+	}
+
+	let mut records = Vec::new();
+	for record in buffer[..TQERR_RECORD_LENGTH * TQERR_RECORD_COUNT].chunks_exact(TQERR_RECORD_LENGTH) {
+		let text = fixed_fortran_string(record, TQERR_RECORD_LENGTH)?;
+		if !text.is_empty() {
+			records.push(text);
+		}
+	}
+	return Ok(records.join("\n"));
+}
+
+fn cstring_character_length(cstring: &CString) -> usize {
+	// CString::as_bytes deliberately excludes the trailing NUL.
+	return cstring.as_bytes().len();
 }
 
 fn wrap_result<T>(result: T, errcode: usize)->Result<T, ChemAppError>{
@@ -189,21 +237,23 @@ impl Engine {
 	pub fn tqgtid(&self)->Result<String, ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
-		let mut cstring: [u8; 256] = [0;256];
+		// The GTT bridge declares CHARACTER*255. No spare Rust byte is passed
+		// to Fortran as part of that declaration.
+		let mut cstring: [u8; TQGTID_CHARACTER_LENGTH] = [0; TQGTID_CHARACTER_LENGTH];
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], 256, &mut errcode);
+			func(&mut cstring[0], TQGTID_CHARACTER_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(cstring: &mut u8, errcode: &mut usize, length: usize)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], &mut errcode, 256);
+			func(&mut cstring[0], &mut errcode, TQGTID_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
-		return wrap_result(from_utf8(&cstring[0..clen(&cstring)])?.to_owned(), errcode);
+		return wrap_result(fixed_fortran_string(&cstring, TQGTID_CHARACTER_LENGTH)?, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -235,21 +285,21 @@ impl Engine {
 	pub fn tqgtpi(&self)->Result<String, ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
-		let mut cstring: [u8; 80] = [0;80];
+		let mut cstring: [u8; NAME_LENGTH_MAX] = [0; NAME_LENGTH_MAX];
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], 80, &mut errcode);
+			func(&mut cstring[0], NAME_LENGTH_MAX, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(cstring: &mut u8, errcode: &mut usize, length: usize)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], &mut errcode, 80);
+			func(&mut cstring[0], &mut errcode, NAME_LENGTH_MAX);
 		}
 		/******************************************************************************************************/
-		return wrap_result(from_utf8(&cstring[0..clen(&cstring)])?.to_owned(), errcode);
+		return wrap_result(fixed_fortran_string(&cstring, NAME_LENGTH_MAX)?, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -259,21 +309,21 @@ impl Engine {
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
 		let mut hid = 0;
-		let mut cstring: [u8; 80] = [0;80];
+		let mut cstring: [u8; NAME_LENGTH_MAX] = [0; NAME_LENGTH_MAX];
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, hid: &mut i32, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], 80, &mut hid, &mut errcode);
+			func(&mut cstring[0], NAME_LENGTH_MAX, &mut hid, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(cstring: &mut u8, hid: &mut i32, errcode: &mut usize, length: usize)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], &mut hid, &mut errcode, 80);
+			func(&mut cstring[0], &mut hid, &mut errcode, NAME_LENGTH_MAX);
 		}
 		/******************************************************************************************************/
-		return wrap_result((from_utf8(&cstring[0..clen(&cstring)])?.to_owned(),hid), errcode);
+		return wrap_result((fixed_fortran_string(&cstring, NAME_LENGTH_MAX)?,hid), errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -642,45 +692,42 @@ impl Engine {
 	/// GET-TRANSPARENT-FILE-HEADER-INFO
 	#[named]
 	pub fn tqgtrh(&self)->Result<TransparentHeader,ChemAppError>{
-		const SLENGTH0 : usize = 41;
-		const SLENGTH1 : usize = 81;
-		const SLENGTH2 : usize = 256;
 		let fname = func_alias(function_name!());
 		let mut cver = 0;
-		let mut cnwp : [u8; SLENGTH0] = [0; SLENGTH0];
+		let mut cnwp : [u8; TQGTRH_PROGRAM_NAME_LENGTH] = [0; TQGTRH_PROGRAM_NAME_LENGTH];
 		let mut cvnw : [i32; 3] = [0; 3];
-		let mut cnrp : [u8; SLENGTH0] = [0; SLENGTH0];
+		let mut cnrp : [u8; TQGTRH_PROGRAM_NAME_LENGTH] = [0; TQGTRH_PROGRAM_NAME_LENGTH];
 		let mut cvnr : [i32; 3] = [0; 3];
 		let mut cdtc : [i32; 6] = [0; 6];
 		let mut cdte : [i32; 6] = [0; 6];
-		let mut cid  : [u8; SLENGTH2] = [0; SLENGTH2];
-		let mut cusr : [u8; SLENGTH1] = [0; SLENGTH1];
-		let mut crem : [u8; SLENGTH1] = [0; SLENGTH1];
+		let mut cid  : [u8; TQGTRH_USER_ID_LENGTH] = [0; TQGTRH_USER_ID_LENGTH];
+		let mut cusr : [u8; TQGTRH_TEXT_LENGTH] = [0; TQGTRH_TEXT_LENGTH];
+		let mut crem : [u8; TQGTRH_TEXT_LENGTH] = [0; TQGTRH_TEXT_LENGTH];
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(&mut i32, &mut u8, usize, &mut i32, &mut u8, usize, &mut i32, &mut i32, &mut i32, &mut u8, usize, &mut u8, usize, &mut u8, usize, &mut usize)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cver, &mut cnwp[0], SLENGTH0, &mut cvnw[0], &mut cnrp[0], SLENGTH0, &mut cvnr[0], &mut cdtc[0], &mut cdte[0], &mut cid[0], SLENGTH2, &mut cusr[0], SLENGTH1, &mut crem[0], SLENGTH1, &mut errcode);
+			func(&mut cver, &mut cnwp[0], TQGTRH_PROGRAM_NAME_LENGTH, &mut cvnw[0], &mut cnrp[0], TQGTRH_PROGRAM_NAME_LENGTH, &mut cvnr[0], &mut cdtc[0], &mut cdte[0], &mut cid[0], TQGTRH_USER_ID_LENGTH, &mut cusr[0], TQGTRH_TEXT_LENGTH, &mut crem[0], TQGTRH_TEXT_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(&mut i32, &mut u8, &mut i32, &mut u8, &mut i32, &mut i32, &mut i32, &mut u8, &mut u8, &mut u8, &mut usize, usize, usize, usize, usize, usize)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cver, &mut cnwp[0], &mut cvnw[0], &mut cnrp[0], &mut cvnr[0], &mut cdtc[0], &mut cdte[0], &mut cid[0], &mut cusr[0], &mut crem[0], &mut errcode, SLENGTH0, SLENGTH0, SLENGTH2, SLENGTH1, SLENGTH1);
+			func(&mut cver, &mut cnwp[0], &mut cvnw[0], &mut cnrp[0], &mut cvnr[0], &mut cdtc[0], &mut cdte[0], &mut cid[0], &mut cusr[0], &mut crem[0], &mut errcode, TQGTRH_PROGRAM_NAME_LENGTH, TQGTRH_PROGRAM_NAME_LENGTH, TQGTRH_USER_ID_LENGTH, TQGTRH_TEXT_LENGTH, TQGTRH_TEXT_LENGTH);
 		}
 		/******************************************************************************************************/
 		let header : TransparentHeader = TransparentHeader {
 			version : cver,
-			name_writing_program       : cu8array2string(&cnwp),
+			name_writing_program       : fixed_fortran_string(&cnwp, TQGTRH_PROGRAM_NAME_LENGTH)?,
 			version_writing_program    : cvnw,
-			name_reading_program       : cu8array2string(&cnrp),
+			name_reading_program       : fixed_fortran_string(&cnrp, TQGTRH_PROGRAM_NAME_LENGTH)?,
 			minversion_reading_program : cvnr,
 			creation_date              : cdtc,
 			expiry_date                : cdte,
-			user_ids_allowed           : cu8array2string(&cid),
-			license_holders_allowed    : cu8array2string(&cusr),
-			remark                     : cu8array2string(&crem),
+			user_ids_allowed           : fixed_fortran_string(&cid, TQGTRH_USER_ID_LENGTH)?,
+			license_holders_allowed    : fixed_fortran_string(&cusr, TQGTRH_TEXT_LENGTH)?,
+			remark                     : fixed_fortran_string(&crem, TQGTRH_TEXT_LENGTH)?,
 		};
 		return wrap_result(header, errcode);
 	}
@@ -691,7 +738,9 @@ impl Engine {
 	pub fn tqgsu(&self, option: &str) -> Result<String, ChemAppError>{
 		let fname = func_alias(function_name!());
 		let coption: CString = CString::new(option)?;
-		let option_length = option.len()-1;
+		// CString::as_bytes excludes the terminating NUL and therefore matches
+		// the C bridge's strlen(OPTION), including for an empty option.
+		let option_length = cstring_character_length(&coption);
 		let mut cunit: [u8; NAME_LENGTH_MAX] = [0;NAME_LENGTH_MAX];
 		let mut errcode = 0;
 		/******************************************************************************************************/
@@ -708,7 +757,7 @@ impl Engine {
 			func(&coption.as_bytes()[0], &mut cunit[0], &mut errcode, option_length, NAME_LENGTH_MAX);
 		}
 		/******************************************************************************************************/
-		return wrap_result(from_utf8(&cunit[0..clen(&cunit)])?.to_owned(), errcode);
+		return wrap_result(fixed_fortran_string(&cunit, NAME_LENGTH_MAX)?, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -1121,22 +1170,25 @@ impl Engine {
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
-	/// GET-CHARGE-OF-PHASE-CONSTITUENT
+	/// GET-CHARGE-OF-PHASE-CONSTITUENT.
+	///
+	/// ChemApp's `VAL` output is DOUBLE PRECISION; using `f64` prevents the
+	/// native routine from writing an eight-byte value into integer storage.
 	#[named]
-	pub fn tqchar(&self, indexp: usize, indexc: usize)->Result<i32, ChemAppError>{
+	pub fn tqchar(&self, indexp: usize, indexc: usize)->Result<f64, ChemAppError>{
 		let fname = func_alias(function_name!());
-		let mut charge = 0;
+		let mut charge = 0.0;
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, charge: &mut i32, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, charge: &mut f64, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &mut charge, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(indexp: &usize, indexc: &usize, charge: &mut i32, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "C" fn(indexp: &usize, indexc: &usize, charge: &mut f64, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &mut charge, &mut errcode);
 		}
 		/******************************************************************************************************/
@@ -1295,17 +1347,19 @@ impl Engine {
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
-			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, cstatus: &u8, cstatus_length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
+			// TQGSPC writes the fixed-width status buffer; express that write in
+			// the Rust FFI type even though pointer representation is unchanged.
+			let func: Symbol<extern "system" fn(indexp: &usize, indexc: &usize, cstatus: &mut u8, cstatus_length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &mut cstatus[0], NAME_LENGTH_MAX, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
-			let func: Symbol<extern "C" fn(indexp: &usize, indexc: &usize, cstatus: &u8, errcode: &mut usize, cstatus_length: usize)->()> = self.library.get(fname.as_bytes())?;
+			let func: Symbol<extern "C" fn(indexp: &usize, indexc: &usize, cstatus: &mut u8, errcode: &mut usize, cstatus_length: usize)->()> = self.library.get(fname.as_bytes())?;
 			func(&indexp, &indexc, &mut cstatus[0], &mut errcode, NAME_LENGTH_MAX);
 		}
 		/******************************************************************************************************/
-		return wrap_result(from_utf8(&cstatus)?.to_owned(), errcode);
+		return wrap_result(fixed_fortran_string(&cstatus, NAME_LENGTH_MAX)?, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -1809,22 +1863,24 @@ impl Engine {
 	#[named]
 	pub fn tqerr(&self)->Result<String,ChemAppError>{
 		let fname = func_alias(function_name!());
-		let mut cmess : [u8; 80 * 3] = [0; 80 * 3];
+		// TQERR returns three CHARACTER*80 records. The allocation is 240
+		// bytes, but the hidden length remains the length of each record: 80.
+		let mut cmess : [u8; TQERR_RECORD_LENGTH * TQERR_RECORD_COUNT] = [0; TQERR_RECORD_LENGTH * TQERR_RECORD_COUNT];
 		let mut errcode = 0;
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func: Symbol<extern "system" fn(message: &mut u8, message_len: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cmess[0], 80 * 3, &mut errcode);
+			func(&mut cmess[0], TQERR_RECORD_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(message: &mut u8, errcode: &mut usize, message_len: usize)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cmess[0], &mut errcode, 80 * 3);
+			func(&mut cmess[0], &mut errcode, TQERR_RECORD_LENGTH);
 		}
 		/******************************************************************************************************/
-		return wrap_result(from_utf8(&cmess)?.to_owned(), errcode);
+		return wrap_result(tqerr_message(&cmess)?, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -1911,7 +1967,7 @@ impl Engine {
 			}
 			vecc.push(vec);
 		}
-		return Ok(vecc);
+		return wrap_result(vecc, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -1963,3 +2019,45 @@ impl Engine {
 
 /***********************************************************************************************************************************************************************************************************/
 /***********************************************************************************************************************************************************************************************************/
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn fixed_output_lengths_match_the_checked_gtt_bridge() {
+		assert_eq!(TQGTID_CHARACTER_LENGTH, 255);
+		assert_eq!(NAME_LENGTH_MAX, 25);
+		assert_eq!(TQGTRH_PROGRAM_NAME_LENGTH, 40);
+		assert_eq!(TQGTRH_USER_ID_LENGTH, 255);
+		assert_eq!(TQGTRH_TEXT_LENGTH, 80);
+		assert_eq!(TQERR_RECORD_LENGTH, 80);
+		assert_eq!(TQERR_RECORD_COUNT, 3);
+	}
+
+	#[test]
+	fn fixed_fortran_string_uses_only_the_declared_record_and_trims_trailing_blanks() {
+		assert_eq!(fixed_fortran_string(b"A B   \0not-a-record", 6).unwrap(), "A B");
+		assert_eq!(fixed_fortran_string(b"    ", 4).unwrap(), "");
+		assert!(fixed_fortran_string(b"short", 6).is_err());
+	}
+
+	#[test]
+	fn tqerr_is_three_fixed_width_records() {
+		let mut buffer = [b' '; TQERR_RECORD_LENGTH * TQERR_RECORD_COUNT];
+		buffer[..5].copy_from_slice(b"first");
+		buffer[TQERR_RECORD_LENGTH..TQERR_RECORD_LENGTH + 6].copy_from_slice(b"second");
+		assert_eq!(tqerr_message(&buffer).unwrap(), "first\nsecond");
+	}
+
+	#[test]
+	fn tqgsu_input_length_excludes_only_the_cstring_nul() {
+		assert_eq!(cstring_character_length(&CString::new("").unwrap()), 0);
+		assert_eq!(cstring_character_length(&CString::new("Pressure").unwrap()), 8);
+	}
+
+	#[test]
+	fn tqchar_exposes_the_native_double_precision_result() {
+		let _: fn(&Engine, usize, usize) -> Result<f64, ChemAppError> = Engine::tqchar;
+	}
+}
