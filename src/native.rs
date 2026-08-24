@@ -18,6 +18,7 @@ use crate::error::{ChemAppError};
 
 const NAME_LENGTH_MAX : usize = 25;
 const TQGTID_CHARACTER_LENGTH: usize = 255;
+const TQGTNM_CHARACTER_LENGTH: usize = 80;
 const TQGTRH_PROGRAM_NAME_LENGTH: usize = 40;
 const TQGTRH_USER_ID_LENGTH: usize = 255;
 const TQGTRH_TEXT_LENGTH: usize = 80;
@@ -43,21 +44,14 @@ fn func_alias(name: &'static str)->&'static str {
     funcs[name]
 }
 
-fn clen(array: &[u8]) -> usize {
-	let mut length = 0;
-	for k in 0..array.len(){
-		if array[k] == 32{break;}
-		else {length += 1;}
-	}
-	return length;
-}
-
 /// Converts exactly one fixed-width Fortran CHARACTER result to a Rust string.
 ///
 /// `character_length` is the Fortran declaration, not necessarily the Rust
 /// allocation length. ChemApp may blank-pad the record and is not required to
 /// NUL-terminate it, so this deliberately never examines a convenience byte
-/// beyond the declared record.
+/// beyond the declared record. Internal spaces are data: only trailing
+/// Fortran padding is removed. Fixed-width output must never be parsed by
+/// looking for its first space.
 fn fixed_fortran_string(buffer: &[u8], character_length: usize) -> Result<String, ChemAppError> {
 	if buffer.len() < character_length {
 		return Err(ChemAppError::OtherError(format!(
@@ -262,21 +256,21 @@ impl Engine {
 	pub fn tqgtnm(&self)->Result<String, ChemAppError>{
 		let fname = func_alias(function_name!());
 		let mut errcode = 0;
-		let mut cstring: [u8; 80] = [0;80];
+		let mut cstring: [u8; TQGTNM_CHARACTER_LENGTH] = [0; TQGTNM_CHARACTER_LENGTH];
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
 			let func : Symbol<extern "system" fn(cstring: &mut u8, length: usize, errcode: &mut usize)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], 80, &mut errcode);
+			func(&mut cstring[0], TQGTNM_CHARACTER_LENGTH, &mut errcode);
 		}
 		/******************************************************************************************************/
 		#[cfg(target_family="unix")]
 		unsafe {
 			let func: Symbol<extern "C" fn(cstring: &mut u8, errcode: &mut usize, length: usize)->()> = self.library.get(fname.as_bytes())?;
-			func(&mut cstring[0], &mut errcode, 80);
+			func(&mut cstring[0], &mut errcode, TQGTNM_CHARACTER_LENGTH);
 		}
 		/******************************************************************************************************/
-		return wrap_result(from_utf8(&cstring[0..clen(&cstring)])?.to_owned(), errcode);
+		return wrap_result(fixed_fortran_string(&cstring, TQGTNM_CHARACTER_LENGTH)?, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -834,7 +828,7 @@ impl Engine {
 			func(&indexs, &mut cname[0], &mut errcode, NAME_LENGTH_MAX);
 		}
 		/******************************************************************************************************/
-		return wrap_result(from_utf8(&cname[0..clen(&cname)])?.replace('\0', "").to_owned(), errcode);
+		return wrap_result(fixed_fortran_string(&cname, NAME_LENGTH_MAX)?, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -998,7 +992,7 @@ impl Engine {
 			func(&indexp, &mut cname[0], &mut errcode, NAME_LENGTH_MAX);
 		}
 		/******************************************************************************************************/
-		return wrap_result(from_utf8(&cname[0..clen(&cname)])?.to_owned(), errcode);
+		return wrap_result(fixed_fortran_string(&cname, NAME_LENGTH_MAX)?, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -1021,7 +1015,7 @@ impl Engine {
 			func(&indexp, &mut cname[0], &mut errcode, NAME_LENGTH_MAX);
 		}
 		/******************************************************************************************************/
-		return wrap_result(from_utf8(&cname)?.to_owned().trim().to_string(), errcode);
+		return wrap_result(fixed_fortran_string(&cname, NAME_LENGTH_MAX)?, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -1094,7 +1088,7 @@ impl Engine {
 			func(&indexp, &indexc, &mut cname[0], &mut errcode, NAME_LENGTH_MAX);
 		}
 		/******************************************************************************************************/
-		return wrap_result(from_utf8(&cname)?.to_owned(), errcode);
+		return wrap_result(fixed_fortran_string(&cname, NAME_LENGTH_MAX)?, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -1240,7 +1234,7 @@ impl Engine {
 			func(&indexp, &indexl, &indexc, &mut cname[0], &mut errcode, NAME_LENGTH_MAX);
 		}
 		/******************************************************************************************************/
-		return wrap_result(from_utf8(&cname)?.trim().to_owned(), errcode);
+		return wrap_result(fixed_fortran_string(&cname, NAME_LENGTH_MAX)?, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -1310,7 +1304,7 @@ impl Engine {
 			func(&indexp, &mut cstatus[0], &mut errcode, NAME_LENGTH_MAX);
 		}
 		/******************************************************************************************************/
-		return wrap_result(from_utf8(&cstatus)?.to_owned(), errcode);
+		return wrap_result(fixed_fortran_string(&cstatus, NAME_LENGTH_MAX)?, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -2027,6 +2021,7 @@ mod tests {
 	#[test]
 	fn fixed_output_lengths_match_the_checked_gtt_bridge() {
 		assert_eq!(TQGTID_CHARACTER_LENGTH, 255);
+		assert_eq!(TQGTNM_CHARACTER_LENGTH, 80);
 		assert_eq!(NAME_LENGTH_MAX, 25);
 		assert_eq!(TQGTRH_PROGRAM_NAME_LENGTH, 40);
 		assert_eq!(TQGTRH_USER_ID_LENGTH, 255);
@@ -2036,10 +2031,23 @@ mod tests {
 	}
 
 	#[test]
-	fn fixed_fortran_string_uses_only_the_declared_record_and_trims_trailing_blanks() {
-		assert_eq!(fixed_fortran_string(b"A B   \0not-a-record", 6).unwrap(), "A B");
+	fn fixed_fortran_string_preserves_internal_spaces_and_trims_only_padding() {
+		assert_eq!(fixed_fortran_string(b"GTT - Technologies      ", 24).unwrap(), "GTT - Technologies");
+		assert_eq!(fixed_fortran_string(b"Corundum                 ", 25).unwrap(), "Corundum");
 		assert_eq!(fixed_fortran_string(b"    ", 4).unwrap(), "");
+		assert_eq!(fixed_fortran_string(b"A B   \0not-a-record", 6).unwrap(), "A B");
 		assert!(fixed_fortran_string(b"short", 6).is_err());
+	}
+
+	#[test]
+	fn tqgtnm_fixed_record_preserves_complete_license_holder_text() {
+		let license_holder = b"Example Research License - University";
+		let mut record = [b' '; TQGTNM_CHARACTER_LENGTH];
+		record[..license_holder.len()].copy_from_slice(license_holder);
+		assert_eq!(
+			fixed_fortran_string(&record, TQGTNM_CHARACTER_LENGTH).unwrap(),
+			"Example Research License - University"
+		);
 	}
 
 	#[test]

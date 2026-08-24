@@ -99,10 +99,18 @@ production correction milestone fixed the nine confirmed Win32/x86 findings:
 `TQCHAR` now uses `f64`/`double` storage; fixed CHARACTER calls use their
 documented bridge lengths; `TQGSPC` declares its writable pointer as mutable;
 `TQGSU` uses the actual input length; and `TQGPAR` propagates native errors.
-Win32/x86 therefore has 74 verified wrappers and one incomplete API
-(`TQGETR`). All 75 Win64 wrappers remain UNVERIFIED because the checked 2017
+A follow-up fixed-output conversion correction removed obsolete first-space
+decoding from `TQGTNM`, `TQGNSC`, `TQGNP`, `TQMODL`, `TQGNPC`, `TQGNLC`, and
+`TQGSP`. In particular, `TQGTNM` now preserves complete multi-word
+license-holder text and removes only trailing Fortran padding; its raw ABI was
+already correct. Win32/x86 therefore has 74 verified wrappers and one
+incomplete API (`TQGETR`) after this correction. All 75 Win64 wrappers remain UNVERIFIED because the checked 2017
 DLL lacks a version-matched raw-ABI source; Linux/i386 has 68 UNVERIFIED
 wrappers and 7 absent exports; Unix64 has no checked binary.
+
+The checked Win64 `maindemo` run observed a non-empty TQGTNM result containing
+internal spaces with no trailing padding. The installation-specific text was
+not retained in repository documentation or tests.
 
 The former CRITICAL and HIGH defects above are **FIXED IN CURRENT MASTER** for
 the source rules supported by the checked Win32 bridge. This does not resolve

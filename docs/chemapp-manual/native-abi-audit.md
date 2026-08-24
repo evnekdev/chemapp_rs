@@ -6,8 +6,9 @@ This audit began as a documentation-only hardening pass over all **75**
 `Engine::tq...` wrappers. The hardened-audit baseline was
 `ad5fbbfd71d8e5282b8c2bc63b39d193d9d678d7`. The first correction milestone
 subsequently fixed the nine confirmed Win32/x86 findings described below in
-`src/native.rs`; the historical evidence is retained so a later platform
-correction does not need to rediscover it.
+`src/native.rs`. A later narrow correction also replaced the obsolete
+first-space fixed-record decoding in seven getters; the historical evidence is
+retained so a later platform correction does not need to rediscover it.
 
 The strongest conclusion is deliberately scoped: the checked-in 32-bit
 Windows DLL and the checked-in C bridge agree on exported decorated symbols,
@@ -33,8 +34,10 @@ previously declared the native `DBP` (`double *`) output as `&mut i32`, which
 could write eight bytes into four-byte Rust storage. It now uses `&mut f64`
 and returns `Result<f64, ChemAppError>`. The fixed-length calls (`tqgtid`,
 `tqgtpi`, `tqgthi`, `tqgtrh`, `tqerr`), `tqgsu`, `tqgspc`, and `tqgpar` are
-also corrected and have focused structural tests. These changes do not verify
-the unresolved Win64 integer/length ABI.
+also corrected and have focused structural tests. `tqgtnm`, `tqgnsc`,
+`tqgnp`, `tqmodl`, `tqgnpc`, `tqgnlc`, and `tqgsp` now preserve internal
+spaces and remove only trailing fixed-record padding. These changes do not
+verify the unresolved Win64 integer/length ABI.
 The Windows x64 `LI`/`LIP` question remains HIGH-RISK **UNVERIFIED**, not a
 confirmed defect, because the available bridge is from 2013 and the checked
 x64 DLL is from 2017.
@@ -83,6 +86,10 @@ calls and wrote the demo result table. The temporary `result` artifact was
 removed afterward. It skipped optional files when unavailable. `tqgtrh`,
 `tqerr`, and `tqchar` lacked their required safe demo conditions. A successful
 call sequence is **not** proof of the raw ABI.
+
+The fixed-output conversion correction also ran this demo. `tqgtnm` returned
+a non-empty license-holder value containing internal spaces and no trailing
+padding; the installation-specific text was intentionally not recorded.
 
 ## Shared ABI notation
 
@@ -249,7 +256,7 @@ means it was not exercised.
 | TQCPRT `tqcprt` | §2.2; writes copyright into native message buffer. | `tqcprt(LIP)`; F-W/U same. | none. | `_TQCPRT@4` / `TQCPRT` / `tqcprt_`; C/R (commented in Rust); no. | Win32/x86: VERIFIED / —. |
 | TQLITE `tqlite` | §2.4; O Light flag; phase targets/maps unavailable in Light. | `tqlite(LIP,LIP)`; F-W/U same. | none; Rust bool from `i32`. | `_TQLITE@8` / `TQLITE` / `tqlite_`; C/R; yes. | Win32/x86: VERIFIED / —. |
 | TQGTID `tqgtid` | §2.5; O license user ID; after init. | `tqgtid(CHP,LIP)`; F-W `(ID,255,NOERR)`, F-U `(ID,NOERR,ftnlen=255)`. | C(255); Rust now allocates and passes 255. | `_TQGTID@12` / `TQGTID` / `tqgtid_`; C/R; yes. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; original hidden length was 256. Other builds UNVERIFIED. |
-| TQGTNM `tqgtnm` | §2.6; O license-holder name. | `tqgtnm(CHP,LIP)`; F-W `(NAME,80,NOERR)`, F-U appended 80. | C(80); Rust `u8[80]`. | `_TQGTNM@12` / `TQGTNM` / `tqgtnm_`; C/R; yes. | Win32/x86: VERIFIED / —. |
+| TQGTNM `tqgtnm` | §2.6; O license-holder name. | `tqgtnm(CHP,LIP)`; F-W `(NAME,80,NOERR)`, F-U appended 80. | C(80); raw ABI was already correct; Rust now decodes exactly the 80-byte record. | `_TQGTNM@12` / `TQGTNM` / `tqgtnm_`; C/R; yes. | **FIXED IN CURRENT MASTER:** original `clen()` stopped at the first space. Complete internal-space-preserving license-holder text is now returned with trailing padding removed. |
 | TQGTPI `tqgtpi` | §2.7; O program ID. | `tqgtpi(CHP,LIP)`; bridge passes `TQSTRLEN=25`. | C(25); Rust now allocates/passes 25. | `_TQGTPI@12` / `TQGTPI` / `tqgtpi_`; C/R; yes. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; original hidden length was 80. Other builds UNVERIFIED. |
 | TQGTHI `tqgthi` | §2.8; O HASP type and ID; meaningful only for relevant licensing. | `tqgthi(CHP,LIP,LIP)`; F-W `(text,25,id,noerr)`, F-U appended 25. | C(25); Rust now allocates/passes 25, with `i32*` ID. | `_TQGTHI@16` / `TQGTHI` / `tqgthi_`; C/R; yes. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; original hidden length was 80. Other builds UNVERIFIED. |
 | TQGTED `tqgted` | §2.9; O expiry month/year. | `tqgted(LIP,LIP,LIP)`; F-W/U same. | none; Rust `u32*`. | `_TQGTED@12` / `TQGTED` / `tqgted_`; C/R; yes. | Win32/x86: VERIFIED / — (non-negative fields). |
@@ -276,26 +283,26 @@ means it was not exercised.
 | Routine / wrapper | Manual semantic arguments, state, units | H and reconstructed raw ABI | CHAR / Rust ABI types | Symbols; coverage; runtime | Verdict / severity / audit note |
 |---|---|---|---|---|---|
 | TQINSC `tqinsc` | §3.2; I component name, O one-based index; ASCII system loaded. | `(CHP,LIP,LIP)`; interleaved/appended name length. | C(NAME). | `_TQINSC@16` / `TQINSC` / `tqinsc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
-| TQGNSC `tqgnsc` | §3.3; I one-based component index, O name. | `(LI,CHP,LIP)`; name length 25. | C(25). | `_TQGNSC@16` / `TQGNSC` / `tqgnsc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
+| TQGNSC `tqgnsc` | §3.3; I one-based component index, O name. | `(LI,CHP,LIP)`; name length 25. | C(25); Rust decodes the declared fixed record. | `_TQGNSC@16` / `TQGNSC` / `tqgnsc_`; C/R/crate; yes. | **FIXED IN CURRENT MASTER:** replaces first-space truncation; raw ABI unchanged. |
 | TQCNSC `tqcnsc` | §3.4; I component index/name; changes name. | `(LI,CHP,LIP)`; input name length. | C(NAME). | `_TQCNSC@16` / `TQCNSC` / `tqcnsc_`; -/-/-; no. | Win32/x86: VERIFIED / LOW. |
 | TQNOSC `tqnosc` | §3.5; O number of system components. | `(LIP,LIP)`. | none. | `_TQNOSC@8` / `TQNOSC` / `tqnosc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQSTSC `tqstsc` | §3.6; I component index; O stoichiometry vector, molecular mass in current amount unit/mol. | `(LI,DBP,DBP,LIP)`. | array `DB*`; Rust allocates `TQNOSC` values. | `_TQSTSC@16` / `TQSTSC` / `tqstsc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQCSC `tqcsc` | §3.7; I complete component-name set; must be independent; mutates component basis. | `(CHP,LIP)`; bridge packs C rows into blank-padded 24-byte records, raw length 24. | C array(24); Rust makes packed 24-byte records. | `_TQCSC@12` / `TQCSC` / `tqcsc_`; C/R; yes. | Win32/x86: VERIFIED / —; unusual packed buffer matches raw, not public C input. |
 | TQINP `tqinp` | §3.8; I phase name, O one-based phase index. | `(CHP,LIP,LIP)`. | C(NAME). | `_TQINP@16` / `TQINP` / `tqinp_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
-| TQGNP `tqgnp` | §3.9; I phase index, O name. | `(LI,CHP,LIP)`; output len 25. | C(25). | `_TQGNP@16` / `TQGNP` / `tqgnp_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
-| TQMODL `tqmodl` | §3.10; I phase index, O model identifier. | `(LI,CHP,LIP)`; output len 25. | C(25). | `_TQMODL@16` / `TQMODL` / `tqmodl_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
+| TQGNP `tqgnp` | §3.9; I phase index, O name. | `(LI,CHP,LIP)`; output len 25. | C(25); Rust decodes the declared fixed record. | `_TQGNP@16` / `TQGNP` / `tqgnp_`; C/R/crate; yes. | **FIXED IN CURRENT MASTER:** replaces first-space truncation; raw ABI unchanged. |
+| TQMODL `tqmodl` | §3.10; I phase index, O model identifier. | `(LI,CHP,LIP)`; output len 25. | C(25); Rust decodes the declared fixed record. | `_TQMODL@16` / `TQMODL` / `tqmodl_`; C/R/crate; yes. | **FIXED IN CURRENT MASTER:** consistent record-bounded output conversion. |
 | TQNOP `tqnop` | §3.11; O number of phases. | `(LIP,LIP)`. | none. | `_TQNOP@8` / `TQNOP` / `tqnop_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQINPC `tqinpc` | §3.12; I name/phase index, O one-based constituent index. | `(CHP,LI,LIP,LIP)`. | C(NAME). | `_TQINPC@20` / `TQINPC` / `tqinpc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
-| TQGNPC `tqgnpc` | §3.13; I phase/constituent index, O name. | `(LI,LI,CHP,LIP)`, output len 25. | C(25). | `_TQGNPC@20` / `TQGNPC` / `tqgnpc_`; C/R/crate; yes. | Win32/x86: VERIFIED / LOW: output is not trimmed consistently. |
+| TQGNPC `tqgnpc` | §3.13; I phase/constituent index, O name. | `(LI,LI,CHP,LIP)`, output len 25. | C(25); Rust decodes the declared fixed record. | `_TQGNPC@20` / `TQGNPC` / `tqgnpc_`; C/R/crate; yes. | **FIXED IN CURRENT MASTER:** trailing padding is removed without changing internal spaces. |
 | TQPCIS `tqpcis` | §3.14; I phase/constituent, O permitted-as-incoming flag. | `(LI,LI,LIP,LIP)`. | none. | `_TQPCIS@16` / `TQPCIS` / `tqpcis_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQNOPC `tqnopc` | §3.15; I phase, O number of constituents. | `(LI,LIP,LIP)`. | none. | `_TQNOPC@12` / `TQNOPC` / `tqnopc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQSTPC `tqstpc` | §3.16; I phase/constituent; O stoichiometry and molecular mass, active-unit dependent. | `(LI,LI,DBP,DBP,LIP)`. | DB array; Rust allocates component count. | `_TQSTPC@20` / `TQSTPC` / `tqstpc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQCHAR `tqchar` | §3.17; I phase/constituent; O charge as real value. | Header/bridge `(LI,LI,DBP,LIP)`. | no CHAR; Rust now uses `f64*`, matching raw `double*`. | `_TQCHAR@16` / `TQCHAR` / **absent**; -/-/crate; no. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; original `i32*` was a CRITICAL eight-byte-write risk. Linux/i386 unavailable; other builds UNVERIFIED. |
 | TQINLC `tqinlc` | §3.18; I name/phase/sublattice; O constituent index. | `(CHP,LI,LI,LIP,LIP)`. | C(NAME). | `_TQINLC@24` / `TQINLC` / `tqinlc_`; C/R; yes. | Win32/x86: VERIFIED / —. |
-| TQGNLC `tqgnlc` | §3.19; I phase/sublattice/constituent; O name. | `(LI,LI,LI,CHP,LIP)`; output len 25. | C(25). | `_TQGNLC@24` / `TQGNLC` / `tqgnlc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
+| TQGNLC `tqgnlc` | §3.19; I phase/sublattice/constituent; O name. | `(LI,LI,LI,CHP,LIP)`; output len 25. | C(25); Rust decodes the declared fixed record. | `_TQGNLC@24` / `TQGNLC` / `tqgnlc_`; C/R/crate; yes. | **FIXED IN CURRENT MASTER:** consistent record-bounded output conversion. |
 | TQNOSL `tqnosl` | §3.20; I phase; O number of sublattices. | `(LI,LIP,LIP)`. | none. | `_TQNOSL@12` / `TQNOSL` / `tqnosl_`; C/R; yes. | Win32/x86: VERIFIED / —. |
 | TQNOLC `tqnolc` | §3.21; I phase/sublattice; O constituent count. | `(LI,LI,LIP,LIP)`. | none. | `_TQNOLC@16` / `TQNOLC` / `tqnolc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
-| TQGSP `tqgsp` | §3.23; I phase; O status (`ENTERED`, `ELIMINATED`, etc.). | `(LI,CHP,LIP)`, output len 25. | C(25). | `_TQGSP@16` / `TQGSP` / `tqgsp_`; C/R/crate; yes. | Win32/x86: VERIFIED / LOW: returned padding retained. |
+| TQGSP `tqgsp` | §3.23; I phase; O status (`ENTERED`, `ELIMINATED`, etc.). | `(LI,CHP,LIP)`, output len 25. | C(25); Rust decodes the declared fixed record. | `_TQGSP@16` / `TQGSP` / `tqgsp_`; C/R/crate; yes. | **FIXED IN CURRENT MASTER:** trailing fixed-width padding is removed. |
 | TQCSP `tqcsp` | §3.24; I phase/status; changes phase participation. | `(LI,CHP,LIP)`. | C(STATUS). | `_TQCSP@16` / `TQCSP` / `tqcsp_`; C/R; yes. | Win32/x86: VERIFIED / —. |
 | TQGSPC `tqgspc` | §3.25; I phase/constituent; O status. | `(LI,LI,CHP,LIP)`, output len 25. | C(25); Rust symbol type now uses `&mut u8` for the writable output pointer. | `_TQGSPC@20` / `TQGSPC` / `tqgspc_`; C/R/crate; yes. | **FIXED IN CURRENT MASTER:** Win32/x86 VERIFIED; original immutable reference was an FFI-soundness defect, not a pointer-layout change. Other builds UNVERIFIED. |
 | TQCSPC `tqcspc` | §3.26; I phase/constituent/status; mutates status subject to model restrictions. | `(LI,LI,CHP,LIP)`. | C(STATUS). | `_TQCSPC@20` / `TQCSPC` / `tqcspc_`; C/R; yes. | Win32/x86: VERIFIED / —. |
@@ -405,9 +412,9 @@ Unix64 length types.
 | `tqcsu` | two inputs (class, unit), W interleaved/U appended; both `strlen` | two `CString`s; both `str.len()` | Win32 match. |
 | `tqgsu` | input option (`strlen`) and output unit (fixed 25); W `(option,len,unit,25,noerr)`, U appends `(strlen,25)` | `CString` byte length for option; mutable 25-byte unit buffer, passes 25 | **FIXED IN CURRENT MASTER:** Win32 length/order match; original code used `option.len()-1`. |
 | `tqgtid` | fixed output ID, 255; W `(id,255,noerr)`, U appended 255 | mutable 255-byte buffer; hidden length 255 | **FIXED IN CURRENT MASTER:** Win32 length/order match; original hidden length was 256. |
-| `tqgtnm` | fixed output name, 80 | mutable 80-byte buffer; hidden 80 | Win32 match. |
+| `tqgtnm` | fixed output name, 80 | mutable 80-byte buffer; hidden 80 | **FIXED IN CURRENT MASTER:** raw ABI was already correct; `clen()` first-space truncation was replaced with record-bounded decoding. |
 | `tqgtpi`, `tqgthi` | each fixed output, `TQSTRLEN` = 25 | mutable 25-byte buffers; hidden 25 | **FIXED IN CURRENT MASTER:** Win32 length/order match; original hidden length was 80. |
-| `tqgnsc`, `tqgnp`, `tqmodl`, `tqgnpc`, `tqgnlc`, `tqgsp` | fixed output name/model/status, 25 | mutable 25-byte buffer; hidden 25 | Win32 length/order match. Rust trimming is inconsistent but not a machine ABI difference. |
+| `tqgnsc`, `tqgnp`, `tqmodl`, `tqgnpc`, `tqgnlc`, `tqgsp` | fixed output name/model/status, 25 | mutable 25-byte buffer; hidden 25 | **FIXED IN CURRENT MASTER:** all use the same record-bounded conversion; this is Rust-side output adaptation, not a machine ABI change. |
 | `tqgspc` | fixed writable output status, 25 | mutable 25-byte allocation, hidden 25, and `Symbol` uses `&mut u8` | **FIXED IN CURRENT MASTER:** Win32 soundness declaration now expresses the native write. |
 | `tqgtrh` | five fixed outputs 40, 40, 255, 80, 80; W interleaves each/U appends in that order | exact allocations and hidden values 40, 40, 255, 80, 80 | **FIXED IN CURRENT MASTER:** Win32 length/order match; original values were off by one. |
 | `tqerr` | output is three 80-byte records; W `(mess,80,noerr)`, U final 80 | 240-byte allocation, hidden 80, record-bounded conversion | **FIXED IN CURRENT MASTER:** total capacity remains distinct from CHARACTER record length. |
@@ -419,7 +426,10 @@ them. Fixed outputs are Fortran blank-padded, are not required to be NUL
 terminated, and must be interpreted using their declared record size. The
 corrected fixed-output wrappers inspect only that declared record, stop at an
 in-record NUL when present, and trim trailing Fortran blanks without removing
-internal spaces.
+internal spaces. The previous statement that Win32/x86 already had 74 fully
+verified wrappers was therefore overstated while `tqgtnm`'s first-space
+conversion remained. After this correction, 74 is the current Win32/x86 count:
+the seven output-adaptation defects are fixed and `tqgetr` remains incomplete.
 
 ## Integer width and calling-convention findings
 
