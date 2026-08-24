@@ -108,6 +108,10 @@ pub(crate) fn chemapp_int_to_usize(value: ChemAppInt) -> Result<usize, ChemAppEr
 /// Adapts a raw native integer to the established public `i32` representation
 /// without assuming source-fallback `long` storage is always 32-bit.
 pub(crate) fn chemapp_int_to_i32(value: ChemAppInt) -> Result<i32, ChemAppError> {
+    // This is an identity conversion on checked c_int branches, but remains a
+    // checked narrowing on the source-modelled c_long fallback. Keep one
+    // portable boundary rather than cfg-splitting every caller.
+    #[allow(clippy::useless_conversion)]
     i32::try_from(value).map_err(|_| {
         ChemAppError::OtherError(format!(
             "ChemApp INTEGER {value} cannot be represented as public i32"

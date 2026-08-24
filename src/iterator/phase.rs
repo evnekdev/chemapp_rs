@@ -15,7 +15,7 @@ impl<'a> PhaseIterator<'a> {
         Ok(Self {
             calculator,
             next: 1,
-            count: calculator.engine.tqnop()?,
+            count: calculator.engine().tqnop()?,
         })
     }
 }

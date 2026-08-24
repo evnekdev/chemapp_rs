@@ -147,6 +147,60 @@ fn validate_composition_rows(actual: usize, expected: usize) -> Result<(), ChemA
     }
 }
 
+fn validate_target_component_indices(
+    composition_len: usize,
+    fixed: Option<usize>,
+    adjusting: Option<usize>,
+) -> Result<(), ChemAppError> {
+    match (fixed, adjusting) {
+        (None, None) => Ok(()),
+        (Some(fixed), Some(adjusting)) => {
+            for (role, index) in [("fixed", fixed), ("adjusting", adjusting)] {
+                if index == 0 || index > composition_len {
+                    return Err(ChemAppError::OtherError(format!(
+                        "{role} system-component index {index} is outside the one-based range 1..={composition_len}"
+                    )));
+                }
+            }
+            if fixed == adjusting {
+                return Err(ChemAppError::OtherError(
+                    "fixed and adjusting system-component indices must be different".to_owned(),
+                ));
+            }
+            Ok(())
+        }
+        _ => Err(ChemAppError::OtherError(
+            "both fixed and adjusting system components must be defined, or neither".to_owned(),
+        )),
+    }
+}
+
+fn adjusted_target_amount(
+    fixed_amount: f64,
+    fixed_fraction: f64,
+    adjusting_fraction: f64,
+) -> Result<f64, ChemAppError> {
+    if !fixed_amount.is_finite() || !fixed_fraction.is_finite() || !adjusting_fraction.is_finite() {
+        return Err(ChemAppError::OtherError(
+            "target composition correction received a non-finite amount or phase fraction"
+                .to_owned(),
+        ));
+    }
+    if fixed_fraction == 0.0 {
+        return Err(ChemAppError::OtherError(
+            "target composition correction cannot divide by a zero fixed-component phase fraction"
+                .to_owned(),
+        ));
+    }
+    let adjusted = fixed_amount * adjusting_fraction / fixed_fraction;
+    if !adjusted.is_finite() {
+        return Err(ChemAppError::OtherError(
+            "target composition correction produced a non-finite incoming amount".to_owned(),
+        ));
+    }
+    Ok(adjusted)
+}
+
 /*******************************************************************************************************************************************************************************************************************************/
 /*******************************************************************************************************************************************************************************************************************************/
 
@@ -160,10 +214,21 @@ fn validate_composition_rows(actual: usize, expected: usize) -> Result<(), ChemA
 /// A calculator owns one mutable ChemApp state. It is not safe to share one
 /// calculator for concurrent native calls; parallel calculations require
 /// separately loaded library instances/copies supported by the installation.
+/// Its Engine cannot be replaced independently of the loaded-system metadata:
+/// use [`Calculator::engine`] for deliberate native calls.
+///
+/// ```compile_fail
+/// use chemapp_rs::{Calculator, Engine};
+///
+/// fn replace_engine(calculator: &mut Calculator, replacement: Engine) {
+///     calculator.engine = replacement;
+/// }
+/// ```
 #[derive(Debug)]
 pub struct Calculator {
-    /// The loaded low-level ChemApp engine.
-    pub engine: Engine,
+    /// The loaded low-level ChemApp engine. Keeping ownership private prevents
+    /// replacement without rebuilding all system-dependent metadata.
+    engine: Engine,
     /// Optional captured baselines for reversible parameter changes.
     cache: Option<ParameterCache>,
     /// Data-file path used to initialize this calculator, or empty if unloaded.
@@ -181,7 +246,23 @@ pub struct Calculator {
 }
 
 impl Calculator {
+    /// Returns the underlying stateful low-level ChemApp engine.
+    ///
+    /// This is the advanced native escape hatch. Ordinary result queries and
+    /// deliberate low-level state operations are supported, but raw calls that
+    /// reinitialize or replace the loaded thermodynamic system (for example
+    /// `TQINI` followed by a data-file read) invalidate this Calculator's
+    /// stored data-file identity, composition transform, parameter cache, and
+    /// other system-local high-level identities. Construct a new Calculator
+    /// instead of using such a sequence through this accessor.
+    pub fn engine(&self) -> &Engine {
+        &self.engine
+    }
+
     /// Read one typed interaction parameter from the current live TQGPAR matrix.
+    ///
+    /// `address` is valid only for this Calculator's loaded thermodynamic
+    /// system and configuration; it is not a persistent cross-system identity.
     pub fn interaction_parameter(
         &self,
         address: InteractionParameterAddress,
@@ -193,7 +274,9 @@ impl Calculator {
     ///
     /// This mutates the loaded ChemApp model in memory. It deliberately does
     /// not reset conditions or recalculate equilibrium, so previously obtained
-    /// results are stale until the caller explicitly calculates again.
+    /// results are stale until the caller explicitly calculates again. The
+    /// address must have been obtained for this Calculator's current loaded
+    /// system and configuration.
     pub fn set_interaction_parameter(
         &self,
         address: InteractionParameterAddress,
@@ -224,30 +307,30 @@ impl Calculator {
         Self::init_engine(&engine, datfile)?;
         let components = Self::component_names(&engine)?;
         let transform = Self::identity_transform(&components)?;
-        return Ok(Calculator {
-            engine: engine,
+        Ok(Calculator {
+            engine,
             cache: None,
             file: datfile.to_string(),
             nondefault_errunit: None,
             transform,
             previous_errunit: None,
             active_stream_names: RefCell::new(HashSet::new()),
-        });
+        })
     }
 
     /// Initializes a ChemApp interface without a datafile
     pub fn from_library_unloaded(libname: &str) -> Result<Calculator, ChemAppError> {
         let engine = Engine::new(libname)?;
         engine.tqini()?;
-        return Ok(Calculator {
-            engine: engine,
+        Ok(Calculator {
+            engine,
             cache: None,
             file: "".to_string(),
             nondefault_errunit: None,
             transform: Transform::default(),
             previous_errunit: None,
             active_stream_names: RefCell::new(HashSet::new()),
-        });
+        })
     }
 
     /// Claims the unique high-level owner for a name-addressed native stream.
@@ -280,6 +363,9 @@ impl Calculator {
     }
 
     /// Returns the captured parameter cache, if one has been generated.
+    ///
+    /// The returned cache is an inspection view. Mutation and reset operations
+    /// live on `Calculator` so the cache can only target its owning Engine.
     pub fn parameter_cache(&self) -> Option<&ParameterCache> {
         self.cache.as_ref()
     }
@@ -292,10 +378,10 @@ impl Calculator {
     /***************************************************************************************************************************************************************************************************************************/
 
     /// Initializes the ChemApp interface and preconfigures it with the thermodynamic info from a datafile.
-    pub fn init_engine(engine: &Engine, datfile: &str) -> Result<(), ChemAppError> {
+    fn init_engine(engine: &Engine, datfile: &str) -> Result<(), ChemAppError> {
         engine.tqini()?;
         Self::load_datafile(engine, datfile)?;
-        return Ok(());
+        Ok(())
     }
 
     /// Loads one ChemApp thermochemical data-file through its format-specific
@@ -305,7 +391,7 @@ impl Calculator {
     /// `FILE` unit from `TQGIO` is then used consistently for opening and
     /// closing. Once an open succeeds, close is attempted even if the read
     /// fails; a dual failure retains the read error as the primary error.
-    pub fn load_datafile(engine: &Engine, datfile: &str) -> Result<(), ChemAppError> {
+    fn load_datafile(engine: &Engine, datfile: &str) -> Result<(), ChemAppError> {
         let format = datafile_format_from_filename(datfile)?;
         let unit = engine.tqgio("FILE")?;
 
@@ -333,11 +419,19 @@ impl Calculator {
             }),
         }
     }
-    /// Set a formula transform for input compositions
+    /// Sets a formula transform for input compositions.
+    ///
+    /// The transform defines the active high-level component basis. Changing
+    /// it drops any captured parameter cache so system-local cached addresses
+    /// cannot outlive the basis/configuration that produced them.
     pub fn set_transform<T: AsRef<str>>(&mut self, basis: &[T]) -> Result<(), ChemAppError> {
         let components = Self::component_names(&self.engine)?;
         self.transform = build_transform(&components, basis)?;
-        return Ok(());
+        // Cached native addresses are system-local. A basis change does not
+        // alter ChemApp's native indices today, but invalidating here keeps the
+        // high-level ownership contract simple and future-proof.
+        self.cache = None;
+        Ok(())
     }
     /// Internally, creates a temporary file (deleted once the current `Calculator` instance is dropped) to redirect ChemApp outputs; this is a useful feature in environments where console window is not available.
     pub fn redirect_error_to_temp(&mut self) -> Result<(), ChemAppError> {
@@ -393,7 +487,7 @@ impl Calculator {
         }
         self.nondefault_errunit = Some((filename, unit));
         self.previous_errunit = Some(previous_unit);
-        return Ok(());
+        Ok(())
     }
 
     /***************************************************************************************************************************************************************************************************************************/
@@ -402,7 +496,7 @@ impl Calculator {
     /// Resets all input conditions to prepare for another calculation (with the same datafile).
     pub fn reset(&self) -> Result<(), ChemAppError> {
         self.engine.tqremc(-2)?;
-        return Ok(());
+        Ok(())
     }
 
     /***************************************************************************************************************************************************************************************************************************/
@@ -410,16 +504,16 @@ impl Calculator {
 
     /// Global system properties accessor.
     pub fn system(&self) -> System<'_> {
-        return System::new(self);
+        System::new(self)
     }
 
     /// Iterates over system component indices.
     pub fn components(&self) -> Result<SystemComponentIterator<'_>, ChemAppError> {
-        return SystemComponentIterator::new(self);
+        SystemComponentIterator::new(self)
     }
     /// Iterates over phase indices.
     pub fn phases(&self) -> Result<PhaseIterator<'_>, ChemAppError> {
-        return PhaseIterator::new(self);
+        PhaseIterator::new(self)
     }
 
     /***************************************************************************************************************************************************************************************************************************/
@@ -491,7 +585,7 @@ impl Calculator {
         }
         //self.engine.tqshow();
         self.engine.tqce(" ", 0, 0, (0.0, 0.0))?;
-        return Ok(());
+        Ok(())
     }
 
     /// Calculates a no-target equilibrium at `temp` and ChemApp's default pressure.
@@ -527,6 +621,7 @@ impl Calculator {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn calculate_target_t_(
         &self,
         x_i: &DVector<f64>,
@@ -537,11 +632,7 @@ impl Calculator {
         fixed: Option<usize>,
         adjusting: Option<usize>,
     ) -> Result<(), ChemAppError> {
-        if fixed.is_some() != adjusting.is_some() {
-            return Err(ChemAppError::OtherError(
-                "both fixed and adjusting system components must be defined, or neither".to_owned(),
-            ));
-        }
+        validate_target_component_indices(x_i.len(), fixed, adjusting)?;
         // set non-compositional conditions
         let nitermax = 10usize;
         let val = if precipitation { -0.5 } else { 0.0 };
@@ -562,7 +653,7 @@ impl Calculator {
                     xvarprev = xvar.clone();
                     let xfnew = self.engine.tqgetr("XP", masterphase, sidxf)?;
                     let xanew = self.engine.tqgetr("XP", masterphase, sidxa)?;
-                    xvar[sidxa - 1] = xvar[sidxf - 1] * xanew / xfnew;
+                    xvar[sidxa - 1] = adjusted_target_amount(xvar[sidxf - 1], xfnew, xanew)?;
                     if iter > 0 {
                         xvar = (&xvar + &xvarprev) * 0.5;
                     }
@@ -587,9 +678,21 @@ impl Calculator {
                 ))
             }
         }
-        return Ok(());
+        Ok(())
     }
     /// Performs a temperature-target calculation after checked basis conversion.
+    ///
+    /// This method does **not** call `TQREMC`: it inherits the current pressure,
+    /// units, phase/constituent statuses, and other active native conditions.
+    /// It sets the phase-amount target `A`, rewrites temperature target limits,
+    /// writes incoming component amounts, and calls `TQCE` with temperature as
+    /// the target variable. `fixed` and `adjusting` are optional, distinct,
+    /// one-based system-component indices; supply both or neither.
+    ///
+    /// On success, the target equilibrium and the conditions just described
+    /// remain live. On failure, ChemApp may retain any conditions written before
+    /// the failing call; this method does not attempt a hidden rollback.
+    #[allow(clippy::too_many_arguments)]
     pub fn calculate_target_t<D: Dim, S: Storage<f64, D>>(
         &self,
         compositions: &Vector<f64, D, S>,
@@ -600,7 +703,7 @@ impl Calculator {
         fixed: Option<usize>,
         adjusting: Option<usize>,
     ) -> Result<(), ChemAppError> {
-        return self.calculate_target_t_(
+        self.calculate_target_t_(
             &self.transformed_composition(compositions)?,
             masterphase,
             target,
@@ -608,7 +711,7 @@ impl Calculator {
             precipitation,
             fixed,
             adjusting,
-        );
+        )
     }
 
     /***************************************************************************************************************************************************************************************************************************/
@@ -737,6 +840,7 @@ impl Calculator {
     /***************************************************************************************************************************************************************************************************************************/
     /// Runs a complete stateful map and snapshots every successful native result
     /// before advancing ChemApp to the next point.
+    #[allow(clippy::too_many_arguments)]
     fn mapping(
         &self,
         first_option: &str,
@@ -815,15 +919,12 @@ impl Calculator {
 /// Custom `Drop` re-implementation to ensure any temporary files are deleted.
 impl Drop for Calculator {
     fn drop(&mut self) {
-        match &self.nondefault_errunit {
-            Some((filename, unit)) => {
-                if let Some(previous_unit) = self.previous_errunit {
-                    let _ = self.engine.tqcio("ERROR", previous_unit);
-                }
-                let _ = self.engine.tqclos(*unit);
-                let _ = std::fs::remove_file(&filename);
+        if let Some((filename, unit)) = &self.nondefault_errunit {
+            if let Some(previous_unit) = self.previous_errunit {
+                let _ = self.engine.tqcio("ERROR", previous_unit);
             }
-            None => {}
+            let _ = self.engine.tqclos(*unit);
+            let _ = std::fs::remove_file(filename);
         }
     }
 }
@@ -845,6 +946,32 @@ mod tests {
         let error =
             validate_composition_rows(composition.nrows(), transform.number_final()).unwrap_err();
         assert!(error.description().contains("requires 2"));
+    }
+
+    #[test]
+    fn target_component_indices_are_one_based_bounded_and_paired() {
+        assert!(validate_target_component_indices(3, None, None).is_ok());
+        assert!(validate_target_component_indices(3, Some(1), Some(2)).is_ok());
+        for invalid in [
+            (Some(0), Some(1)),
+            (Some(1), Some(0)),
+            (Some(4), Some(1)),
+            (Some(1), Some(4)),
+            (Some(1), None),
+            (None, Some(1)),
+            (Some(2), Some(2)),
+        ] {
+            assert!(validate_target_component_indices(3, invalid.0, invalid.1).is_err());
+        }
+    }
+
+    #[test]
+    fn target_amount_correction_rejects_zero_and_non_finite_values() {
+        assert_eq!(adjusted_target_amount(2.0, 0.5, 0.25).unwrap(), 1.0);
+        assert!(adjusted_target_amount(2.0, 0.0, 0.25).is_err());
+        assert!(adjusted_target_amount(f64::NAN, 0.5, 0.25).is_err());
+        assert!(adjusted_target_amount(2.0, f64::INFINITY, 0.25).is_err());
+        assert!(adjusted_target_amount(2.0, 0.5, f64::NEG_INFINITY).is_err());
     }
 
     #[test]

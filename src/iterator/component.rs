@@ -15,7 +15,7 @@ impl<'a> SystemComponentIterator<'a> {
         Ok(Self {
             calculator,
             next: 1,
-            count: calculator.engine.tqnosc()?,
+            count: calculator.engine().tqnosc()?,
         })
     }
 }

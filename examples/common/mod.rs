@@ -65,7 +65,7 @@ pub fn pressure() -> Result<f64, ChemAppError> {
 /// system-component basis. Every component receives one unit; applications
 /// must replace this with their scientifically meaningful composition.
 pub fn unit_component_composition(calculator: &Calculator) -> Result<DVector<f64>, ChemAppError> {
-    let count = calculator.engine.tqnosc()?;
+    let count = calculator.engine().tqnosc()?;
     if count == 0 {
         return Err(ChemAppError::OtherError(
             "the loaded data-file contains no system components".to_owned(),

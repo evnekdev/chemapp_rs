@@ -118,8 +118,8 @@ impl BondSnapshot {
         };
         Ok(Self {
             phase_index: bond.phase_index(),
-            phase_name: bond.calculator.engine.tqgnp(bond.phase_index())?,
-            model: bond.calculator.engine.tqmodl(bond.phase_index())?,
+            phase_name: bond.calculator.engine().tqgnp(bond.phase_index())?,
+            model: bond.calculator.engine().tqmodl(bond.phase_index())?,
             kind,
             x: bond.x()?,
         })

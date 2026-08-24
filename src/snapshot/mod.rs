@@ -77,11 +77,11 @@ pub struct UnitsSnapshot {
 impl UnitsSnapshot {
     pub(crate) fn new(calculator: &Calculator) -> Result<Self, ChemAppError> {
         Ok(Self {
-            temperature: calculator.engine.tqgsu("Temperature")?,
-            pressure: calculator.engine.tqgsu("Pressure")?,
-            volume: calculator.engine.tqgsu("Volume")?,
-            energy: calculator.engine.tqgsu("Energy")?,
-            amount: calculator.engine.tqgsu("Amount")?,
+            temperature: calculator.engine().tqgsu("Temperature")?,
+            pressure: calculator.engine().tqgsu("Pressure")?,
+            volume: calculator.engine().tqgsu("Volume")?,
+            energy: calculator.engine().tqgsu("Energy")?,
+            amount: calculator.engine().tqgsu("Amount")?,
         })
     }
 }

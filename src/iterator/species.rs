@@ -13,15 +13,15 @@ pub struct SpeciesIterator<'a> {
 impl<'a> SpeciesIterator<'a> {
     /// Creates a model-aware iterator for a one-based phase index.
     pub fn new(calculator: &'a Calculator, indexp: usize) -> Result<Self, ChemAppError> {
-        let model = calculator.engine.tqmodl(indexp)?;
+        let model = calculator.engine().tqmodl(indexp)?;
         // TQMODL documents PURE as the result for a non-mixture phase. The
         // TQNOSL/TQNOLC contract applies to solution phases, which ChemApp
         // considers to have one or more sublattices. Do not infer that from a
         // textual model-family prefix: QUAS, QSOL, RKMP, and other mixture
         // models are not ruled out by their spelling.
         let identities = if has_sublattice_species(&model) {
-            let counts = (1..=calculator.engine.tqnosl(indexp)?)
-                .map(|sublattice| calculator.engine.tqnolc(indexp, sublattice))
+            let counts = (1..=calculator.engine().tqnosl(indexp)?)
+                .map(|sublattice| calculator.engine().tqnolc(indexp, sublattice))
                 .collect::<Result<Vec<_>, _>>()?;
             flattened_species_identities(&counts)
         } else {

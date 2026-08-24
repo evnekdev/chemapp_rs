@@ -8,7 +8,7 @@ use chemapp_rs::ChemAppError;
 fn main() -> Result<(), ChemAppError> {
     let calculator = common::calculator_from_env()?;
 
-    println!("ChemApp version: {}", calculator.engine.tqvers()?);
+    println!("ChemApp version: {}", calculator.engine().tqvers()?);
     println!("\nSystem components");
     println!("{:<7} Name", "Index");
     for component in calculator.components()? {

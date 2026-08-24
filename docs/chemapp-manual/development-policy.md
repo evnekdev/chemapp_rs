@@ -103,6 +103,12 @@ should use independent ChemApp library instances/copies only where the build
 and licence support doing so. Do not add an internal mutex that misleadingly
 suggests global native reentrancy.
 
+A `Calculator` owns one coherent loaded system. Its Engine storage is not a
+public replaceable field; `engine()` permits deliberate low-level calls without
+transferring ownership. Raw reinitialization/data loading through that accessor
+invalidates the Calculator's data-file metadata, transform, cache, and all
+system-local identities, so callers must construct a new Calculator instead.
+
 ## 8. Calculation helpers must state their reset contract
 
 Every helper that performs an equilibrium calculation must document whether it:
@@ -277,6 +283,14 @@ TQGPAR matrix, and be enabled only after a reversible runtime round-trip for
 that model/channel family. Unknown or special columns remain inspectable and
 read-only. Mutation invalidates earlier equilibrium results without silently
 recalculating them.
+
+Parameter-cache mutation belongs to the Calculator that captured the cache.
+Never expose a safe public cache mutator that accepts an arbitrary `&Engine`:
+phase, interaction, expression, and term indices are local to the loaded
+system/configuration. Cache inspection may remain detached/read-only. Changing
+the loaded system or high-level composition basis invalidates the cache;
+ordinary equilibrium conditions and TQCDAT value changes do not invalidate its
+address structure or captured-baseline meaning.
 
 ## 23. Error serialization is not a stable wire protocol
 

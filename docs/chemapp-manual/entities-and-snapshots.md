@@ -159,9 +159,7 @@ species rows. This is the concrete behavior previously omitted by the
 `SUB*`-prefix heuristic. The complete live table, including those species
 rows, remained equal to the full snapshot table for the unchanged state.
 
-The repository bundles a native library only for Windows x86, Windows x86-64,
-and Linux i386. Both demos prefer `CHEMAPP_LIBRARY` when set; otherwise they
-select only the exact matching bundled binary and report a clear error for
-other targets. `CHEMAPP_DATAFILE` can likewise override the default
-project-relative `data/cosi.dat`. Compilation for another target is not native
-runtime evidence for that target.
+The maintained examples require explicit `CHEMAPP_LIBRARY` and
+`CHEMAPP_DATAFILE` paths. They do not select a repository-native binary or
+thermodynamic database implicitly. Compilation for another target is not
+native runtime evidence for that target.

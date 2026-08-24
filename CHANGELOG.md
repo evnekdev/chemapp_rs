@@ -39,6 +39,13 @@ ChemApp itself remains a separately obtained proprietary dependency.
   - removed unused public calculation counters and made Calculator's data-file,
     transform, error-redirection, and parameter-cache storage private, with
     read-only accessors for the first, transform, and cache.
+  - made Calculator's Engine storage private and exposed `engine()` as
+    the advanced low-level accessor; system loading is now construction-only at
+    the high level so metadata cannot be detached from its native system.
+  - bound parameter-cache mutation/reset methods to the owning Calculator and
+    made detached cache construction and standard-state marker types private.
+  - `calculate_target_t` now rejects unpaired, zero, out-of-range, or identical
+    correction indices and prevents zero/non-finite correction arithmetic.
   - composition transforms now report dimension and non-spanning-basis errors
     instead of allowing dependency assertions to unwind through Calculator.
   - added `Calculator::calculate_isothermal_at_pressure`; the existing method
@@ -124,10 +131,10 @@ ChemApp itself remains a separately obtained proprietary dependency.
     (`PURE`) versus solution-phase distinction instead of a `SUB*` prefix.
   - corrected `Calculator::set_clim` so either failed call in its preferred
     two-bound order retries the complete reverse ordering once.
-  - made examples select only architecture-matched bundled ChemApp binaries,
-    with `CHEMAPP_LIBRARY` and optional `CHEMAPP_DATAFILE` overrides.
-  - made the interaction examples portable and fallible, with
-    `CHEMAPP_INTERACTION_DATAFILE` support and structured raw/resolved tables.
+  - made examples use external `CHEMAPP_LIBRARY` and `CHEMAPP_DATAFILE` paths;
+    no bundled native library or database is selected by published examples.
+  - made interaction examples portable and fallible with structured
+    raw/resolved tables using the same external data-file configuration.
   - corrected `TQLPAR` output adaptation to honor each returned descriptor
     length and corrected `TQGPAR` multi-expression values from native Fortran
     column-major storage into logical Rust rows.

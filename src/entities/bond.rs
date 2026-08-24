@@ -113,16 +113,16 @@ impl<'a> Bond<'a> {
 
     /// Validates the identity against the phase's current model and dimensions.
     pub fn is_valid(&self) -> Result<bool, ChemAppError> {
-        if self.indexp == 0 || self.indexp > self.calculator.engine.tqnop()? {
+        if self.indexp == 0 || self.indexp > self.calculator.engine().tqnop()? {
             return Ok(false);
         }
-        let model = normalized_model(&self.calculator.engine.tqmodl(self.indexp)?);
+        let model = normalized_model(&self.calculator.engine().tqmodl(self.indexp)?);
         match &self.kind {
             BondKind::Pair {
                 constituent_a,
                 constituent_b,
             } => {
-                let count = self.calculator.engine.tqnopc(self.indexp)?;
+                let count = self.calculator.engine().tqnopc(self.indexp)?;
                 Ok(matches!(model.as_str(), "QUAS" | "QSOL")
                     && *constituent_a > 0
                     && constituent_a <= constituent_b
@@ -134,11 +134,11 @@ impl<'a> Bond<'a> {
                 species_c,
                 species_d,
             } => {
-                if model != "SUBG" || self.calculator.engine.tqnosl(self.indexp)? != 2 {
+                if model != "SUBG" || self.calculator.engine().tqnosl(self.indexp)? != 2 {
                     return Ok(false);
                 }
-                let first_count = self.calculator.engine.tqnolc(self.indexp, 1)?;
-                let second_count = self.calculator.engine.tqnolc(self.indexp, 2)?;
+                let first_count = self.calculator.engine().tqnolc(self.indexp, 1)?;
+                let second_count = self.calculator.engine().tqnolc(self.indexp, 2)?;
                 Ok(species_a.sublattice == 1
                     && species_b.sublattice == 1
                     && species_c.sublattice == 2
@@ -215,7 +215,7 @@ impl<'a> Bond<'a> {
                 // The manual defines only INDEXA/INDEXB for QUAS/QSOL. Zeroes
                 // are neutral placeholders for the unused INDEXC/INDEXD slots.
                 self.calculator
-                    .engine
+                    .engine()
                     .tqbond(self.indexp, constituent_a, constituent_b, 0, 0)
             }
             BondKind::Quadruplet {
@@ -224,8 +224,8 @@ impl<'a> Bond<'a> {
                 species_c,
                 species_d,
             } => {
-                let first_count = self.calculator.engine.tqnolc(self.indexp, 1)?;
-                self.calculator.engine.tqbond(
+                let first_count = self.calculator.engine().tqnolc(self.indexp, 1)?;
+                self.calculator.engine().tqbond(
                     self.indexp,
                     species_a.local_index,
                     species_b.local_index,

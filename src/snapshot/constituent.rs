@@ -59,7 +59,7 @@ impl ConstituentSnapshot {
             phase_index: constituent.phase_index(),
             phase_name: constituent
                 .calculator
-                .engine
+                .engine()
                 .tqgnp(constituent.phase_index())?,
             index: constituent.index(),
             status: constituent.status()?,

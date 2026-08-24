@@ -73,6 +73,10 @@ impl Display for MagneticInteractionRole {
 /// phase, value)`. Magnetic parameters lower to `TQCDAT(10, interaction,
 /// expression, role, phase, value)`. The variants make it impossible to put a
 /// magnetic role on a Gibbs interaction accidentally.
+///
+/// The numeric identity is local to the loaded thermodynamic system and its
+/// current component/phase configuration. It is not a globally persistent
+/// thermodynamic identity and must be rebuilt before use with another system.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum InteractionParameterAddress {
     /// One ordinary excess Gibbs coefficient.

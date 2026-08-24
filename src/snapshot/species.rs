@@ -21,7 +21,7 @@ impl SpeciesSnapshot {
     pub fn new(species: &Species<'_>) -> Result<Self, ChemAppError> {
         Ok(Self {
             phase_index: species.phase_index(),
-            phase_name: species.calculator.engine.tqgnp(species.phase_index())?,
+            phase_name: species.calculator.engine().tqgnp(species.phase_index())?,
             identity: species.identity(),
             name: species.name()?,
             x: species.x()?,

@@ -13,11 +13,11 @@ fn main() -> Result<(), ChemAppError> {
     let calculator: Calculator = common::calculator_from_env()?;
 
     let stream = Stream::new(&calculator, "ENTITY-DEMO", 298.15, 1.0)?;
-    let quartz = calculator.engine.tqinp("SiO2(quartz)")?;
+    let quartz = calculator.engine().tqinp("SiO2(quartz)")?;
     stream.add_with_indices(quartz, 0, 1.0)?;
     stream.add_with_names("GAS", "CO2", 0.5)?;
-    calculator.engine.tqstec("T", 0, 2500.0)?;
-    calculator.engine.tqce(" ", 0, 0, (0.0, 0.0))?;
+    calculator.engine().tqstec("T", 0, 2500.0)?;
+    calculator.engine().tqce(" ", 0, 0, (0.0, 0.0))?;
 
     let full = calculator.snapshot()?;
     let stable = calculator.snapshot_with_options(SnapshotOptions::stable_only())?;
@@ -38,7 +38,7 @@ fn main() -> Result<(), ChemAppError> {
         let sublattices = if model.trim().eq_ignore_ascii_case("PURE") {
             0
         } else {
-            calculator.engine.tqnosl(phase.index())?
+            calculator.engine().tqnosl(phase.index())?
         };
         let species_count = phase.species()?.count();
         println!(

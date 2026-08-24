@@ -24,6 +24,10 @@ reads the containing live TQGPAR matrix and performs checked row/column lookup.
 its model/channel family is in the verified set, then lowers the typed address
 to TQCDAT. Raw `Engine::tqcdat` remains the unrestricted low-level escape hatch.
 
+These addresses are stable only within the loaded thermodynamic system and
+component/phase configuration that produced them. They are not global or
+persistent thermodynamic identities and must be rebuilt for another system.
+
 TQGPAR values remain authoritative even when an optional DAT cross-check
 recovers a damaged TQLPAR descriptor. Pretty or resolved descriptor text is
 never a mutation key.
@@ -121,6 +125,13 @@ was unchanged.
 read-only ones, and indexes mutable cells by
 `phase_index/channel/interaction_index/expression_index/column_or_role`.
 Native and resolved text are display/provenance fields only.
+
+Cache creation and all native mutation/reset operations are bound to the owning
+`Calculator`; callers cannot pass an unrelated Engine to a public cache method.
+`ParameterCache` itself exposes read-only inspection. Generating a new cache
+replaces the previous one, and changing the Calculator composition basis drops
+the cache. Changes to equilibrium conditions do not affect address identity;
+TQCDAT writes intentionally retain the original captured baselines.
 
 The cache captured 4,042 verified mutable cells. Absolute writes use the
 supplied value. Delta writes always mean `captured_baseline + delta`; repeated

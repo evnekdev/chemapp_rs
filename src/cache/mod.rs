@@ -36,6 +36,121 @@ impl Calculator {
         self.install_parameter_cache(cache);
         Ok(())
     }
+
+    fn required_parameter_cache(&self) -> Result<&ParameterCache, ChemAppError> {
+        self.parameter_cache().ok_or_else(|| {
+            ChemAppError::OtherError(
+                "no ParameterCache is installed; call generate_parameter_cache first".to_owned(),
+            )
+        })
+    }
+
+    /// Writes an absolute value or baseline-relative delta for a cached,
+    /// verified interaction address using this Calculator's own Engine.
+    pub fn set_cached_interaction_parameter(
+        &self,
+        address: InteractionParameterAddress,
+        value: f64,
+        is_delta: bool,
+    ) -> Result<bool, ChemAppError> {
+        self.required_parameter_cache()?.set_interaction_parameter(
+            self.engine(),
+            address,
+            value,
+            is_delta,
+        )
+    }
+
+    /// Restores one cached interaction parameter to its captured baseline.
+    pub fn reset_cached_interaction_parameter(
+        &self,
+        address: InteractionParameterAddress,
+    ) -> Result<bool, ChemAppError> {
+        self.required_parameter_cache()?
+            .reset_interaction_parameter(self.engine(), address)
+    }
+
+    /// Restores every verified cached cell for one native interaction.
+    pub fn reset_cached_interaction(
+        &self,
+        phase_index: usize,
+        channel: InteractionChannel,
+        interaction_index: usize,
+    ) -> Result<usize, ChemAppError> {
+        self.required_parameter_cache()?.reset_interaction(
+            self.engine(),
+            phase_index,
+            channel,
+            interaction_index,
+        )
+    }
+
+    /// Restores all verified cached interaction cells and verifies readback.
+    pub fn reset_cached_interactions(&self) -> Result<(), ChemAppError> {
+        self.required_parameter_cache()?
+            .reset_interactions(self.engine())
+    }
+
+    /// Restores all cached compound, endmember, and interaction baselines.
+    pub fn reset_cached_parameters(&self) -> Result<(), ChemAppError> {
+        self.required_parameter_cache()?.reset_all(self.engine())
+    }
+
+    /// Sets cached pure-phase enthalpy, absolutely or relative to the baseline.
+    pub fn set_cached_compound_h298(
+        &self,
+        phase: &str,
+        value: f64,
+        is_delta: bool,
+    ) -> Result<bool, ChemAppError> {
+        self.required_parameter_cache()?
+            .set_compound_h298(self.engine(), phase, value, is_delta)
+    }
+
+    /// Sets cached pure-phase entropy, absolutely or relative to the baseline.
+    pub fn set_cached_compound_s298(
+        &self,
+        phase: &str,
+        value: f64,
+        is_delta: bool,
+    ) -> Result<bool, ChemAppError> {
+        self.required_parameter_cache()?
+            .set_compound_s298(self.engine(), phase, value, is_delta)
+    }
+
+    /// Sets cached endmember enthalpy, absolutely or relative to the baseline.
+    pub fn set_cached_endmember_h298(
+        &self,
+        phase: &str,
+        constituent: &str,
+        value: f64,
+        is_delta: bool,
+    ) -> Result<bool, ChemAppError> {
+        self.required_parameter_cache()?.set_endmember_h298(
+            self.engine(),
+            phase,
+            constituent,
+            value,
+            is_delta,
+        )
+    }
+
+    /// Sets cached endmember entropy, absolutely or relative to the baseline.
+    pub fn set_cached_endmember_s298(
+        &self,
+        phase: &str,
+        constituent: &str,
+        value: f64,
+        is_delta: bool,
+    ) -> Result<bool, ChemAppError> {
+        self.required_parameter_cache()?.set_endmember_s298(
+            self.engine(),
+            phase,
+            constituent,
+            value,
+            is_delta,
+        )
+    }
 }
 
 /// Structural key for one cached interaction cell.
@@ -79,7 +194,7 @@ pub struct CachedInteractionParameter {
 ///
 /// Fields remain private because endmember mutation is an implementation
 /// detail of cache reset, not a stable public addressing interface.
-pub struct EndmemberParameter {
+struct EndmemberParameter {
     phase_index: usize,
     constituent_index: usize,
     phase_name: String,
@@ -100,7 +215,7 @@ impl EndmemberParameter {
 ///
 /// Fields remain private because compound mutation is an implementation
 /// detail of cache reset, not a stable public addressing interface.
-pub struct CompoundParameter {
+struct CompoundParameter {
     phase_index: usize,
     phase_name: String,
     h298: f64,
@@ -115,6 +230,11 @@ impl CompoundParameter {
 }
 
 /// A model-neutral cache of live ChemApp parameter baselines.
+///
+/// Cached native addresses are meaningful only for the Calculator/system that
+/// captured them. Public mutation is therefore exposed on [`Calculator`],
+/// which always applies this cache to its owning Engine; this type exposes
+/// read-only inspection methods only.
 #[derive(Debug)]
 pub struct ParameterCache {
     interaction_lookup: HashMap<InteractionParameterAddress, usize>,
@@ -163,7 +283,7 @@ fn first_tqgdat_value(
 
 impl ParameterCache {
     /// Capture baselines for requested interaction channels and standard-state data.
-    pub fn new<T: AsRef<str> + std::fmt::Debug>(
+    fn new<T: AsRef<str> + std::fmt::Debug>(
         calculator: &Calculator,
         phase_names: &[T],
         include_gibbs: bool,
@@ -176,8 +296,8 @@ impl ParameterCache {
         let mut compounds = Vec::new();
         for phase_name in phase_names {
             let phase_name = phase_name.as_ref();
-            let phase_index = calculator.engine.tqinp(phase_name)?;
-            if calculator.engine.tqmodl(phase_index)? == "PURE" {
+            let phase_index = calculator.engine().tqinp(phase_name)?;
+            if calculator.engine().tqmodl(phase_index)? == "PURE" {
                 if include_compounds {
                     compounds.push(Self::load_compound(calculator, phase_name)?);
                 }
@@ -196,7 +316,7 @@ impl ParameterCache {
                 };
                 if include {
                     for interaction in crate::interactions::load_phase_interactions(
-                        &calculator.engine,
+                        calculator.engine(),
                         phase_index,
                         channel,
                     )? {
@@ -331,7 +451,7 @@ impl ParameterCache {
     }
 
     /// Write an absolute value or `baseline + delta` for a verified address.
-    pub fn set_interaction_parameter(
+    fn set_interaction_parameter(
         &self,
         engine: &Engine,
         address: InteractionParameterAddress,
@@ -365,7 +485,7 @@ impl ParameterCache {
     }
 
     /// Restore one verified cell to its captured baseline and verify readback.
-    pub fn reset_interaction_parameter(
+    fn reset_interaction_parameter(
         &self,
         engine: &Engine,
         address: InteractionParameterAddress,
@@ -385,7 +505,7 @@ impl ParameterCache {
     }
 
     /// Restore every verified cell of one native interaction exactly once.
-    pub fn reset_interaction(
+    fn reset_interaction(
         &self,
         engine: &Engine,
         phase_index: usize,
@@ -407,7 +527,7 @@ impl ParameterCache {
     }
 
     /// Restore every verified interaction cell and verify live readback.
-    pub fn reset_interactions(&self, engine: &Engine) -> Result<(), ChemAppError> {
+    fn reset_interactions(&self, engine: &Engine) -> Result<(), ChemAppError> {
         let baselines = self.verified_interaction_baselines();
         for (address, baseline, _) in &baselines {
             crate::interactions::write_interaction_parameter(engine, *address, *baseline)?;
@@ -424,7 +544,7 @@ impl ParameterCache {
     }
 
     /// Restore every cached compound, endmember, and verified interaction value.
-    pub fn reset_all(&self, engine: &Engine) -> Result<(), ChemAppError> {
+    fn reset_all(&self, engine: &Engine) -> Result<(), ChemAppError> {
         for compound in &self.compounds {
             compound.reset(engine)?;
         }
@@ -435,19 +555,19 @@ impl ParameterCache {
     }
 
     /// Load the standard-state baseline for one pure phase.
-    pub fn load_compound(
+    fn load_compound(
         calculator: &Calculator,
         phase_name: &str,
     ) -> Result<CompoundParameter, ChemAppError> {
-        let phase_index = calculator.engine.tqinp(phase_name)?;
+        let phase_index = calculator.engine().tqinp(phase_name)?;
         let h298 = first_tqgdat_value(
-            calculator.engine.tqgdat(phase_index, 1, "H", 0)?,
+            calculator.engine().tqgdat(phase_index, 1, "H", 0)?,
             phase_name,
             1,
             "H",
         )?;
         let s298 = first_tqgdat_value(
-            calculator.engine.tqgdat(phase_index, 1, "S", 0)?,
+            calculator.engine().tqgdat(phase_index, 1, "S", 0)?,
             phase_name,
             1,
             "S",
@@ -461,16 +581,16 @@ impl ParameterCache {
     }
 
     /// Load standard-state baselines for every constituent of a solution phase.
-    pub fn load_endmembers(
+    fn load_endmembers(
         calculator: &Calculator,
         phase_name: &str,
     ) -> Result<Vec<EndmemberParameter>, ChemAppError> {
-        let phase_index = calculator.engine.tqinp(phase_name)?;
-        (1..=calculator.engine.tqnopc(phase_index)?)
+        let phase_index = calculator.engine().tqinp(phase_name)?;
+        (1..=calculator.engine().tqnopc(phase_index)?)
             .map(|constituent_index| {
                 let h298 = first_tqgdat_value(
                     calculator
-                        .engine
+                        .engine()
                         .tqgdat(phase_index, constituent_index, "H", 0)?,
                     phase_name,
                     constituent_index,
@@ -478,7 +598,7 @@ impl ParameterCache {
                 )?;
                 let s298 = first_tqgdat_value(
                     calculator
-                        .engine
+                        .engine()
                         .tqgdat(phase_index, constituent_index, "S", 0)?,
                     phase_name,
                     constituent_index,
@@ -488,7 +608,7 @@ impl ParameterCache {
                     phase_index,
                     constituent_index,
                     phase_name: phase_name.to_owned(),
-                    name: calculator.engine.tqgnpc(phase_index, constituent_index)?,
+                    name: calculator.engine().tqgnpc(phase_index, constituent_index)?,
                     h298,
                     s298,
                 })
@@ -497,7 +617,7 @@ impl ParameterCache {
     }
 
     /// Set a pure-phase enthalpy baseline or a delta from that baseline.
-    pub fn set_compound_h298(
+    fn set_compound_h298(
         &self,
         engine: &Engine,
         phase: &str,
@@ -508,7 +628,7 @@ impl ParameterCache {
     }
 
     /// Set a pure-phase entropy baseline or a delta from that baseline.
-    pub fn set_compound_s298(
+    fn set_compound_s298(
         &self,
         engine: &Engine,
         phase: &str,
@@ -547,7 +667,7 @@ impl ParameterCache {
     }
 
     /// Set an endmember enthalpy baseline or a delta from that baseline.
-    pub fn set_endmember_h298(
+    fn set_endmember_h298(
         &self,
         engine: &Engine,
         phase: &str,
@@ -559,7 +679,7 @@ impl ParameterCache {
     }
 
     /// Set an endmember entropy baseline or a delta from that baseline.
-    pub fn set_endmember_s298(
+    fn set_endmember_s298(
         &self,
         engine: &Engine,
         phase: &str,

@@ -71,13 +71,13 @@ impl<'a> Species<'a> {
 
     /// Reports whether this species identity is valid for the phase model.
     pub fn is_valid(&self) -> Result<bool, ChemAppError> {
-        if self.indexp == 0 || self.indexp > self.calculator.engine.tqnop()? {
+        if self.indexp == 0 || self.indexp > self.calculator.engine().tqnop()? {
             return Ok(false);
         }
-        if !has_sublattice_species(&self.calculator.engine.tqmodl(self.indexp)?) {
+        if !has_sublattice_species(&self.calculator.engine().tqmodl(self.indexp)?) {
             return Ok(false);
         }
-        let number_of_sublattices = self.calculator.engine.tqnosl(self.indexp)?;
+        let number_of_sublattices = self.calculator.engine().tqnosl(self.indexp)?;
         if self.identity.sublattice == 0 || self.identity.sublattice > number_of_sublattices {
             return Ok(false);
         }
@@ -85,13 +85,13 @@ impl<'a> Species<'a> {
             && self.identity.local_index
                 <= self
                     .calculator
-                    .engine
+                    .engine()
                     .tqnolc(self.indexp, self.identity.sublattice)?)
     }
 
     /// Returns the sublattice-species name.
     pub fn name(&self) -> Result<String, ChemAppError> {
-        self.calculator.engine.tqgnlc(
+        self.calculator.engine().tqgnlc(
             self.indexp,
             self.identity.sublattice,
             self.identity.local_index,
@@ -100,7 +100,7 @@ impl<'a> Species<'a> {
 
     /// Returns the calculated sublattice site fraction.
     pub fn x(&self) -> Result<f64, ChemAppError> {
-        self.calculator.engine.tqgtlc(
+        self.calculator.engine().tqgtlc(
             self.indexp,
             self.identity.sublattice,
             self.identity.local_index,

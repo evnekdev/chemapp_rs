@@ -78,7 +78,7 @@ impl<'a> Stream<'a> {
         pres: f64,
     ) -> Result<Self, ChemAppError> {
         calculator.claim_stream_name(name)?;
-        if let Err(error) = calculator.engine.tqsttp(name, (temp, pres)) {
+        if let Err(error) = calculator.engine().tqsttp(name, (temp, pres)) {
             calculator.release_stream_name(name);
             return Err(error);
         }
@@ -122,7 +122,7 @@ impl<'a> Stream<'a> {
     /// unknown; callers must not create a second high-level owner for it.
     pub fn remove(mut self) -> Result<(), ChemAppError> {
         debug_assert!(self.lease.begin_explicit_removal());
-        match self.calculator.engine.tqstrm(&self.name) {
+        match self.calculator.engine().tqstrm(&self.name) {
             Ok(()) => {
                 self.lease.complete_explicit_removal();
                 self.calculator.release_stream_name(&self.name);
@@ -140,7 +140,7 @@ impl<'a> Stream<'a> {
         val: f64,
     ) -> Result<(), ChemAppError> {
         self.calculator
-            .engine
+            .engine()
             .tqstca(&self.name, indexp, indexc, val)
     }
 
@@ -151,13 +151,13 @@ impl<'a> Stream<'a> {
         constituent: &str,
         val: f64,
     ) -> Result<(), ChemAppError> {
-        let indexp = self.calculator.engine.tqinp(phase)?;
-        let indexc = self.calculator.engine.tqinpc(indexp, constituent)?;
+        let indexp = self.calculator.engine().tqinp(phase)?;
+        let indexc = self.calculator.engine().tqinpc(indexp, constituent)?;
         self.add_with_indices(indexp, indexc, val)
     }
 
     fn property(&self, option: &str) -> Result<f64, ChemAppError> {
-        self.calculator.engine.tqstxp(&self.name, option)
+        self.calculator.engine().tqstxp(&self.name, option)
     }
 
     /// Returns stream heat capacity (`CP`) in the active unit.
@@ -188,7 +188,7 @@ impl Drop for Stream<'_> {
             // Drop cannot report native cleanup failures. Releasing the Rust
             // lease is still required because the value is gone; callers that
             // need to observe cleanup errors should use consuming `remove`.
-            let _ = self.calculator.engine.tqstrm(&self.name);
+            let _ = self.calculator.engine().tqstrm(&self.name);
             self.calculator.release_stream_name(&self.name);
         }
     }

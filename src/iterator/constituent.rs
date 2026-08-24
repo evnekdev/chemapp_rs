@@ -16,7 +16,7 @@ impl<'a> ConstituentIterator<'a> {
         Ok(Self {
             calculator,
             next: 1,
-            count: calculator.engine.tqnopc(indexp)?,
+            count: calculator.engine().tqnopc(indexp)?,
             indexp,
         })
     }

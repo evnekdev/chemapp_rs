@@ -36,6 +36,11 @@ live views     owned data  inspection and mutation
 - [`Calculator`](https://docs.rs/chemapp_rs/latest/chemapp_rs/struct.Calculator.html) is the preferred starting point for most
   users. It loads a data-file and adds composition transforms, calculations,
   mapping, reports, and snapshots.
+- `Calculator::engine()` is the advanced borrowed native accessor for
+  intentional low-level calls; all `Engine::tq...` methods remain available.
+  Raw calls that reinitialize/load another system
+  invalidate Calculator metadata and must instead be performed through a new
+  Calculator.
 - A live entity reads the current ChemApp state. A snapshot owns copied values
   and remains valid after another calculation changes that native state.
 
@@ -87,7 +92,7 @@ fn main() -> Result<(), ChemAppError> {
     let datafile = std::env::var("CHEMAPP_DATAFILE")
         .map_err(|error| ChemAppError::OtherError(error.to_string()))?;
     let calculator = Calculator::from_library(&library, &datafile)?;
-    println!("ChemApp version: {}", calculator.engine.tqvers()?);
+    println!("ChemApp version: {}", calculator.engine().tqvers()?);
     Ok(())
 }
 ```
@@ -144,7 +149,7 @@ fn main() -> Result<(), ChemAppError> {
     let datafile = required("CHEMAPP_DATAFILE")?;
     let calculator = Calculator::from_library(&library, &datafile)?;
 
-    println!("ChemApp version: {}", calculator.engine.tqvers()?);
+    println!("ChemApp version: {}", calculator.engine().tqvers()?);
     for phase in calculator.phases()? {
         println!("{}: {}", phase.name()?, phase.model()?);
     }
@@ -281,7 +286,9 @@ The 1.0 API includes:
 
 Parameter mutation and raw `Engine` calls are advanced. Low-level methods
 preserve ChemApp semantics and may require knowledge of the official
-Programmer's Manual.
+Programmer's Manual. Native interaction addresses and parameter-cache entries
+are local to the loaded system; do not persist and reuse them with another
+data-file/configuration.
 
 ## Examples
 

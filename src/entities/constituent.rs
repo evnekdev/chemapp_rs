@@ -43,45 +43,45 @@ impl<'a> Constituent<'a> {
 
     /// Reports whether both native indices exist in the loaded system.
     pub fn is_valid(&self) -> Result<bool, ChemAppError> {
-        if self.indexp == 0 || self.indexp > self.calculator.engine.tqnop()? {
+        if self.indexp == 0 || self.indexp > self.calculator.engine().tqnop()? {
             return Ok(false);
         }
-        Ok(self.index > 0 && self.index <= self.calculator.engine.tqnopc(self.indexp)?)
+        Ok(self.index > 0 && self.index <= self.calculator.engine().tqnopc(self.indexp)?)
     }
 
     /// Returns the real-valued electric charge reported by ChemApp.
     pub fn charge(&self) -> Result<f64, ChemAppError> {
-        self.calculator.engine.tqchar(self.indexp, self.index)
+        self.calculator.engine().tqchar(self.indexp, self.index)
     }
 
     /// Returns the constituent molar mass.
     pub fn wmass(&self) -> Result<f64, ChemAppError> {
-        Ok(self.calculator.engine.tqstpc(self.indexp, self.index)?.1)
+        Ok(self.calculator.engine().tqstpc(self.indexp, self.index)?.1)
     }
 
     /// Returns stoichiometric coefficients in system-component order.
     pub fn stoic(&self) -> Result<Vec<f64>, ChemAppError> {
-        Ok(self.calculator.engine.tqstpc(self.indexp, self.index)?.0)
+        Ok(self.calculator.engine().tqstpc(self.indexp, self.index)?.0)
     }
 
     /// Returns the current constituent status text.
     pub fn status(&self) -> Result<String, ChemAppError> {
-        self.calculator.engine.tqgspc(self.indexp, self.index)
+        self.calculator.engine().tqgspc(self.indexp, self.index)
     }
 
     /// Returns the constituent name.
     pub fn name(&self) -> Result<String, ChemAppError> {
-        self.calculator.engine.tqgnpc(self.indexp, self.index)
+        self.calculator.engine().tqgnpc(self.indexp, self.index)
     }
 
     /// Reports whether incoming material is allowed for this constituent.
     pub fn incoming_allowed(&self) -> Result<bool, ChemAppError> {
-        self.calculator.engine.tqpcis(self.indexp, self.index)
+        self.calculator.engine().tqpcis(self.indexp, self.index)
     }
 
     fn result(&self, option: &str) -> Result<f64, ChemAppError> {
         self.calculator
-            .engine
+            .engine()
             .tqgetr(option, self.indexp, self.index)
     }
 

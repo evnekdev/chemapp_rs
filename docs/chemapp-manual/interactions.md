@@ -272,8 +272,8 @@ separate expression/column/value/address/support table for one interaction, and
 demo outputs every parsed and transformed
 Gibbs and magnetic row. It and the focused `interactions_gibbs` and
 `interactions_magnetic` examples support
-`CHEMAPP_LIBRARY` plus `CHEMAPP_INTERACTION_DATAFILE` (falling back to
-`CHEMAPP_DATAFILE`) and contain no workstation-specific paths.
+`CHEMAPP_LIBRARY` plus `CHEMAPP_DATAFILE` and contain no workstation-specific
+paths.
 
 `ParameterCache` remains a parameter perturbation/reset facility, not the
 general interaction model. It now retains every TQGPAR cell and uses structural

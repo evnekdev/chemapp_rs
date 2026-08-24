@@ -67,7 +67,7 @@ impl<'a> Phase<'a> {
         &self,
         channel: InteractionChannel,
     ) -> Result<Vec<Interaction>, ChemAppError> {
-        crate::interactions::load_phase_interactions(&self.calculator.engine, self.index, channel)
+        crate::interactions::load_phase_interactions(self.calculator.engine(), self.index, channel)
     }
 
     /// Inspect one channel with independent ASCII-DAT structural evidence.
@@ -81,7 +81,7 @@ impl<'a> Phase<'a> {
         cross_check: &dyn InteractionDescriptorCrossCheck,
     ) -> Result<Vec<Interaction>, ChemAppError> {
         crate::interactions::load_phase_interactions_with_cross_check(
-            &self.calculator.engine,
+            self.calculator.engine(),
             self.index,
             channel,
             Some(cross_check),
@@ -110,7 +110,7 @@ impl<'a> Phase<'a> {
 
     /// Reports whether the phase index exists in the loaded system.
     pub fn is_valid(&self) -> Result<bool, ChemAppError> {
-        Ok(self.index > 0 && self.index <= self.calculator.engine.tqnop()?)
+        Ok(self.index > 0 && self.index <= self.calculator.engine().tqnop()?)
     }
 
     /// Reports whether ChemApp identifies this as a stoichiometric (`PURE`) phase.
@@ -120,21 +120,21 @@ impl<'a> Phase<'a> {
 
     /// Returns the current phase status text.
     pub fn status(&self) -> Result<String, ChemAppError> {
-        self.calculator.engine.tqgsp(self.index)
+        self.calculator.engine().tqgsp(self.index)
     }
 
     /// Returns the phase name.
     pub fn name(&self) -> Result<String, ChemAppError> {
-        self.calculator.engine.tqgnp(self.index)
+        self.calculator.engine().tqgnp(self.index)
     }
 
     /// Returns the ChemApp phase-model identifier.
     pub fn model(&self) -> Result<String, ChemAppError> {
-        self.calculator.engine.tqmodl(self.index)
+        self.calculator.engine().tqmodl(self.index)
     }
 
     fn result(&self, option: &str) -> Result<f64, ChemAppError> {
-        self.calculator.engine.tqgetr(option, self.index, 0)
+        self.calculator.engine().tqgetr(option, self.index, 0)
     }
 
     /// Returns phase amount (`A`).

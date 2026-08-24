@@ -60,12 +60,12 @@ impl ChemAppError {
     /// Returns a human-readable description, including known native error text.
     pub fn description(&self) -> String {
         match self {
-            Self::NativeError(id) => match error_descriptions.get(&id) {
+            Self::NativeError(id) => match error_descriptions.get(id) {
                 Some(desc) => {
-                    return format!("ChemApp error {}, {}", id, desc);
+                    format!("ChemApp error {}, {}", id, desc)
                 }
                 None => {
-                    return format!("Unrecognized ChemApp error {}", id);
+                    format!("Unrecognized ChemApp error {}", id)
                 }
             },
             Self::CleanupError {
@@ -73,31 +73,25 @@ impl ChemAppError {
                 primary,
                 cleanup,
             } => {
-                return format!(
+                format!(
                     "{} failed: {}; required cleanup also failed: {}",
                     operation,
                     primary.description(),
                     cleanup.description()
-                );
+                )
             }
             Self::RetryError {
                 operation,
                 preferred,
                 alternate,
-            } => {
-                return format!(
-					"{} failed in both bounded orderings: preferred ordering: {}; alternate ordering: {}",
-					operation,
-					preferred.description(),
-					alternate.description()
-				);
-            }
-            Self::OtherError(desc) => {
-                return format!("{}", &desc);
-            }
-            Self::CustomError(desc) => {
-                return format!("{}", &desc);
-            }
+            } => format!(
+                "{} failed in both bounded orderings: preferred ordering: {}; alternate ordering: {}",
+                operation,
+                preferred.description(),
+                alternate.description()
+            ),
+            Self::OtherError(desc) => desc.to_string(),
+            Self::CustomError(desc) => desc.to_string(),
         }
     }
 }
@@ -105,7 +99,7 @@ impl ChemAppError {
 impl fmt::Display for ChemAppError {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         let _ = write!(formatter, "{}", self.description());
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -121,19 +115,19 @@ impl std::error::Error for ChemAppError {
 
 impl From<Utf8Error> for ChemAppError {
     fn from(error: Utf8Error) -> ChemAppError {
-        return ChemAppError::OtherError(error.to_string());
+        ChemAppError::OtherError(error.to_string())
     }
 }
 
 impl From<NulError> for ChemAppError {
     fn from(error: NulError) -> ChemAppError {
-        return ChemAppError::OtherError(error.to_string());
+        ChemAppError::OtherError(error.to_string())
     }
 }
 
 impl From<libloading::Error> for ChemAppError {
     fn from(error: libloading::Error) -> ChemAppError {
-        return ChemAppError::OtherError(error.to_string());
+        ChemAppError::OtherError(error.to_string())
     }
 }
 

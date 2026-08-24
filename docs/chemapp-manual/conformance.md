@@ -43,9 +43,9 @@ Components, phases, constituents, species, and bonds are enumerated from run-tim
 
 ## High-priority gaps and audit items
 
-### 1. `Calculator::load_datafile` follows the ChemApp FILE-unit lifecycle — aligned
+### 1. Calculator's internal data-file loader follows the FILE-unit lifecycle — aligned
 
-`Calculator::load_datafile` first validates the case-insensitive `.dat`,
+Calculator construction first validates the case-insensitive `.dat`,
 `.cst`, or `.bin` extension, before querying or changing native state. It then
 uses `TQGIO("FILE")` to obtain the configured unit, uses that same unit for
 the format-specific open/read/close sequence, and attempts `TQCLOS` whenever
@@ -119,6 +119,16 @@ calls no-target TQCE. The manual documents the post-reset default pressure as
 1 bar. `calculate_isothermal_at_pressure` makes pressure explicit;
 `calculate_isothermal` deliberately uses that documented default. Both leave
 the resulting equilibrium as the current live Engine state.
+
+`calculate_target_t` has a different contract: it does not call `TQREMC` and
+therefore inherits the current pressure, units, phase/constituent statuses,
+and other active conditions. It sets the phase-amount target, temperature
+limits, and incoming system-component amounts before calling temperature-
+target `TQCE`; success leaves that target state live, while failure performs no
+hidden rollback. Optional fixed/adjusting selectors must be supplied together
+as distinct one-based indices within the transformed composition. The Rust
+correction step rejects non-finite values and an exactly zero denominator
+instead of propagating NaN/infinity.
 
 One `Engine` is structurally `!Sync`: methods taking `&self` still mutate one
 native ChemApp state and cannot run concurrently. Ownership remains movable
@@ -234,6 +244,14 @@ infer aliases from `#1`/`#2` display-name suffixes.
 The API is stable; model/channel mutation coverage is extensible. Unsupported
 or not-yet-verified cells stay inspectable and explicitly read-only rather than
 being assigned guessed selectors.
+
+For 1.0, `ParameterCache` exposes only read-only inspection. Cache construction
+and every mutation/reset operation are Calculator-owned and always use that
+Calculator's Engine, preventing a system-A cache from being applied to a
+system-B Engine through safe public API. The Engine field is private;
+`engine()` remains the documented advanced low-level accessor. No high-level
+reload operation exists yet because construction-only loading is the smallest
+coherent contract.
 
 ### Interaction inspection — runtime-observed for the EN22 model set
 

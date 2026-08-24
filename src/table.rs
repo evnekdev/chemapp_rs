@@ -209,7 +209,7 @@ impl TryFrom<&Constituent<'_>> for ConstituentTableRow {
         Ok(Self {
             phase: format!(
                 "{} [{}]",
-                value.calculator.engine.tqgnp(value.phase_index())?,
+                value.calculator.engine().tqgnp(value.phase_index())?,
                 value.phase_index()
             ),
             index: value.index(),
@@ -265,7 +265,7 @@ impl TryFrom<&Species<'_>> for SpeciesTableRow {
         Ok(Self {
             phase: format!(
                 "{} [{}]",
-                value.calculator.engine.tqgnp(value.phase_index())?,
+                value.calculator.engine().tqgnp(value.phase_index())?,
                 value.phase_index()
             ),
             sublattice: value.sublattice(),
@@ -661,7 +661,7 @@ pub(crate) fn live_report(calculator: &crate::Calculator) -> Result<String, Chem
         "XP".to_owned(),
         format!("AP / {}", units.amount),
     ];
-    Ok(vec![
+    Ok([
         "Snapshot filter: stable_only=false".to_owned(),
         system,
         components,

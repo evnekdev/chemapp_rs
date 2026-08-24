@@ -20,18 +20,18 @@ pub struct BondIterator<'a> {
 impl<'a> BondIterator<'a> {
     /// Dispatches by TQMODL and enumerates only structurally applicable identities.
     pub fn new(calculator: &'a Calculator, indexp: usize) -> Result<Self, ChemAppError> {
-        let mode = bond_iteration_mode(&calculator.engine.tqmodl(indexp)?);
+        let mode = bond_iteration_mode(&calculator.engine().tqmodl(indexp)?);
         let identities = match mode {
-            BondIterationMode::Pair => pair_identities(calculator.engine.tqnopc(indexp)?),
+            BondIterationMode::Pair => pair_identities(calculator.engine().tqnopc(indexp)?),
             BondIterationMode::Quadruplet => {
-                if calculator.engine.tqnosl(indexp)? != 2 {
+                if calculator.engine().tqnosl(indexp)? != 2 {
                     return Err(ChemAppError::OtherError(
                         "SUBG TQBOND enumeration requires exactly two sublattices".to_owned(),
                     ));
                 }
                 quadruplet_identities(
-                    calculator.engine.tqnolc(indexp, 1)?,
-                    calculator.engine.tqnolc(indexp, 2)?,
+                    calculator.engine().tqnolc(indexp, 1)?,
+                    calculator.engine().tqnolc(indexp, 2)?,
                 )
             }
             BondIterationMode::None => Vec::new(),
