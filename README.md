@@ -1,7 +1,7 @@
 # chemapp_rs
 
 [![CI](https://github.com/evnekdev/chemapp_rs/actions/workflows/abi-platform-model.yml/badge.svg)](https://github.com/evnekdev/chemapp_rs/actions/workflows/abi-platform-model.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/evnekdev/chemapp_rs/blob/master/LICENSE)
 
 `chemapp_rs` is an unofficial Rust interface for
 [ChemApp](https://gtt-technologies.de/software/chemapp/), GTT Technologies'
@@ -31,9 +31,9 @@ Entities       Snapshots   Interactions
 live views     owned data  inspection and mutation
 ```
 
-- [`Engine`](src/native.rs) preserves ChemApp's one-based indices, options,
+- [`Engine`](https://docs.rs/chemapp_rs/latest/chemapp_rs/struct.Engine.html) preserves ChemApp's one-based indices, options,
   state, units, and native errors with minimal Rust adaptation.
-- [`Calculator`](src/calculator.rs) is the preferred starting point for most
+- [`Calculator`](https://docs.rs/chemapp_rs/latest/chemapp_rs/struct.Calculator.html) is the preferred starting point for most
   users. It loads a data-file and adds composition transforms, calculations,
   mapping, reports, and snapshots.
 - A live entity reads the current ChemApp state. A snapshot owns copied values
@@ -57,31 +57,55 @@ The strongest checked runtime target is the repository's historical ChemApp
 7.14 Win64/x64 binary. Win32/x86 has strong ABI/source evidence, Linux/i386 is
 represented by an older library with seven later exports absent, and Unix64 is
 source-modelled without a checked native binary. See
-[conformance](docs/chemapp-manual/conformance.md) and the
-[native ABI audit](docs/chemapp-manual/native-abi-audit.md) before selecting a
+[conformance](https://github.com/evnekdev/chemapp_rs/blob/master/docs/chemapp-manual/conformance.md) and the
+[native ABI audit](https://github.com/evnekdev/chemapp_rs/blob/master/docs/chemapp-manual/native-abi-audit.md) before selecting a
 production platform.
 
-## Installation
+## Use the crate in your own project
 
-For the 1.0 release:
+```text
+cargo new chemapp-demo
+cd chemapp-demo
+cargo add chemapp_rs@1
+```
+
+Equivalent `Cargo.toml` entry:
 
 ```toml
 [dependencies]
 chemapp_rs = "1.0"
 ```
 
-Before 1.0.0 is published, development builds can use the repository directly:
+Replace `src/main.rs` with:
 
-```toml
-[dependencies]
-chemapp_rs = { git = "https://github.com/evnekdev/chemapp_rs.git" }
+```rust,no_run
+use chemapp_rs::{Calculator, ChemAppError};
+
+fn main() -> Result<(), ChemAppError> {
+    let library = std::env::var("CHEMAPP_LIBRARY")
+        .map_err(|error| ChemAppError::OtherError(error.to_string()))?;
+    let datafile = std::env::var("CHEMAPP_DATAFILE")
+        .map_err(|error| ChemAppError::OtherError(error.to_string()))?;
+    let calculator = Calculator::from_library(&library, &datafile)?;
+    println!("ChemApp version: {}", calculator.engine.tqvers()?);
+    Ok(())
+}
 ```
 
-The Cargo dependency installs only the Rust interface. Keep the ChemApp native
-library and your thermodynamic data outside the crate and pass their paths at
-runtime.
+Then set the two paths described below and run `cargo run`. The dependency
+installs only the Rust interface; ChemApp and thermodynamic data remain external.
 
-## Run the quickstart
+To track current `master` instead of the stable crates.io release, use
+`chemapp_rs = { git = "https://github.com/evnekdev/chemapp_rs.git" }`.
+
+## Run the repository examples
+
+Clone the repository and enter it before running its named examples:
+
+```text
+git clone https://github.com/evnekdev/chemapp_rs.git
+cd chemapp_rs
+```
 
 The maintained examples use two environment variables:
 
@@ -104,7 +128,7 @@ CHEMAPP_DATAFILE=/path/to/system.dat \
 cargo run --example quickstart
 ```
 
-The complete program is [examples/quickstart.rs](examples/quickstart.rs). Its
+The complete program is [examples/quickstart.rs](https://github.com/evnekdev/chemapp_rs/blob/master/examples/quickstart.rs). Its
 core workflow is:
 
 ```rust,no_run
@@ -147,21 +171,25 @@ claimed scientific result.
 
 ## First equilibrium
 
-[examples/equilibrium.rs](examples/equilibrium.rs) creates a non-degenerate
+[examples/equilibrium.rs](https://github.com/evnekdev/chemapp_rs/blob/master/examples/equilibrium.rs) creates a non-degenerate
 unit-per-component input in
 the loaded system-component basis, sets an isothermal condition, calculates,
 and reports stable phases. The demonstration composition is intentionally
 pedagogical rather than scientifically meaningful; replace it with the amounts
 for your system. Set `CHEMAPP_TEMPERATURE` to override the default `1000.0` in
-the active ChemApp temperature unit.
+the active ChemApp temperature unit. Set `CHEMAPP_PRESSURE` to override the
+explicit default `1.0` in the active pressure unit.
 
 ```powershell
 cargo run --example equilibrium
 ```
 
-`Calculator::calculate_isothermal` resets equilibrium conditions, sets
-temperature and incoming component amounts, and calls the native equilibrium
-routine. It leaves the resulting equilibrium as the live ChemApp state.
+The example uses `Calculator::calculate_isothermal_at_pressure`, so pressure is
+visible and explicit. `calculate_isothermal` is the convenience counterpart:
+it resets conditions with `TQREMC(-2)` and therefore uses ChemApp's documented
+1-bar default. Both convert mole amounts from the active user basis, set
+temperature and incoming system-component amounts, call no-target `TQCE`, and
+leave the resulting equilibrium as the live ChemApp state.
 
 ## Live entities and owned snapshots
 
@@ -174,7 +202,7 @@ system copy—before changing conditions when an earlier result must remain
 available. Snapshot types implement `Debug` and `Clone`.
 `SnapshotOptions::stable_only()` applies the exact project criterion
 `AC > 0.9999`; it is not an approximate hidden heuristic. Run
-[examples/snapshots.rs](examples/snapshots.rs) for the live/owned contrast.
+[examples/snapshots.rs](https://github.com/evnekdev/chemapp_rs/blob/master/examples/snapshots.rs) for the live/owned contrast.
 
 Temperature and pressure mapping APIs return a snapshot for every successful
 native mapping state, including the terminal state:
@@ -182,7 +210,7 @@ native mapping state, including the terminal state:
 - `mapping_temperature` / `mapping_temperature_with_options`;
 - `mapping_pressure` / `mapping_pressure_with_options`.
 
-See [entities and snapshots](docs/chemapp-manual/entities-and-snapshots.md) for
+See [entities and snapshots](https://github.com/evnekdev/chemapp_rs/blob/master/docs/chemapp-manual/entities-and-snapshots.md) for
 state, filtering, table, TQBOND, and mapping details.
 
 ## Streams
@@ -191,12 +219,12 @@ state, filtering, table, TQBOND, and mapping details.
 streams globally within an engine, so a calculator permits one live owner per
 name. Use `Stream::remove()` when cleanup errors must be observable. Normal
 `Drop` cleanup is best-effort because destructors cannot return a native error.
-The dataset-specific [entities demo](examples/entitiesdemo.rs) exercises stream
+The dataset-specific [entities demo](https://github.com/evnekdev/chemapp_rs/blob/master/examples/entitiesdemo.rs) exercises stream
 creation, snapshots, tables, and mapping.
 
 ## Inspect interactions
 
-[examples/interactions.rs](examples/interactions.rs) prints Gibbs and magnetic
+[examples/interactions.rs](https://github.com/evnekdev/chemapp_rs/blob/master/examples/interactions.rs) prints Gibbs and magnetic
 interactions for every solution phase. Set `CHEMAPP_PHASE` to one exact phase
 name to limit the report. Each row retains:
 
@@ -211,12 +239,12 @@ A phase may legitimately have no magnetic interactions. Focused
 No interaction example requires `chemsage-parser` or an ASCII-DAT recovery
 provider.
 
-Read [interaction inspection](docs/chemapp-manual/interactions.md) for model
+Read [interaction inspection](https://github.com/evnekdev/chemapp_rs/blob/master/docs/chemapp-manual/interactions.md) for model
 grammars, sublattices, provenance, and the known two-digit-order TQLPAR defect.
 
 ## Advanced: interaction parameter mutation
 
-[examples/parameter_mutation.rs](examples/parameter_mutation.rs) locates a
+[examples/parameter_mutation.rs](https://github.com/evnekdev/chemapp_rs/blob/master/examples/parameter_mutation.rs) locates a
 runtime-verified `InteractionParameterAddress`, reads it with
 `Calculator::interaction_parameter`, performs a tiny temporary write, verifies
 readback, and restores the exact baseline.
@@ -232,7 +260,7 @@ This is an advanced API:
   independent thermodynamic parameters.
 
 The example never calls TQWASC. Read
-[parameter mutation](docs/chemapp-manual/parameter-mutation.md) before using
+[parameter mutation](https://github.com/evnekdev/chemapp_rs/blob/master/docs/chemapp-manual/parameter-mutation.md) before using
 this interface in sensitivity or fitting work.
 
 ## Capability overview
@@ -311,22 +339,24 @@ commercial binary, licence, or data-file.
 
 ## Detailed documentation
 
-- [Entities, snapshots, tables, and mapping](docs/chemapp-manual/entities-and-snapshots.md)
+- [Entities, snapshots, tables, and mapping](https://github.com/evnekdev/chemapp_rs/blob/master/docs/chemapp-manual/entities-and-snapshots.md)
   explains live state, ownership, filtering, TQBOND, and continuation.
-- [Interactions](docs/chemapp-manual/interactions.md) documents parsing,
+- [Interactions](https://github.com/evnekdev/chemapp_rs/blob/master/docs/chemapp-manual/interactions.md) documents parsing,
   sublattice grouping, name resolution, and provenance.
-- [Parameter mutation](docs/chemapp-manual/parameter-mutation.md) records exact
+- [Parameter mutation](https://github.com/evnekdev/chemapp_rs/blob/master/docs/chemapp-manual/parameter-mutation.md) records exact
   TQGPAR/TQCDAT selectors, verified families, cache semantics, and limitations.
-- [Best practices](docs/chemapp-manual/best-practices.md) translates official
+- [Best practices](https://github.com/evnekdev/chemapp_rs/blob/master/docs/chemapp-manual/best-practices.md) translates official
   ChemApp guidance into Rust rules.
-- [Conformance](docs/chemapp-manual/conformance.md) summarizes current runtime
+- [Conformance](https://github.com/evnekdev/chemapp_rs/blob/master/docs/chemapp-manual/conformance.md) summarizes current runtime
   and platform evidence.
-- [Native ABI audit](docs/chemapp-manual/native-abi-audit.md) contains the full
+- [Native ABI audit](https://github.com/evnekdev/chemapp_rs/blob/master/docs/chemapp-manual/native-abi-audit.md) contains the full
   routine-by-routine direct-Fortran audit.
 
 ## API stability
 
-Version 1.0 establishes the current public API. Low-level wrappers aim to
+Version 1.0 is the first stable release and establishes the current public API.
+Compatible additions and fixes follow SemVer; incompatible public API changes
+require a new major version. Low-level wrappers aim to
 preserve ChemApp semantics across compatible releases. Advanced mutation
 support remains deliberately conservative: additional models or terms are
 enabled only after direct runtime evidence establishes their selectors.
@@ -342,6 +372,6 @@ permission.
 ## Licence and trademarks
 
 Project-authored Rust code and documentation are licensed under the
-[MIT License](LICENSE). ChemApp is proprietary software of GTT Technologies and
+[MIT License](https://github.com/evnekdev/chemapp_rs/blob/master/LICENSE). ChemApp is proprietary software of GTT Technologies and
 is not covered by this project's MIT licence. `chemapp_rs` is unofficial and is
 not endorsed by GTT Technologies.

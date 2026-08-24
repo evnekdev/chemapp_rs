@@ -7,6 +7,7 @@ extern crate libloading;
 
 use function_name::named;
 use libloading::{Library, Symbol};
+use std::cell::Cell;
 use std::cmp::min;
 use std::ffi::CString;
 use std::str::from_utf8;
@@ -216,14 +217,24 @@ fn system_dimensions_from_raw(
 /// one-based indices, call ordering, units, or native state semantics. Loading
 /// is fallible, so `Engine` deliberately has no `Default` implementation; use
 /// [`Engine::new`] with an explicit compatible library path.
+///
+/// ChemApp mutates native state even through methods taking `&self`. `Engine`
+/// is therefore deliberately not [`Sync`]: one instance must never be called
+/// concurrently. Ownership may be moved to another thread, but parallel work
+/// requires independent supported ChemApp library instances/copies.
+///
+/// ```compile_fail
+/// use chemapp_rs::Engine;
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<Engine>();
+/// ```
 #[derive(Debug)]
 pub struct Engine {
-    /// Reserved count of low-level isothermal calculations.
-    pub n_isothermal: usize,
-    /// Reserved count of low-level target calculations.
-    pub n_target: usize,
     pub(crate) library_name: String,
     library: Library,
+    // Cell is zero-sized and Send but !Sync. It expresses ChemApp's mutable,
+    // non-reentrant per-library state without adding a locking fiction.
+    _not_sync: Cell<()>,
 }
 
 impl Engine {
@@ -231,10 +242,9 @@ impl Engine {
     /// Initializes a new instance of `Engine` from a DLL path or name. In case a name only is used, the DLL has to be discoverable in PATH system variable (modify the system environment variables if it is not the case).
     pub fn new(library_name: &str) -> Result<Engine, ChemAppError> {
         return Ok(Engine {
-            n_isothermal: 0,
-            n_target: 0,
             library_name: String::from(library_name),
             library: unsafe { Library::new(library_name)? },
+            _not_sync: Cell::new(()),
         });
     }
 
@@ -986,7 +996,7 @@ impl Engine {
     }
 
     /*****************************************************************************************************************************************************************************************************/
-    /// TODO WRITE-STRING
+    /// WRITE-STRING
     #[named]
     pub fn tqwstr(&self, option: &str, text: &str) -> Result<(), ChemAppError> {
         let fname = func_alias(function_name!());
@@ -2061,7 +2071,6 @@ impl Engine {
     /// GET-STOICHIOMETRY-OF-PHASE-CONSTITUENT
     #[named]
     pub fn tqstpc(&self, indexp: usize, indexc: usize) -> Result<(Vec<f64>, f64), ChemAppError> {
-        //todo!();
         let fname = func_alias(function_name!());
         raw_chemapp_ints!(indexp, indexc);
         let ncomp = self.tqnosc()?;
@@ -2798,7 +2807,6 @@ impl Engine {
     /// REMOVE-STREAM
     #[named]
     pub fn tqstrm(&self, idents: &str) -> Result<(), ChemAppError> {
-        //todo!();
         let fname = func_alias(function_name!());
         let cidents: CString = CString::new(idents)?;
         let mut errcode = 0;
@@ -4013,6 +4021,12 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn engine_ownership_can_move_between_threads() {
+        fn assert_send<T: Send>() {}
+        assert_send::<Engine>();
+    }
 
     #[test]
     fn fixed_output_lengths_match_the_checked_gtt_bridge() {

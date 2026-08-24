@@ -111,17 +111,28 @@ next native call, retain the final result with a non-positive continuation
 indicator, and preserve native order. `indexp` and `indexc` are forwarded
 independently, and `list` selects `TQMAPL` only when requested.
 
-### 6. Calculation reset/pressure assumptions need documentation — audit
+### 6. Calculation reset/pressure contract — resolved for 1.0
 
-`calculate_isothermal_` calls `TQREMC(-2)`, sets temperature and incoming amounts, then calculates equilibrium. The manual documents default pressure as 1 bar, so this can legitimately rely on ChemApp's default state, but the high-level API currently does not make the assumed pressure obvious.
+The isothermal path calls `TQREMC(-2)`, optionally sets explicit pressure,
+sets temperature and transformed incoming system-component mole amounts, then
+calls no-target TQCE. The manual documents the post-reset default pressure as
+1 bar. `calculate_isothermal_at_pressure` makes pressure explicit;
+`calculate_isothermal` deliberately uses that documented default. Both leave
+the resulting equilibrium as the current live Engine state.
 
-**Direction:** explicitly document the pressure behavior or provide an API that accepts pressure rather than relying silently on a default.
+One `Engine` is structurally `!Sync`: methods taking `&self` still mutate one
+native ChemApp state and cannot run concurrently. Ownership remains movable
+for sequential transfer. Parallel calculations require independently loaded
+library instances/copies supported by the installation; this is not a claim
+that every ChemApp build or licence permits arbitrary repeated loading.
 
-### 7. Same-`Engine` concurrency semantics are not encoded — audit
+### 7. Same-`Engine` concurrency semantics — encoded for 1.0
 
-ChemApp is stateful. The crate's architecture explicitly anticipates parallelism through separately loaded library instances/copies, but the public type system/documentation does not yet make the non-reentrant nature of a single engine prominent.
-
-**Direction:** document the rule now; later audit auto-traits and consider an explicit synchronization/ownership design if necessary.
+ChemApp is stateful. A private zero-sized `Cell` marker makes `Engine` and its
+high-level owners `!Sync`, and a compile-fail rustdoc guards that invariant.
+`Engine` remains `Send`, allowing sequential ownership transfer. This does not
+establish native thread affinity or parallel safety: concurrent calculations
+require independent supported library instances/copies.
 
 ### 8. Integer/string ABI verification — audited, platform limits retained
 
@@ -194,9 +205,9 @@ exact binary evidence, and C/Rust demo coverage are in
 
 ## Advanced functionality
 
-### Parameter cache — experimental
+### Parameter cache — stable API with deliberately bounded coverage
 
-`cache` remains an experimental API, but its interaction surface is now
+`ParameterCache` is part of the 1.0 API. Its interaction surface is
 model-neutral and complete for every TQGPAR cell returned by EN22. It retained
 9,034 cells, with 4,042 typed, runtime-verified TQCDAT addresses and 4,992
 inspectable read-only SUBQ extended columns. Structural keys include phase,
@@ -219,6 +230,10 @@ Duplicate phase copies remain phase-local addressable views, not independent
 parameter owners: the documented TQCDAT write propagates to every copy. No
 generic native copy-family identity was found, so the API deliberately does not
 infer aliases from `#1`/`#2` display-name suffixes.
+
+The API is stable; model/channel mutation coverage is extensible. Unsupported
+or not-yet-verified cells stay inspectable and explicitly read-only rather than
+being assigned guessed selectors.
 
 ### Interaction inspection — runtime-observed for the EN22 model set
 

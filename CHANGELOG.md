@@ -33,6 +33,16 @@ ChemApp itself remains a separately obtained proprietary dependency.
   - `ChemAppError::NativeError` now retains the signed native error type
     (`i32`) rather than `usize`; public positive indices are checked before
     conversion to the native ChemApp integer.
+  - `Engine` is deliberately `!Sync` because its shared-reference methods
+    mutate one native ChemApp state. Sequential ownership transfer remains
+    possible; parallel work requires independent supported library instances.
+  - removed unused public calculation counters and made Calculator's data-file,
+    transform, error-redirection, and parameter-cache storage private, with
+    read-only accessors for the first, transform, and cache.
+  - composition transforms now report dimension and non-spanning-basis errors
+    instead of allowing dependency assertions to unwind through Calculator.
+  - added `Calculator::calculate_isothermal_at_pressure`; the existing method
+    retains ChemApp's documented 1-bar default after its full condition reset.
   - `Calculator::from_library` and `from_library_unloaded` now propagate
     library, initialization, component-name, and composition-transform errors
     instead of panicking. `Calculator::set_clim` now returns `Result`.
@@ -53,7 +63,7 @@ ChemApp itself remains a separately obtained proprietary dependency.
     native parsing, cross-check status, effective structure, and resolution as
     separate provenance layers; deprecated recovery-name aliases forward to the
     same implementation.
-  - the experimental interaction cache no longer exposes the former MQM-only
+  - the interaction cache no longer exposes the former MQM-only
     `InteractionGEMQM`/`InteractionMagnMQM` and six-term, first-expression
     mutation methods; callers use typed structural parameter addresses.
   - `SystemDimensions` fields now use the exact NA–NK dimension meanings rather

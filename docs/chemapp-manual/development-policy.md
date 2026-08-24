@@ -96,7 +96,12 @@ ChemApp maintains internal mutable state inside the loaded native library.
 
 Even if an FFI method takes `&self`, callers must not infer that native operations are logically immutable or safe to execute concurrently on the same engine instance.
 
-Parallel calculations should use independent ChemApp library instances. Any future `Send`/`Sync` exposure must be justified by the actual ChemApp ABI and state model, not by Rust auto-traits alone.
+`Engine` is deliberately `!Sync`, enforced by a private zero-sized marker and a
+compile-fail test. It remains `Send` for sequential ownership transfer; this is
+not permission to call one native state concurrently. Parallel calculations
+should use independent ChemApp library instances/copies only where the build
+and licence support doing so. Do not add an internal mutex that misleadingly
+suggests global native reentrancy.
 
 ## 8. Calculation helpers must state their reset contract
 
@@ -290,3 +295,9 @@ thermodynamic data-files, licences, tokens, and machine-specific identifiers.
 Those artifacts may remain available to authorized maintainers in the
 development repository, but they are neither build dependencies nor package
 content. Examples must obtain native-library and data-file paths at runtime.
+
+Short error descriptions keyed by public ChemApp `NOERR` values are retained
+as functional interface diagnostics, paraphrased from the public Programmer's
+Manual error table. They do not replace immediate version-specific `TQERR`
+output. Any future redistribution concern must be reviewed explicitly rather
+than being resolved by an unsupported legal claim in source documentation.

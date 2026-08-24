@@ -25,14 +25,15 @@ impl Calculator {
         include_endmembers: bool,
         include_compounds: bool,
     ) -> Result<(), ChemAppError> {
-        self.cache = Some(ParameterCache::new(
+        let cache = ParameterCache::new(
             self,
             phase_names,
             include_gibbs,
             include_magnetic,
             include_endmembers,
             include_compounds,
-        )?);
+        )?;
+        self.install_parameter_cache(cache);
         Ok(())
     }
 }

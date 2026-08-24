@@ -12,6 +12,7 @@ use nalgebra::{DVector, Dim, Storage, Vector};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::ffi::OsStr;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use tempfile::NamedTempFile;
 
@@ -118,6 +119,34 @@ where
     }
 }
 
+/// Builds a `chemformula` transform without allowing its linear-solver panic
+/// to escape a fallible public `Calculator` API.
+fn build_transform<T1: AsRef<str>, T2: AsRef<str>>(
+    initial: &[T1],
+    final_basis: &[T2],
+) -> Result<Transform, ChemAppError> {
+    match catch_unwind(AssertUnwindSafe(|| Transform::new(initial, final_basis, true))) {
+        Ok(Ok(transform)) => Ok(transform),
+        Ok(Err(error)) => Err(ChemAppError::OtherError(format!(
+            "could not construct the ChemApp composition transform: {error:?}"
+        ))),
+        Err(_) => Err(ChemAppError::OtherError(
+            "could not construct the ChemApp composition transform: the selected basis does not span the loaded system-component basis"
+                .to_owned(),
+        )),
+    }
+}
+
+fn validate_composition_rows(actual: usize, expected: usize) -> Result<(), ChemAppError> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(ChemAppError::OtherError(format!(
+            "composition has {actual} entries, but the active input basis requires {expected}"
+        )))
+    }
+}
+
 /*******************************************************************************************************************************************************************************************************************************/
 /*******************************************************************************************************************************************************************************************************************************/
 
@@ -127,22 +156,22 @@ where
 /// architecture, and thermodynamic data-file are external requirements. The
 /// type does not implement [`Default`]; use [`Calculator::from_library`] or
 /// [`Calculator::from_library_unloaded`] so loading failures are reported.
+///
+/// A calculator owns one mutable ChemApp state. It is not safe to share one
+/// calculator for concurrent native calls; parallel calculations require
+/// separately loaded library instances/copies supported by the installation.
 #[derive(Debug)]
 pub struct Calculator {
     /// The loaded low-level ChemApp engine.
     pub engine: Engine,
     /// Optional captured baselines for reversible parameter changes.
-    pub cache: Option<ParameterCache>,
+    cache: Option<ParameterCache>,
     /// Data-file path used to initialize this calculator, or empty if unloaded.
-    pub file: String,
+    file: String,
     /// Active temporary error-file path and FORTRAN unit, when redirected.
-    pub nondefault_errunit: Option<(String, usize)>,
-    /// Reserved count of high-level isothermal calculations.
-    pub number_isothermal: usize,
-    /// Reserved count of high-level temperature-target calculations.
-    pub number_target_t: usize,
+    nondefault_errunit: Option<(String, usize)>,
     /// Composition transform from the user-selected basis to system components.
-    pub transform: Transform,
+    transform: Transform,
     /// The ERROR unit active before `redirect_error_to_temp` changed it.
     previous_errunit: Option<usize>,
     /// Names leased to live high-level `Stream` owners. ChemApp streams are
@@ -183,11 +212,7 @@ impl Calculator {
 
     /// Builds a formula transform while retaining the dependency's diagnostic.
     fn identity_transform(components: &[String]) -> Result<Transform, ChemAppError> {
-        Transform::new(components, components, true).map_err(|error| {
-            ChemAppError::OtherError(format!(
-                "could not construct the ChemApp component identity transform: {error:?}"
-            ))
-        })
+        build_transform(components, components)
     }
 
     /***************************************************************************************************************************************************************************************************************************/
@@ -204,8 +229,6 @@ impl Calculator {
             cache: None,
             file: datfile.to_string(),
             nondefault_errunit: None,
-            number_isothermal: 0,
-            number_target_t: 0,
             transform,
             previous_errunit: None,
             active_stream_names: RefCell::new(HashSet::new()),
@@ -221,8 +244,6 @@ impl Calculator {
             cache: None,
             file: "".to_string(),
             nondefault_errunit: None,
-            number_isothermal: 0,
-            number_target_t: 0,
             transform: Transform::default(),
             previous_errunit: None,
             active_stream_names: RefCell::new(HashSet::new()),
@@ -246,6 +267,25 @@ impl Calculator {
 
     pub(crate) fn release_stream_name(&self, name: &str) {
         self.active_stream_names.borrow_mut().remove(name);
+    }
+
+    /// Returns the thermodynamic data-file used to load this calculator.
+    pub fn datafile(&self) -> Option<&str> {
+        (!self.file.is_empty()).then_some(self.file.as_str())
+    }
+
+    /// Returns the active user-basis-to-system-component transform.
+    pub fn transform(&self) -> &Transform {
+        &self.transform
+    }
+
+    /// Returns the captured parameter cache, if one has been generated.
+    pub fn parameter_cache(&self) -> Option<&ParameterCache> {
+        self.cache.as_ref()
+    }
+
+    pub(crate) fn install_parameter_cache(&mut self, cache: ParameterCache) {
+        self.cache = Some(cache);
     }
 
     /***************************************************************************************************************************************************************************************************************************/
@@ -296,11 +336,7 @@ impl Calculator {
     /// Set a formula transform for input compositions
     pub fn set_transform<T: AsRef<str>>(&mut self, basis: &[T]) -> Result<(), ChemAppError> {
         let components = Self::component_names(&self.engine)?;
-        self.transform = Transform::new(&components, basis, true).map_err(|error| {
-            ChemAppError::OtherError(format!(
-                "could not construct the ChemApp composition transform: {error:?}"
-            ))
-        })?;
+        self.transform = build_transform(&components, basis)?;
         return Ok(());
     }
     /// Internally, creates a temporary file (deleted once the current `Calculator` instance is dropped) to redirect ChemApp outputs; this is a useful feature in environments where console window is not available.
@@ -425,32 +461,70 @@ impl Calculator {
     /***************************************************************************************************************************************************************************************************************************/
     /***************************************************************************************************************************************************************************************************************************/
 
-    /// A simple isothermal calculation (temperature + initial composition in the pre-transformed basis).
-    fn calculate_isothermal_(&self, x_i: &DVector<f64>, temp: f64) -> Result<(), ChemAppError> {
+    fn transformed_composition<D: Dim, S: Storage<f64, D>>(
+        &self,
+        compositions: &Vector<f64, D, S>,
+    ) -> Result<DVector<f64>, ChemAppError> {
+        let expected = self.transform.number_final();
+        validate_composition_rows(compositions.nrows(), expected)?;
+        Ok(self
+            .transform
+            .transform_final2init(compositions, false, false, false)
+            .column(0)
+            .into_owned())
+    }
+
+    /// Executes the shared no-target protocol after composition conversion.
+    fn calculate_isothermal_(
+        &self,
+        x_i: &DVector<f64>,
+        temp: f64,
+        pressure: Option<f64>,
+    ) -> Result<(), ChemAppError> {
         self.reset()?;
+        if let Some(pressure) = pressure {
+            self.engine.tqsetc("P", 0, 0, pressure)?;
+        }
         self.engine.tqsetc("T", 0, 0, temp)?;
         for k in 0..x_i.len() {
             self.engine.tqsetc("IA", 0, k + 1, x_i[k])?;
         }
         //self.engine.tqshow();
-        self.engine.tqce(" ", 0, 0, (10.0, 6000.0))?;
-        //self.number_isothermal += 1;
+        self.engine.tqce(" ", 0, 0, (0.0, 0.0))?;
         return Ok(());
     }
-    /// Perform a no-target isothermal calculation for an input composition and a temperature, use dynamic vectors; TODO check the composition transformations
+
+    /// Calculates a no-target equilibrium at `temp` and ChemApp's default pressure.
+    ///
+    /// The call removes all prior conditions with `TQREMC(-2)`, converts the
+    /// supplied mole amounts from the active user basis into the loaded system-
+    /// component basis, sets `T` and each `IA`, then calls `TQCE` with a blank
+    /// target. The documented default pressure after reset is 1 bar. The
+    /// calculated equilibrium remains the live native state on return.
     pub fn calculate_isothermal<D: Dim, S: Storage<f64, D>>(
         &self,
         compositions: &Vector<f64, D, S>,
         temp: f64,
     ) -> Result<(), ChemAppError> {
-        return self.calculate_isothermal_(
-            &self
-                .transform
-                .transform_final2init(compositions, false, false, false)
-                .column(0)
-                .into_owned(),
+        self.calculate_isothermal_(&self.transformed_composition(compositions)?, temp, None)
+    }
+
+    /// Calculates a no-target equilibrium at explicit temperature and pressure.
+    ///
+    /// Temperature and pressure use the engine's active units. Reset,
+    /// composition conversion, amount basis, and live-state semantics are the
+    /// same as [`Calculator::calculate_isothermal`].
+    pub fn calculate_isothermal_at_pressure<D: Dim, S: Storage<f64, D>>(
+        &self,
+        compositions: &Vector<f64, D, S>,
+        temp: f64,
+        pressure: f64,
+    ) -> Result<(), ChemAppError> {
+        self.calculate_isothermal_(
+            &self.transformed_composition(compositions)?,
             temp,
-        );
+            Some(pressure),
+        )
     }
 
     fn calculate_target_t_(
@@ -513,10 +587,9 @@ impl Calculator {
                 ))
             }
         }
-        //self.number_target_t += 1;
         return Ok(());
     }
-    /// Perform a T-target calculation for an input composition and a temperature, use dynamic vectors; TODO check the composition transformations
+    /// Performs a temperature-target calculation after checked basis conversion.
     pub fn calculate_target_t<D: Dim, S: Storage<f64, D>>(
         &self,
         compositions: &Vector<f64, D, S>,
@@ -528,11 +601,7 @@ impl Calculator {
         adjusting: Option<usize>,
     ) -> Result<(), ChemAppError> {
         return self.calculate_target_t_(
-            &self
-                .transform
-                .transform_final2init(compositions, false, false, false)
-                .column(0)
-                .into_owned(),
+            &self.transformed_composition(compositions)?,
             masterphase,
             target,
             interval,
@@ -762,6 +831,21 @@ impl Drop for Calculator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nalgebra::DVector;
+
+    #[test]
+    fn transform_boundary_rejects_unspanned_basis_without_unwinding() {
+        assert!(build_transform(&["Al", "O"], &["Al2O3"]).is_err());
+    }
+
+    #[test]
+    fn transform_dimension_contract_is_reported_before_chemformula_asserts() {
+        let transform = build_transform(&["Al", "O"], &["Al", "O"]).unwrap();
+        let composition = DVector::from_vec(vec![1.0]);
+        let error =
+            validate_composition_rows(composition.nrows(), transform.number_final()).unwrap_err();
+        assert!(error.description().contains("requires 2"));
+    }
 
     #[test]
     fn datafile_extension_is_case_insensitive_and_checked_before_native_calls() {

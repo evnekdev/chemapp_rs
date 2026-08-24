@@ -47,6 +47,20 @@ pub fn temperature() -> Result<f64, ChemAppError> {
     }
 }
 
+pub fn pressure() -> Result<f64, ChemAppError> {
+    match std::env::var("CHEMAPP_PRESSURE") {
+        Ok(value) => value.parse::<f64>().map_err(|error| {
+            ChemAppError::OtherError(format!(
+                "CHEMAPP_PRESSURE must be a number in the active ChemApp pressure unit: {error}"
+            ))
+        }),
+        Err(std::env::VarError::NotPresent) => Ok(1.0),
+        Err(error) => Err(ChemAppError::OtherError(format!(
+            "could not read CHEMAPP_PRESSURE: {error}"
+        ))),
+    }
+}
+
 /// Builds a non-degenerate demonstration composition in the loaded
 /// system-component basis. Every component receives one unit; applications
 /// must replace this with their scientifically meaningful composition.

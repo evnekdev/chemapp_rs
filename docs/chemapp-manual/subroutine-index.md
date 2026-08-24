@@ -116,7 +116,9 @@ Important: global conditions and streams are distinct input modes. `TQSETC` and 
 | `TQCDAT` | change thermodynamic data | wrapped |
 | `TQWASC` | write ASCII thermochemical data-file | wrapped |
 
-The current `cache` and `parse` modules build on this group. Their support is incomplete for some parameter/model classes and should be treated as advanced/experimental until audited.
+The current `cache` and `parse` modules build on this group. Their 1.0 APIs are
+stable, but mutation support remains deliberately read-only for parameter/model
+classes whose native selectors have not been verified.
 
 ## Current manual-to-code audit target
 

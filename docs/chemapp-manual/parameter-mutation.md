@@ -130,8 +130,8 @@ typed addresses and verify TQGPAR readback. Runtime checks exercised magnetic
 moment and multi-expression Gibbs delta/reset paths.
 
 The former MQM-specific interaction cache types and six-term/first-expression
-assumptions were removed. This is an API change in the experimental cache
-surface.
+assumptions were removed. This is an API change made before stabilizing the
+cache surface in 1.0. Model/channel coverage remains intentionally extensible.
 
 ## Remaining limitations
 

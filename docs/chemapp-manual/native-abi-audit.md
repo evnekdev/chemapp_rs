@@ -492,8 +492,8 @@ claim the other arguments are verified.
    TQGPAR matrices and uses typed, runtime-verified TQCDAT addresses for EN22
    ordinary Gibbs and SUBLM magnetic cells. Special/unverified cells remain
    explicitly read-only. Compound/endmember cache loading now reports empty
-   TQGDAT results rather than indexing them. The cache remains experimental
-   because supported data-file/model preconditions are intentionally narrow.
+   TQGDAT results rather than indexing them. The cache API is stable for 1.0;
+   supported mutation families remain explicitly bounded and extensible.
 
 ## Separate ABI and CHARACTER findings
 

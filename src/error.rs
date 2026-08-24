@@ -8,6 +8,11 @@ use std::ffi::NulError;
 use std::fmt;
 use std::str::Utf8Error;
 
+// These concise diagnostics are functional interface data keyed by ChemApp's
+// public NOERR values and paraphrased from the publicly documented Programmer's
+// Manual error table. They are not a substitute for version-specific TQERR
+// output; unknown codes intentionally remain recognizable as unknown.
+
 /*****************************************************************************************************************************************************************************************************/
 /*****************************************************************************************************************************************************************************************************/
 
