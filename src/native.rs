@@ -1741,9 +1741,12 @@ impl Engine {
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
-	// CALCULATE-ONE-DIMENSIONAL-PHASE-MAP
+	/// CALCULATE-ONE-DIMENSIONAL-PHASE-MAP
+	///
+	/// `ICONT` is a signed ChemApp INTEGER. Positive values request another
+	/// continuation call; zero or negative values terminate the map.
 	#[named]
-	pub fn tqmap(&self, option: &str, indexp: usize, indexc: usize, vals: (f64,f64))->Result<usize,ChemAppError>{
+	pub fn tqmap(&self, option: &str, indexp: usize, indexc: usize, vals: (f64,f64))->Result<i32,ChemAppError>{
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(indexp, indexc);
 		let coption: CString = CString::new(option)?;
@@ -1764,13 +1767,15 @@ impl Engine {
 			func(cstring_character_input(&coption)?.0, &indexp, &indexc, &vals_[0], &mut icont, &mut errcode, cstring_character_input(&coption)?.1);
 		}
 		/******************************************************************************************************/
-		return wrap_nonnegative_result(icont, errcode);
+		return wrap_result(icont, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
-	// CALCULATE-ONE-DIMENSIONAL-PHASE-MAP-AND-LIST-RESULTS
+	/// CALCULATE-ONE-DIMENSIONAL-PHASE-MAP-AND-LIST-RESULTS
+	///
+	/// The signed continuation result has the same semantics as `tqmap`.
 	#[named]
-	pub fn tqmapl(&self, option: &str, indexp: usize, indexc: usize, vals: (f64,f64))->Result<usize,ChemAppError>{
+	pub fn tqmapl(&self, option: &str, indexp: usize, indexc: usize, vals: (f64,f64))->Result<i32,ChemAppError>{
 		let fname = func_alias(function_name!());
 		raw_chemapp_ints!(indexp, indexc);
 		let coption: CString = CString::new(option)?;
@@ -1791,7 +1796,7 @@ impl Engine {
 			func(cstring_character_input(&coption)?.0, &indexp, &indexc, &vals_[0], &mut icont, &mut errcode, cstring_character_input(&coption)?.1);
 		}
 		/******************************************************************************************************/
-		return wrap_nonnegative_result(icont, errcode);
+		return wrap_result(icont, errcode);
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
@@ -2212,5 +2217,13 @@ mod tests {
 	#[test]
 	fn tqchar_exposes_the_native_double_precision_result() {
 		let _: fn(&Engine, usize, usize) -> Result<f64, ChemAppError> = Engine::tqchar;
+	}
+
+	#[test]
+	fn mapping_continuation_remains_signed() {
+		let _: fn(&Engine, &str, usize, usize, (f64, f64)) -> Result<i32, ChemAppError> =
+			Engine::tqmap;
+		let _: fn(&Engine, &str, usize, usize, (f64, f64)) -> Result<i32, ChemAppError> =
+			Engine::tqmapl;
 	}
 }

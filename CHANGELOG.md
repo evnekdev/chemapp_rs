@@ -27,6 +27,8 @@
     through `SnapshotOptions` and uses the strict `AC > 0.9999` rule.
   - live entity getters and count-dependent iterator constructors now propagate
     `ChemAppError` rather than silently returning placeholders or empty sets.
+  - `Engine::tqmap` and `Engine::tqmapl` now return signed `i32` continuation
+    values so the documented non-positive terminal states remain representable.
 
 ### Fixed
 
@@ -55,7 +57,8 @@
     a normal temporary-directory fallback for library names with no parent.
   - made the Calculator/entity example project-relative and `Result`-based.
   - completed high-level TQMAP/TQMAPL continuation, corrected listed-routine
-    selection and `indexc` forwarding, and snapshot every native mapping state.
+    selection and `indexc` forwarding, preserved signed `ICONT`, and snapshot
+    every native mapping state.
   - replaced the old quadruplet-only `Bond` concept with explicit QUAS/QSOL
     pair and SUBG quadruplet identities, including canonical enumeration.
   - implemented real stream ownership cleanup through `Drop` and fallible

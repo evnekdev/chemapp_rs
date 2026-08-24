@@ -39,7 +39,7 @@ fn collect_mapping_results<T, C, S>(
     mut snapshot: S,
 ) -> Result<Vec<T>, ChemAppError>
 where
-    C: FnMut(&str) -> Result<usize, ChemAppError>,
+    C: FnMut(&str) -> Result<i32, ChemAppError>,
     S: FnMut() -> Result<T, ChemAppError>,
 {
     let mut results = Vec::new();
@@ -738,7 +738,9 @@ mod tests {
     fn mapping_protocol_snapshots_each_successful_call_before_advancing() {
         use std::cell::RefCell;
         let events = RefCell::new(Vec::new());
-        let continuations = RefCell::new(vec![0usize, 1, 1]);
+        // Pop order is 1, 1, -1: the final negative terminal value must still
+        // produce a snapshot before the loop stops.
+        let continuations = RefCell::new(vec![-1i32, 1, 1]);
         let results = collect_mapping_results(
             "TF",
             "TN",
