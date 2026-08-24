@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-08-24
 
 First stable release of the current direct-Fortran binding and high-level API.
 ChemApp itself remains a separately obtained proprietary dependency.
