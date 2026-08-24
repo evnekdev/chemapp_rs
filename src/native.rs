@@ -1842,7 +1842,15 @@ impl Engine {
 	}
 	
 	/*****************************************************************************************************************************************************************************************************/
-	/// GET-RESULT
+	/// GET-RESULT for the scalar subset of `TQGETR`.
+	///
+	/// This wrapper deliberately exposes only selector forms that produce one
+	/// `DOUBLE PRECISION` result: a positive phase and positive constituent or
+	/// system-component index; a positive phase with index zero; system
+	/// component index with `indexp == 0`; and the whole-system form `(0, 0)`.
+	/// The Programmer's Manual defines negative selectors that return arrays;
+	/// they are not representable by this unsigned scalar API and therefore
+	/// cannot reach its one-element native output buffer.
 	#[named]
 	pub fn tqgetr(&self, option: &str, indexp: usize, indexc: usize)->Result<f64,ChemAppError>{
 		let fname = func_alias(function_name!());

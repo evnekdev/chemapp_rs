@@ -48,7 +48,7 @@ and `TQCLOS` for closing.
 
 ### `chemapp_rs` rule
 
-High-level loading should use these routines rather than ordinary Rust file handles for files that ChemApp itself must read. The normal input unit should be queried with `TQGIO("FILE")` rather than hard-wired unless a test deliberately exercises a fixed unit.
+High-level loading should use these routines rather than ordinary Rust file handles for files that ChemApp itself must read. The normal input unit should be queried with `TQGIO("FILE")` rather than hard-wired unless a test deliberately exercises a fixed unit. `Calculator::load_datafile` validates a supported extension before querying native state, then uses that configured unit consistently for the format-specific open/read/close sequence.
 
 Any temporary `LIST`/`ERROR` redirection must use valid ChemApp/FORTRAN units, avoid collisions, and restore state when necessary.
 
@@ -66,7 +66,7 @@ The manual warns that failing to close a data-file can cause later reads to begi
 
 ### `chemapp_rs` rule
 
-Every successful open/read sequence must have a matching `TQCLOS`, including error paths where practical. Where future refactoring makes this feasible, use a small guard abstraction so unit/file cleanup is not dependent on manually repeated code.
+Every successful open/read sequence must have a matching `TQCLOS`, including error paths where practical. `Calculator::load_datafile` attempts the close after a failed read as well and retains both failures when native read and close both fail. Where future refactoring makes this feasible, use a small guard abstraction so unit/file cleanup is not dependent on manually repeated code.
 
 ## 7. For transparent files, preserve licensing/header diagnostics
 

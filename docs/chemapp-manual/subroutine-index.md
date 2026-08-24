@@ -97,14 +97,14 @@ Important: global conditions and streams are distinct input modes. `TQSETC` and 
 | `TQMAPL` | mapping with list/table output | wrapped |
 | `TQCLIM` | set target/mapping variable limits | wrapped |
 | `TQSHOW` | show current input conditions/settings | wrapped |
-| `TQGETR` | retrieve result from current calculated state | wrapped |
+| `TQGETR` | retrieve result from current calculated state | wrapped — scalar-result subset |
 | `TQGDPC` | get thermodynamic property of a phase constituent | wrapped |
 | `TQSTXP` | retrieve stream thermodynamic property | wrapped |
 | `TQGTLC` | sublattice fraction/result | wrapped |
 | `TQBOND` | bond/pair result information for applicable models | wrapped |
 | `TQERR` | retrieve current ChemApp error message | wrapped |
 
-`TQGETR` refers to the last relevant calculation/mapping state. High-level Rust code that needs historical states must snapshot results before the next native calculation changes them.
+`TQGETR` refers to the last relevant calculation/mapping state. High-level Rust code that needs historical states must snapshot results before the next native calculation changes them. `Engine::tqgetr` currently exposes only the scalar forms of the manual's `INDEXP`/`INDEX` table: positive phase/positive individual index, positive phase/index zero, `indexp == 0` with a positive system-component index, and `(0, 0)` for the system. Negative selectors return arrays and are intentionally not exposed by this scalar `f64` API.
 
 ## 6. Thermodynamic data manipulation
 

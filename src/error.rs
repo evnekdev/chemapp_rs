@@ -16,6 +16,15 @@ use bincode::{Encode};
 pub enum ChemAppError{
 	/// A native ChemApp `NOERR` value. ChemApp INTEGER storage is signed i32.
 	NativeError(i32),
+	/// The operation failed and its required native cleanup failed as well.
+	///
+	/// The original error remains separately available as `primary`; callers
+	/// must not lose the ChemApp error that caused cleanup to be attempted.
+	CleanupError {
+		operation: String,
+		primary: Box<ChemAppError>,
+		cleanup: Box<ChemAppError>,
+	},
 	OtherError(String),
 	CustomError(String),
 }
@@ -29,6 +38,14 @@ impl ChemAppError {
 				Some(desc) => {return format!("ChemApp error {}, {}", id, desc);}
 				None => {return format!("Unrecognized ChemApp error {}", id);}
 			}
+			}
+			Self::CleanupError { operation, primary, cleanup } => {
+				return format!(
+					"{} failed: {}; required cleanup also failed: {}",
+					operation,
+					primary.description(),
+					cleanup.description()
+				);
 			}
 			Self::OtherError(desc) => {return format!("{}", &desc);}
 			Self::CustomError(desc)=> {return format!("{}", &desc);}
@@ -58,6 +75,29 @@ impl From<NulError> for ChemAppError {
 impl From<libloading::Error> for ChemAppError {
 	fn from(error: libloading::Error)->ChemAppError {
 		return ChemAppError::OtherError(error.to_string());
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn cleanup_error_retains_the_primary_native_error() {
+		let error = ChemAppError::CleanupError {
+			operation: "reading a data-file".to_owned(),
+			primary: Box::new(ChemAppError::NativeError(103)),
+			cleanup: Box::new(ChemAppError::NativeError(108)),
+		};
+
+		match &error {
+			ChemAppError::CleanupError { primary, cleanup, .. } => {
+				assert!(matches!(primary.as_ref(), ChemAppError::NativeError(103)));
+				assert!(matches!(cleanup.as_ref(), ChemAppError::NativeError(108)));
+			}
+			_ => panic!("expected CleanupError"),
+		}
+		assert!(error.description().contains("ChemApp error 103"));
 	}
 }
 

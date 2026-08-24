@@ -13,6 +13,12 @@
   - `ChemAppError::NativeError` now retains the signed native error type
     (`i32`) rather than `usize`; public positive indices are checked before
     conversion to the native ChemApp integer.
+  - `Calculator::from_library` and `from_library_unloaded` now propagate
+    library, initialization, component-name, and composition-transform errors
+    instead of panicking. `Calculator::set_clim` now returns `Result`.
+  - `Engine::tqgetr` is documented as the deliberately scalar-only result
+    subset. Negative array selectors remain unexposed rather than being
+    incorrectly treated as scalar calls.
 
 ### Fixed
 
@@ -34,3 +40,9 @@
     UNIX/x86-64 `int`, and the literal non-x86-64 UNIX `long` fallback.
   - pass input `CString` values to native CHARACTER parameters as raw pointers,
     including safely representable zero-length inputs.
+  - load data-files through the configured `TQGIO("FILE")` unit and always
+    attempt `TQCLOS` after a successful open; dual read/close failures preserve
+    the primary error and cleanup context.
+  - made `redirect_error_to_temp` fallible without `expect`/`unwrap`, including
+    a normal temporary-directory fallback for library names with no parent.
+  - made the Calculator/entity example project-relative and `Result`-based.

@@ -3,8 +3,8 @@
 //! A high level submodule for easy operations on ChemApp library - avoid unnecessary boilerplate code. The user is still free to use both `native` and `Calculator` style function in a free manner.
 //! An important feature of `Calculator` is the ability of predefining the composition basis - a useful feature, for example, in oxide systems, where system components are defined as elements, but the compositions should be entered as oxides (CaO, FeO, SiO2, etc). 
 use std::fmt;
-use std::path::Path;
 use std::ffi::OsStr;
+use std::path::Path;
 use std::ops::{Range};
 use nalgebra::{DVector, SVector, Vector, Dim, Storage};
 use tempfile::NamedTempFile;
@@ -21,9 +21,33 @@ use crate::entities::system::System;
 /*******************************************************************************************************************************************************************************************************************************/
 /*******************************************************************************************************************************************************************************************************************************/
 
-/// A helper function to tell whether we deal with an open format *.DAT, transparent header *.CST, or binary formats/
-fn get_extension_from_filename(filename: &str)->Option<String>{
-	return Path::new(filename).extension().and_then(|s| OsStr::to_str(s).and_then(|s| Some(s.to_lowercase())));
+/// ChemApp's three thermochemical data-file formats supported by the loader.
+///
+/// This is deliberately determined before querying or mutating native state so
+/// an unsupported filename cannot open a native FORTRAN unit accidentally.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DatafileFormat {
+	Ascii,
+	Binary,
+	Transparent,
+}
+
+/// Determines the ChemApp data-file format from its case-insensitive extension.
+fn datafile_format_from_filename(filename: &str) -> Result<DatafileFormat, ChemAppError> {
+	let extension = Path::new(filename)
+		.extension()
+		.and_then(OsStr::to_str)
+		.map(str::to_ascii_lowercase)
+		.ok_or_else(|| ChemAppError::OtherError(format!("{filename} has no extension")))?;
+
+	match extension.as_str() {
+		"dat" => Ok(DatafileFormat::Ascii),
+		"bin" => Ok(DatafileFormat::Binary),
+		"cst" => Ok(DatafileFormat::Transparent),
+		_ => Err(ChemAppError::OtherError(format!(
+			"{extension} is not a recognized datafile extension for {filename}"
+		))),
+	}
 }
 
 /*******************************************************************************************************************************************************************************************************************************/
@@ -44,8 +68,10 @@ pub struct Calculator {
 	pub number_isothermal: usize,
 	/// target calculation counter
 	pub number_target_t: usize,
-	 /// instead of raw input using the system components basis, the user can define a custom formula basis; the transform is handled internally
+	/// instead of raw input using the system components basis, the user can define a custom formula basis; the transform is handled internally
 	pub transform: Transform,
+	/// The ERROR unit active before `redirect_error_to_temp` changed it.
+	previous_errunit: Option<usize>,
 }
 
 /*******************************************************************************************************************************************************************************************************************************/
@@ -61,6 +87,7 @@ impl Default for Calculator {
 			number_isothermal: 0,
 			number_target_t: 0,
 			transform: Transform::default(),
+			previous_errunit: None,
 		};
 	}
 }
@@ -69,16 +96,33 @@ impl Default for Calculator {
 /*******************************************************************************************************************************************************************************************************************************/
 
 impl Calculator {
+	/// Queries the loaded system's component names without turning a failed
+	/// native lookup into a silently incomplete composition basis.
+	fn component_names(engine: &Engine) -> Result<Vec<String>, ChemAppError> {
+		let count = engine.tqnosc()?;
+		(0..count)
+			.map(|index| engine.tqgnsc(index + 1))
+			.collect()
+	}
+
+	/// Builds a formula transform while retaining the dependency's diagnostic.
+	fn identity_transform(components: &[String]) -> Result<Transform, ChemAppError> {
+		Transform::new(components, components, true).map_err(|error| {
+			ChemAppError::OtherError(format!(
+				"could not construct the ChemApp component identity transform: {error:?}"
+			))
+		})
+	}
 	
 	/***************************************************************************************************************************************************************************************************************************/
 	/***************************************************************************************************************************************************************************************************************************/
 	
 	/// Initialize a [`Calculator`] from a ChemApp dll file and a datafile
 	pub fn from_library(libname: & str, datfile: & str)->Result<Calculator, ChemAppError>{
-		let engine = Engine::new(libname).unwrap();
+		let engine = Engine::new(libname)?;
 		Self::init_engine(&engine, datfile)?;
-		let components : Vec<String> = (0..engine.tqnosc()?).into_iter().map(|idx| engine.tqgnsc(idx+1)).filter_map(|r| r.ok()).collect();
-		let transform = Transform::new(&components, &components, true);
+		let components = Self::component_names(&engine)?;
+		let transform = Self::identity_transform(&components)?;
 		return Ok(Calculator {
 			engine: engine,
 			cache: None,
@@ -86,13 +130,14 @@ impl Calculator {
 			nondefault_errunit: None,
 			number_isothermal: 0,
 			number_target_t: 0,
-			transform: transform.unwrap(),
+			transform,
+			previous_errunit: None,
 		});
 	}
 	
 	/// Initializes a ChemApp interface without a datafile
 	pub fn from_library_unloaded(libname: &str)->Result<Calculator,ChemAppError>{
-		let engine = Engine::new(libname).unwrap();
+		let engine = Engine::new(libname)?;
 		engine.tqini()?;
 		return Ok(Calculator {
 			engine: engine,
@@ -102,6 +147,7 @@ impl Calculator {
 			number_isothermal : 0,
 			number_target_t : 0,
 			transform : Transform::default(),
+			previous_errunit: None,
 		});
 	}
 	
@@ -115,57 +161,105 @@ impl Calculator {
 		return Ok(());
 	}
 	
-	/// A higher-level abstraction over datafile handling, this function is only needed to be called once while the datafile type (open or transparent header) is automatically detected.
+	/// Loads one ChemApp thermochemical data-file through its format-specific
+	/// native open/read/close sequence.
+	///
+	/// The extension is validated before native state is queried. The configured
+	/// `FILE` unit from `TQGIO` is then used consistently for opening and
+	/// closing. Once an open succeeds, close is attempted even if the read
+	/// fails; a dual failure retains the read error as the primary error.
 	pub fn load_datafile(engine: &Engine, datfile: &str)->Result<(),ChemAppError>{
-		let res = get_extension_from_filename(datfile);
-		match res {
-			Some(extension) => {
-				//println!("extension = {}", &extension);
-				match extension.as_ref() {
-					"dat" => {
-						// loading ASCII file
-						engine.tqopna(datfile, 10)?; // unit number
-						engine.tqrfil()?;
-						engine.tqclos(10)?;
-					}
-					"cst" => {
-						// loading Transparent-Header File
-						engine.tqopnt(datfile, 10)?;
-						engine.tqrcst()?;
-						engine.tqclos(10)?;
-					}
-					"bin" => {
-						// loading a Binary File
-						engine.tqopnb(datfile, 10)?;
-						engine.tqrbin()?;
-						engine.tqclos(10)?;
-					}
-					_ => {
-						return Err(ChemAppError::OtherError(format!("{} is not a recognized datafile extension for {}", extension, datfile)));
-					}
-				}
-			}
-			None => {
-				return Err(ChemAppError::OtherError(format!("{} has no extension", datfile)));
-			}
+		let format = datafile_format_from_filename(datfile)?;
+		let unit = engine.tqgio("FILE")?;
+
+		match format {
+			DatafileFormat::Ascii => engine.tqopna(datfile, unit)?,
+			DatafileFormat::Binary => engine.tqopnb(datfile, unit)?,
+			DatafileFormat::Transparent => engine.tqopnt(datfile, unit)?,
 		}
-		return Ok(());
+
+		let read_result = match format {
+			DatafileFormat::Ascii => engine.tqrfil(),
+			DatafileFormat::Binary => engine.tqrbin(),
+			DatafileFormat::Transparent => engine.tqrcst(),
+		};
+		let close_result = engine.tqclos(unit);
+
+		match (read_result, close_result) {
+			(Ok(()), Ok(())) => Ok(()),
+			(Ok(()), Err(close)) => Err(close),
+			(Err(read), Ok(())) => Err(read),
+			(Err(read), Err(close)) => Err(ChemAppError::CleanupError {
+				operation: format!("reading {datfile} through ChemApp unit {unit}"),
+				primary: Box::new(read),
+				cleanup: Box::new(close),
+			}),
+		}
 	}
 	/// Set a formula transform for input compositions
 	pub fn set_transform<T: AsRef<str>>(&mut self, basis: &[T])->Result<(),ChemAppError>{
-		self.transform = Transform::new(&self.components().map(|c| c.name()).collect::<Vec<String>>(), basis, true).unwrap();
+		let components = Self::component_names(&self.engine)?;
+		self.transform = Transform::new(&components, basis, true).map_err(|error| {
+			ChemAppError::OtherError(format!(
+				"could not construct the ChemApp composition transform: {error:?}"
+			))
+		})?;
 		return Ok(());
 	}
 	/// Internally, creates a temporary file (deleted once the current `Calculator` instance is dropped) to redirect ChemApp outputs; this is a useful feature in environments where console window is not available.
 	pub fn redirect_error_to_temp(&mut self)->Result<(),ChemAppError>{
-		let parent = Path::new(&self.engine.library_name).parent().expect("Does not have a parent directory").to_path_buf();
-		let temp_file = NamedTempFile::new_in(parent).unwrap();
-		let temp_file_ = temp_file.keep().unwrap().1;
-		let filename : String = temp_file_.to_string_lossy().into_owned();
+		let directory = Path::new(&self.engine.library_name)
+			.parent()
+			.filter(|parent| !parent.as_os_str().is_empty())
+			.map(Path::to_path_buf)
+			.unwrap_or_else(std::env::temp_dir);
+		let temp_file = NamedTempFile::new_in(&directory).map_err(|error| {
+			ChemAppError::OtherError(format!(
+				"could not create a temporary ChemApp ERROR file in {}: {error}",
+				directory.display()
+			))
+		})?;
+		let (_file, temp_path) = temp_file.keep().map_err(|error| {
+			ChemAppError::OtherError(format!(
+				"could not persist the temporary ChemApp ERROR file: {}",
+				error.error
+			))
+		})?;
+		let filename = match temp_path.to_str() {
+			Some(path) => path.to_owned(),
+			None => {
+				let _ = std::fs::remove_file(&temp_path);
+				return Err(ChemAppError::OtherError(
+					"temporary ChemApp ERROR path is not valid UTF-8".to_owned(),
+				));
+			}
+		};
 		let unit = 30;
-		self.engine.tqopen(&filename,unit)?;
-		self.engine.tqcio("ERROR",unit)?;
+		let previous_unit = match self.engine.tqgio("ERROR") {
+			Ok(unit) => unit,
+			Err(error) => {
+				let _ = std::fs::remove_file(&temp_path);
+				return Err(error);
+			}
+		};
+		if let Err(open) = self.engine.tqopen(&filename,unit) {
+			let _ = std::fs::remove_file(&temp_path);
+			return Err(open);
+		}
+		if let Err(configure) = self.engine.tqcio("ERROR",unit) {
+			let close = self.engine.tqclos(unit);
+			let _ = std::fs::remove_file(&temp_path);
+			return match close {
+				Ok(()) => Err(configure),
+				Err(cleanup) => Err(ChemAppError::CleanupError {
+					operation: "redirecting ChemApp ERROR output".to_owned(),
+					primary: Box::new(configure),
+					cleanup: Box::new(cleanup),
+				}),
+			};
+		}
 		self.nondefault_errunit = Some((filename,unit));
+		self.previous_errunit = Some(previous_unit);
 		return Ok(());
 	}
 	
@@ -220,19 +314,27 @@ impl Calculator {
 	/***************************************************************************************************************************************************************************************************************************/
 	/***************************************************************************************************************************************************************************************************************************/
 	
-		/// set (tlower, thigh) limits
-	pub fn set_clim(&self, interval: (f64,f64), inverse_order: bool){
+	/// Sets temperature target limits, trying the requested ChemApp ordering
+	/// once and the reverse ordering once if ChemApp rejects the first call.
+	///
+	/// A failed first call may have changed native target-limit state, so this
+	/// method deliberately avoids recursion and makes no broader reset claim.
+	pub fn set_clim(&self, interval: (f64,f64), inverse_order: bool) -> Result<(), ChemAppError> {
 		if inverse_order {
-			let res = self.engine.tqclim("THIGH", interval.1);
-			match res {
-				Ok(_)  => {self.engine.tqclim("TLOW", interval.0).unwrap();}
-				Err(_) => {self.set_clim(interval, false);}
+			match self.engine.tqclim("THIGH", interval.1) {
+				Ok(()) => self.engine.tqclim("TLOW", interval.0),
+				Err(_) => {
+					self.engine.tqclim("TLOW", interval.0)?;
+					self.engine.tqclim("THIGH", interval.1)
+				}
 			}
 		} else {
-			let res = self.engine.tqclim("TLOW", interval.0);
-			match res {
-				Ok(_)  => {self.engine.tqclim("THIGH", interval.1).unwrap();}
-				Err(_) => {self.set_clim(interval, true);}
+			match self.engine.tqclim("TLOW", interval.0) {
+				Ok(()) => self.engine.tqclim("THIGH", interval.1),
+				Err(_) => {
+					self.engine.tqclim("THIGH", interval.1)?;
+					self.engine.tqclim("TLOW", interval.0)
+				}
 			}
 		}
 	}
@@ -256,11 +358,16 @@ impl Calculator {
 	}
 	
 	fn calculate_target_t_(&self, x_i: &DVector<f64>, masterphase: usize, target: usize, interval: (f64,f64), precipitation: bool, fixed: Option<usize>, adjusting: Option<usize>)->Result<(),ChemAppError>{
+		if fixed.is_some() != adjusting.is_some() {
+			return Err(ChemAppError::OtherError(
+				"both fixed and adjusting system components must be defined, or neither".to_owned()
+			));
+		}
 		// set non-compositional conditions
 		let nitermax = 10usize;
 		let val = if precipitation {-0.5} else {0.0};
 		self.engine.tqsetc("A", target, 0, val)?;
-		self.set_clim(interval, true);
+		self.set_clim(interval, true)?;
 		// set compositions
 		let mut xvar : DVector<f64> = x_i.clone();
 		//let mut xvarprev : DVector<f64> = xvar.clone();
@@ -291,7 +398,9 @@ impl Calculator {
 				//self.engine.tqshow()?;
 				self.engine.tqce("T", 0, 0, interval)?;
 			}
-			_ => {panic!("Both or none of fixed and adjusting system components must be defined");}
+			_ => return Err(ChemAppError::OtherError(
+				"both fixed and adjusting system components must be defined, or neither".to_owned()
+			)),
 		}
 		//self.number_target_t += 1;
 		return Ok(());
@@ -444,6 +553,9 @@ impl Drop for Calculator {
 	fn drop(&mut self){
 		match &self.nondefault_errunit {
 			Some((filename,unit)) => {
+				if let Some(previous_unit) = self.previous_errunit {
+					let _ = self.engine.tqcio("ERROR", previous_unit);
+				}
 				let _ = self.engine.tqclos(*unit);
 				let _ = std::fs::remove_file(&filename);
 			}
@@ -451,6 +563,27 @@ impl Drop for Calculator {
 		}
 	}
 	
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn datafile_extension_is_case_insensitive_and_checked_before_native_calls() {
+		assert_eq!(datafile_format_from_filename("system.DAT").unwrap(), DatafileFormat::Ascii);
+		assert_eq!(datafile_format_from_filename("system.cSt").unwrap(), DatafileFormat::Transparent);
+		assert_eq!(datafile_format_from_filename("system.bin").unwrap(), DatafileFormat::Binary);
+		assert!(datafile_format_from_filename("system.unknown").is_err());
+		assert!(datafile_format_from_filename("system").is_err());
+	}
+
+	#[test]
+	fn constructors_report_missing_libraries_without_panicking() {
+		let missing_library = "__chemapp_rs_missing_library_for_constructor_test__.dll";
+		assert!(Calculator::from_library_unloaded(missing_library).is_err());
+		assert!(Calculator::from_library(missing_library, "data/cosi.dat").is_err());
+	}
 }
 
 /*******************************************************************************************************************************************************************************************************************************/

@@ -23,9 +23,12 @@ while recording a conflicting raw length.  Status is now recorded separately
 for each represented build.  At routine level, the confirmed findings are
 **6 machine-ABI defects**, **1 Rust FFI-soundness declaration defect**, and
 **2 semantic/API defects**. All nine are now **FIXED IN CURRENT MASTER** for
-the source-level rules established by the checked Win32 bridge. `tqgetr`
-remains the sole **INCOMPLETE** Win32 wrapper. The checked Linux/i386 library
-also lacks **7** represented exports. Direct x64 disassembly established that
+the source-level rules established by the checked Win32 bridge. `tqgetr` is
+now recorded as a verified scalar-result subset rather than an incomplete
+wrapper: its unsigned public selectors cannot reach the documented
+array-returning negative-selector forms. Exposing those aggregate forms is
+optional future API work, not a defect in the currently reachable call shape.
+The checked Linux/i386 library also lacks **7** represented exports. Direct x64 disassembly established that
 Win64 `LI`/`LIP`/`NOERR` storage is signed 32-bit and non-UNIX `LNT` is a
 64-bit value. The subsequent raw-boundary correction now implements those
 rules through target-specific `ChemAppInt` and `ChemAppLen` aliases, while
@@ -41,9 +44,9 @@ matching checked byte lengths; this does not establish Unix64 runtime
 compatibility.
 
 Current routine-level status is therefore: **0 current confirmed Win64
-raw-integer ABI-ISSUE rows**, **1 INCOMPLETE** `TQGETR` API row on each
-otherwise-supported Windows build, **74 Win64 UNVERIFIED rows**, **0 current
-confirmed Win32 semantic defects**, and **7 Linux/i386
+raw-integer ABI-ISSUE rows**, **75 Win32/x86 VERIFIED scalar/raw-ABI rows**,
+**75 Win64 UNVERIFIED rows**, **0 current confirmed Win32 semantic defects**,
+and **7 Linux/i386
 platform-unavailable rows**. The previous nine Win32 defects and the prior
 common Win64 `NOERR` defect are historical fixed findings, not outstanding
 issues.
@@ -114,6 +117,14 @@ demo successfully. It confirmed that moving raw output storage for `TQSIZE`,
 `TQUSED`, `TQGTRH`, and selected public `i32` adapters did not alter the
 observed Win64 behavior. The generated `result` file was removed and no
 license-specific value was retained.
+
+The Calculator reliability milestone also ran the project-relative Win64
+`entitiesdemo`. It constructed a `Calculator` from the checked x64 DLL,
+loaded `data/cosi.dat` through the configured `FILE` unit, built the identity
+component transform, entered a simple temperature/pressure/composition state,
+and completed `TQCEL`. The temporary result-table artifact from the broad demo
+was removed. This is runtime conformance evidence for that high-level path,
+not broader proof of entity error semantics or mapping completeness.
 
 The fixed-output conversion correction also ran this demo. `tqgtnm` returned
 a non-empty license-holder value containing internal spaces and no trailing
@@ -211,8 +222,8 @@ named build only. `ABI-ISSUE` denotes a machine declaration conflict;
 
 | Build | VERIFIED | ABI-ISSUE | FFI-SOUNDNESS | SEMANTICS-ISSUE | INCOMPLETE | UNVERIFIED | PLATFORM-UNAVAILABLE | NOT-REPRESENTED |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| checked Win32/x86 DLL | 74 | 0 | 0 | 0 | 1 | 0 | 0 | 0 |
-| checked Win64/x64 DLL | 0 | 0 | 0 | 0 | 1 | 74 | 0 | 0 |
+| checked Win32/x86 DLL | 75 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| checked Win64/x64 DLL | 0 | 0 | 0 | 0 | 0 | 75 | 0 | 0 |
 | checked Linux/i386 SO | 0 | 0 | 0 | 0 | 0 | 68 | 7 | 0 |
 | Unix64 mapping in `defs.rs` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 75 |
 
@@ -226,7 +237,7 @@ verified because the checked SO is older (2003) than the 2013 bridge source.
 | Wrapper(s) | Win32/x86 checked DLL | Win64/x64 checked DLL | Linux/i386 checked SO | Unix64 mapping |
 |---|---|---|---|---|
 | `tqgtid`, `tqgtpi`, `tqgthi`, `tqgtrh`, `tqchar`, `tqerr`, `tqgspc`, `tqgsu`, `tqgpar` | VERIFIED (corrected source; checked Win32 bridge evidence) | UNVERIFIED: the common INTEGER/`NOERR` mismatch is fixed, but other details are not promoted | UNVERIFIED except unavailable `tqchar`/`tqgpar` | NOT-REPRESENTED |
-| `tqgetr` | INCOMPLETE | INCOMPLETE: current scalar/unsigned API remains incomplete; other x64 details are not promoted | UNVERIFIED | NOT-REPRESENTED |
+| `tqgetr` | VERIFIED: scalar-result subset | UNVERIFIED: scalar ABI details are not fully promoted | UNVERIFIED | NOT-REPRESENTED |
 | `tqconf`, `tqgdat`, `tqlpar`, `tqcdat`, `tqwasc` | VERIFIED | UNVERIFIED: corrected raw INTEGER storage; no complete per-routine x64 verdict | PLATFORM-UNAVAILABLE | NOT-REPRESENTED |
 | all remaining 60 wrappers | VERIFIED | UNVERIFIED: corrected common raw INTEGER storage; other raw details not promoted | UNVERIFIED | NOT-REPRESENTED |
 
@@ -238,9 +249,8 @@ inventory it gives one and only one status per wrapper/build.
 For unambiguous machine processing and review, the same record is expanded
 here one wrapper per row. Its W64 cells state the **current** post-correction
 status: `U` means the common raw INTEGER defect is fixed but the routine is
-not yet fully verified, and `I` retains the independent `TQGETR` API
-limitation. Git retains the historical `A` status; no stale pre-correction
-cell is presented as current. Key: `V` VERIFIED, `A` ABI-ISSUE,
+not yet fully verified. Git retains the historical `A` status; no stale
+pre-correction cell is presented as current. Key: `V` VERIFIED, `A` ABI-ISSUE,
 `F` FFI-SOUNDNESS, `S` SEMANTICS-ISSUE, `I` INCOMPLETE, `U` UNVERIFIED,
 `P` PLATFORM-UNAVAILABLE, `N` NOT-REPRESENTED.
 
@@ -310,7 +320,7 @@ cell is presented as current. Key: `V` VERIFIED, `A` ABI-ISSUE,
 | `tqmapl` | V | U | U | N |
 | `tqclim` | V | U | U | N |
 | `tqshow` | V | U | U | N |
-| `tqgetr` | I | I | U | N |
+| `tqgetr` | V | U | U | N |
 | `tqgdpc` | V | U | U | N |
 | `tqstxp` | V | U | U | N |
 | `tqgtlc` | V | U | U | N |
@@ -419,7 +429,7 @@ claim the other arguments are verified.
 | TQMAPL `tqmapl` | §5.6; TQMAP plus table output. | `(CHP,LI,LI,DBP,LIP,LIP)`. | C(OPTION). | `_TQMAPL@28` / `TQMAPL` / `tqmapl_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQCLIM `tqclim` | §5.7; I option/value; alters target/map bounds; active units apply. | `(CHP,DB,LIP)`. | C(OPTION). | `_TQCLIM@16` / `TQCLIM` / `tqclim_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQSHOW `tqshow` | §5.8; writes current state/settings to LIST; no calculation. | `(LIP)`. | none. | `_TQSHOW@4` / `TQSHOW` / `tqshow_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
-| TQGETR `tqgetr` | §5.9; I result option/indexes, O scalar or array from current result only. `INDEXP>0/INDEX<0` selects all constituents (or `XP`/`AP` system components) of one phase; `INDEXP<0/INDEX=0` all phases; `INDEXP<=0/INDEX<0` all system components. | `(CHP,LI,LI,DBP,LIP)`. | C(OPTION); Rust exposes one `f64` and `usize` indices only. | `_TQGETR@24` / `TQGETR` / `tqgetr_`; C/R/crate; yes. | Win32/x86: INCOMPLETE / MEDIUM: cannot represent negative documented indices or safely receive the array forms. |
+| TQGETR `tqgetr` | §5.9; I result option/indexes, O scalar or array from current result only. Scalar forms include `INDEXP>0/INDEX>0` for an individual phase constituent/system component, `INDEXP>0/INDEX=0` for a phase, `INDEXP<=0/INDEX>0` for a system component, and `(0,0)` for the system. Negative selectors return arrays: `INDEXP>0/INDEX<0` selects all constituents (or `XP`/`AP` system components) of one phase; `INDEXP<0/INDEX=0` all phases; `INDEXP<=0/INDEX<0` all system components. | `(CHP,LI,LI,DBP,LIP)`. | C(OPTION); Rust exposes the scalar `f64` subset with `usize` indices only, so negative array selectors are unreachable. | `_TQGETR@24` / `TQGETR` / `tqgetr_`; C/R/crate; yes. | Win32/x86: VERIFIED for the exposed scalar subset. Aggregate retrieval is intentionally not exposed; it is a separate API expansion, not a scalar ABI defect. |
 | TQGDPC `tqgdpc` | §5.10; I property option/phase/constituent, O value; documented dimensionless/unit rules depend on option and active units. | `(CHP,LI,LI,DBP,LIP)`. | C(OPTION). | `_TQGDPC@24` / `TQGDPC` / `tqgdpc_`; C/R; yes. | Win32/x86: VERIFIED / —. |
 | TQSTXP `tqstxp` | §5.11; I stream ID/property option, O property; stream state/units apply. | `(CHP,CHP,DBP,LIP)`. | C(IDENTS,OPTION), F-U appends both lengths. | `_TQSTXP@24` / `TQSTXP` / `tqstxp_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
 | TQGTLC `tqgtlc` | §5.12; I phase/sublattice/constituent, O current calculated site fraction. | `(LI,LI,LI,DBP,LIP)`. | none. | `_TQGTLC@20` / `TQGTLC` / `tqgtlc_`; C/R/crate; yes. | Win32/x86: VERIFIED / —. |
@@ -442,22 +452,25 @@ claim the other arguments are verified.
    `CString::as_bytes()`, matching the bridge's `strlen(OPTION)` and allowing
    an empty option without arithmetic underflow. Win64 direct-binary evidence
    supports its 64-bit interleaved length values; Unix64 remains unverified.
-2. `tqgetr` at `src/native.rs` takes `usize` indices, allocates one
-   `f64`, and returns one scalar, but manual §5.9 requires `VAL` to be an
-   array for `(INDEXP>0, INDEX<0)` (all constituents of a phase, or all
-   system components of a phase for `XP`/`AP`), `(INDEXP<0, INDEX=0)` (all
-   phases), and `(INDEXP<=0, INDEX<0)` (all system components).  Negative
-   values are therefore unrepresentable and the one-element allocation would
-   be unsafe if the native array form were made reachable.  The high-level
-   demo retrieves one fugacity at a time and does not expose the gap.
-   Severity: MEDIUM / INCOMPLETE API.
+2. **CLARIFIED IN CURRENT MASTER:** `tqgetr` at `src/native.rs` intentionally
+   exposes the scalar subset of manual §5.9. Its `usize` indices permit the
+   single-value forms (`INDEXP>0/INDEX>0`, `INDEXP>0/INDEX=0`,
+   `INDEXP=0/INDEX>0`, and `(0,0)`) but cannot express any negative array
+   selector. Its one `f64` allocation is therefore safe for every currently
+   reachable call. Aggregate selectors and a vector-returning API remain
+   deliberately unexposed optional functionality, not an ABI or scalar API
+   defect.
 3. **FIXED IN CURRENT MASTER:** `tqgpar` now calls `wrap_result(vecc,
    errcode)`. Its documented output-capacity bounds remain a separate audit.
-4. `Calculator::load_datafile` hard-codes unit 10 rather than obtaining the
-   configured `FILE` unit through TQGIO.  `Calculator` mapping helpers do not
-   exhaust continuation results, and some entity/cache code is deliberately
-   lossy/experimental.  These are higher-level workflow findings, not proof
-   of an `Engine` raw-ABI defect.
+4. **FIXED IN CURRENT MASTER:** `Calculator::load_datafile` validates the
+   `.dat`/`.bin`/`.cst` extension before touching native state, obtains the
+   configured `FILE` unit through `TQGIO`, and uses that unit for open/read/
+   close. It attempts `TQCLOS` after every successful open, including a read
+   failure; if read and close both fail, the primary native read error is
+   retained together with cleanup context. `Calculator` mapping helpers still
+   do not exhaust continuation results, and some entity/cache code remains
+   deliberately lossy/experimental. These are higher-level workflow findings,
+   not proof of an `Engine` raw-ABI defect.
 5. Entity accessors and iterators in `src/entities/` and `src/iterator/`
    commonly replace native failures with `NaN`, `false`, `<NONE>`, or zero.
    This conflicts with the manual's check-every-error guidance.  The snapshot
@@ -498,7 +511,7 @@ unverified.
 |---|---|---|---|
 | `tqconf`, `tqgio`, `tqcio`, `tqopen`, `tqopna`, `tqopnb`, `tqopnt`, `tqwasc` | one input option/file; W: after it, U: final; `strlen(input)` | `CString` raw pointer and checked `as_bytes().len()` excluding terminator; no blank padding | Win32 length value/order matches bridge. |
 | `tqinsc`, `tqcnsc`, `tqinp`, `tqinpc`, `tqinlc` | one input name; W interleaved/U appended; `strlen(input)` | `CString` pointer plus checked `as_bytes().len()` | Win32 match. |
-| `tqcsp`, `tqcspc`, `tqsetc`, `tqsttp`, `tqstca`, `tqstec`, `tqstrm`, `tqce`, `tqcel`, `tqcen`, `tqcenl`, `tqmap`, `tqmapl`, `tqclim`, `tqgetr`, `tqgdpc`, `tqgdat`, `tqlpar`, `tqgpar` | one input status/identifier/option; W interleaved/U appended; `strlen(input)` | `CString` pointer plus checked `as_bytes().len()` | Win32 match. `tqgetr` remains incomplete; `tqgpar` capacity bounds remain a separate audit. |
+| `tqcsp`, `tqcspc`, `tqsetc`, `tqsttp`, `tqstca`, `tqstec`, `tqstrm`, `tqce`, `tqcel`, `tqcen`, `tqcenl`, `tqmap`, `tqmapl`, `tqclim`, `tqgetr`, `tqgdpc`, `tqgdat`, `tqlpar`, `tqgpar` | one input status/identifier/option; W interleaved/U appended; `strlen(input)` | `CString` pointer plus checked `as_bytes().len()` | Win32 match. `tqgetr` is verified for the reachable scalar subset; `tqgpar` capacity bounds remain a separate audit. |
 | `tqcsc` | input 2-D character records; W length after pointer/U final; fixed 24 per record, bridge blank-pads C rows | Rust packs and space-pads 24-byte records, passes 24 | Win32 match; this unusual packing correctly follows raw ABI rather than public C shape. |
 | `tqwstr`, `tqstxp` | two inputs; W lengths interleaved in argument order/U both appended in argument order; `strlen` for each | two `CString`s; each uses its corresponding checked `as_bytes().len()` | Win32 order/value match. |
 | `tqcsu` | two inputs (class, unit), W interleaved/U appended; both `strlen` | two `CString`s; each uses its corresponding checked `as_bytes().len()` | Win32 match. |
@@ -520,8 +533,10 @@ corrected fixed-output wrappers inspect only that declared record, stop at an
 in-record NUL when present, and trim trailing Fortran blanks without removing
 internal spaces. The previous statement that Win32/x86 already had 74 fully
 verified wrappers was therefore overstated while `tqgtnm`'s first-space
-conversion remained. After this correction, 74 is the current Win32/x86 count:
-the seven output-adaptation defects are fixed and `tqgetr` remains incomplete.
+conversion remained. After that correction and the scalar-`tqgetr`
+clarification, **75** is the current Win32/x86 count: the seven
+output-adaptation defects are fixed, and scalar `tqgetr` calls are correctly
+bounded to one result.
 
 ## Win64 direct-binary evidence (2026-08-24)
 
@@ -658,14 +673,15 @@ of comprehensive native coverage.
    INTEGER/`NOERR` mismatch have focused structural coverage. `ChemAppInt`
    and `ChemAppLen` remain explicitly separate; UNIX `ftnlen` conversion and
    empty-`CString` raw-pointer handling are also now covered structurally.
-2. Split `tqgetr` into scalar and correctly sized array forms, retaining its
-   documented negative indices; bound-check data-manipulation buffers.
+2. Repair `Calculator` mapping continuation so it exhausts `TQMAP`/`TQMAPL`
+   results and snapshots every point before advancing native state.
 3. Add capability/symbol detection for the older Linux/i386 binary, then
    decide its supported minimum ChemApp version.  Obtain a real Unix64 binary
    before claiming Unix64 support.
-4. Separately repair higher-level loader unit selection, error swallowing,
-   mapping continuation, and state/unit documentation.
+4. Address remaining higher-level entity error swallowing and state/unit
+   documentation. An aggregate `tqgetr` API may be designed separately when
+   users need it; it is not a correction prerequisite.
 
-The recommended next production milestone is the **TQGETR signed-selector +
-scalar/array API redesign**. It must preserve the now-correct signed raw
-INTEGER representation rather than introduce another unsigned ABI boundary.
+The recommended next production milestone is **mapping continuation and
+snapshot semantics**. It must call `TQMAP`/`TQMAPL` until the continuation
+indicator is exhausted and snapshot each native result before the next call.
