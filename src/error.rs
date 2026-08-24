@@ -14,7 +14,8 @@ use bincode::{Encode};
 /// Custom error struct
 #[derive(Debug,Clone,Serialize,Deserialize,Encode)]
 pub enum ChemAppError{
-	NativeError(usize),
+	/// A native ChemApp `NOERR` value. ChemApp INTEGER storage is signed i32.
+	NativeError(i32),
 	OtherError(String),
 	CustomError(String),
 }
@@ -64,7 +65,7 @@ impl From<libloading::Error> for ChemAppError {
 /*****************************************************************************************************************************************************************************************************/
 
 lazy_static!{
-	pub static ref error_descriptions : HashMap<usize,&'static str> = HashMap::from(
+	pub static ref error_descriptions : HashMap<i32,&'static str> = HashMap::from(
 						[
 										(0,"No error"),
 										// initialization errors

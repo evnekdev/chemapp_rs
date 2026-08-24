@@ -105,12 +105,14 @@ decoding from `TQGTNM`, `TQGNSC`, `TQGNP`, `TQMODL`, `TQGNPC`, `TQGNLC`, and
 license-holder text and removes only trailing Fortran padding; its raw ABI was
 already correct. Win32/x86 therefore has 74 verified wrappers and one
 incomplete API (`TQGETR`) after this correction. Direct disassembly of the
-checked 2017 Win64 DLL now establishes 32-bit raw `LI`/`LIP`/`NOERR` storage
-and 64-bit non-UNIX `LNT` values. Because current Rust declares every Win64
-`NOERR` as `&mut usize`, all 75 Win64 rows now have a confirmed common
-ABI-ISSUE; no wrapper is promoted to Win64 VERIFIED by that result.
-Linux/i386 has 68 UNVERIFIED wrappers and 7 absent exports; Unix64 has no
-checked binary.
+checked 2017 Win64 DLL establishes signed 32-bit raw `LI`/`LIP`/`NOERR`
+storage and 64-bit non-UNIX `LNT` values. Current master implements those
+distinct roles using raw `ChemAppInt = i32` and target-specific
+`ChemAppLen`, with checked public `usize` conversions. This removes the
+former common Win64 ABI-ISSUE, but no wrapper is promoted to Win64 VERIFIED
+without complete per-routine evidence: 74 rows remain UNVERIFIED and
+`TQGETR` remains INCOMPLETE. Linux/i386 has 68 UNVERIFIED wrappers and 7
+absent exports; Unix64 has no checked binary.
 
 The checked Win64 `maindemo` run observed a non-empty TQGTNM result containing
 internal spaces with no trailing padding. It also executed the canonical
@@ -118,13 +120,11 @@ internal spaces with no trailing padding. It also executed the canonical
 records. Installation-specific text and identifiers were not retained in
 repository documentation or tests.
 
-The former CRITICAL and HIGH defects above are **FIXED IN CURRENT MASTER** for
-the source rules supported by the checked Win32 bridge. This does not resolve
-the Win64 `LI`/`LIP`/hidden-length-width question. The next production
-milestone is a systematic Win64 raw-integer conversion: use explicit `i32`
-raw storage and checked public `usize` conversions while retaining `usize`
-for proven 64-bit `LNT` values. The `TQGETR` scalar/array redesign remains
-separate.
+The former CRITICAL and HIGH defects above are **FIXED IN CURRENT MASTER**.
+The direct-binary Win64 integer and length questions are likewise resolved
+for the checked 2017 x64 DLL and implemented at the raw boundary. Unix64
+remains unverified, and the `TQGETR` signed-selector/scalar-array redesign
+remains separate.
 
 The checked Win32, Win64, and Linux/i386 exports were inspected. On Win64,
 `movl` reads/writes through representative index, count, and error pointers

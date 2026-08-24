@@ -196,9 +196,13 @@ Future contributors and AI agents should not have to rediscover important ChemAp
 ## 18. Do not use Rust pointer-sized integers as a default ABI type
 
 `usize` and `isize` describe Rust pointer width, not necessarily a ChemApp
-Fortran/C-transition integer or a hidden CHARACTER length.  The checked C
-header uses 32-bit `LI`/`LIP` even in its x64 branch.  Any native declaration
-using a pointer-sized Rust integer must therefore cite target/build-specific
-evidence, and a successful call is not that evidence.
+Fortran/C-transition integer or a hidden CHARACTER length. The checked 2017
+Win64 DLL and checked C header establish signed 32-bit `LI`/`LIP`/`NOERR`,
+while Win64 non-UNIX `LNT` is a 64-bit `size_t` value. Native declarations
+must therefore use distinct raw ABI types: `ChemAppInt = i32` for native
+integers and a target-specific CHARACTER-length alias for `LNT`/`ftnlen`.
+Public `usize` inputs require checked conversion; a native negative selector
+must not silently become a large unsigned Rust value. A successful call is
+supporting evidence, not a substitute for this target/build-specific record.
 
 The current complete evidence record is [native-abi-audit.md](native-abi-audit.md).  It includes a critical `TQCHAR` output-type defect and must be consulted before changing a native declaration.
