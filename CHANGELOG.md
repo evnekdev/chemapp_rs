@@ -54,7 +54,8 @@ ChemApp itself remains a separately obtained proprietary dependency.
   - live entity getters and count-dependent iterator constructors now propagate
     `ChemAppError` rather than silently returning placeholders or empty sets.
   - `Engine::tqmap` and `Engine::tqmapl` now return signed `i32` continuation
-    values so the documented non-positive terminal states remain representable.
+    values through checked raw-integer conversion, so documented non-positive
+    terminal states remain representable on every source-modelled target.
   - `Stream::remove(self)` provides observable consuming native cleanup;
     high-level streams now have unique ownership per stream name.
   - a failed `Calculator::set_clim` retry now reports both bounded-ordering
