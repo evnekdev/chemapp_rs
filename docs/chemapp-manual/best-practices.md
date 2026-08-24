@@ -203,9 +203,14 @@ must never disappear from a report.
 TQLPAR itself has a known textual defect for multi-digit interaction orders:
 valid-looking `[*]` output (or another incomplete fragment) may replace the
 actual numeric order. When a compatible ASCII DAT source is available, compare
-it deterministically by phase/channel/parameter index and mark any recovered
-structure visibly. Never guess from the corrupted fragment, and never replace
-live TQGPAR values with DAT coefficients.
+it deterministically by phase/channel/parameter index and retain the DAT result
+as independent evidence. Provider absence or failure must not invalidate a
+healthy native row. A difference remains visible while native structure stays
+effective unless a typed, validated native-defect rule authorizes recovery.
+For the known defect, every other structural field must agree and at least one
+native wildcard must correspond to a DAT numeric order of 10 or greater; a
+wildcard alone proves nothing. Never guess from a corrupted fragment, and never
+replace live TQGPAR values with DAT coefficients.
 
 Treat the TQGPAR buffer as a Fortran array: reconstruct logical expression
 rows using its column-major layout and fixed leading dimension. Do not assume

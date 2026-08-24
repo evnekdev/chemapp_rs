@@ -250,13 +250,15 @@ resolution are additive layers, never replacements for the native evidence.
 Unknown grammar is a supported diagnostic state, not a reason to panic or
 silently discard a row.
 
-Because TQLPAR may corrupt two-digit order text, optional ASCII-DAT recovery
-must expose provenance, retain the original native string, and leave live
-TQGPAR values authoritative. The recovery provider must establish a
-deterministic phase/channel/index mapping by cross-validating healthy rows; it
-must not use approximate text matching. The base crate must not require private
-parser credentials, and DAT recovery remains inapplicable to BIN/CST unless a
-compatible source model is supplied separately.
+Because TQLPAR may corrupt two-digit order text, an optional ASCII-DAT
+cross-check must expose provenance, retain both the native parse and DAT-side
+evidence, and leave live TQGPAR values authoritative. The provider must
+establish a deterministic phase/channel/index mapping by cross-validating
+healthy rows; it must not use approximate text matching. Provider failures and
+ordinary disagreements do not invalidate native information. DAT becomes the
+effective descriptor only under a typed, validated native-defect rule. The base
+crate must not require private parser credentials, and DAT recovery remains
+inapplicable to BIN/CST unless a compatible source model is supplied separately.
 
 Parsing identifies the native indexed structure. Resolution separately uses
 `TQMODL` and ChemApp metadata to choose between phase constituents and

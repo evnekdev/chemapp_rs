@@ -4,7 +4,7 @@ use crate::calculator::Calculator;
 use crate::error::ChemAppError;
 use crate::iterator::{BondIterator, ConstituentIterator, SpeciesIterator};
 use crate::snapshot::PhaseSnapshot;
-use crate::{Interaction, InteractionChannel, InteractionDescriptorRecovery};
+use crate::{Interaction, InteractionChannel, InteractionDescriptorCrossCheck};
 
 /// One-based ChemApp phase identity tied to a live calculator.
 #[derive(Debug)]
@@ -64,20 +64,32 @@ impl<'a> Phase<'a> {
         crate::interactions::load_phase_interactions(&self.calculator.engine, self.index, channel)
     }
 
-    /// Inspect one channel with an optional ASCII-DAT structural recovery
-    /// provider. Native TQLPAR text and live TQGPAR values are always retained,
-    /// and each recovered row exposes its provenance.
-    pub fn interactions_with_recovery(
+    /// Inspect one channel with independent ASCII-DAT structural evidence.
+    ///
+    /// Native TQLPAR parsing and live TQGPAR values are always retained. A DAT
+    /// difference replaces effective structure only for an explicit validated
+    /// native defect; errors and ordinary disagreements remain diagnostics.
+    pub fn interactions_with_cross_check(
         &self,
         channel: InteractionChannel,
-        recovery: &dyn InteractionDescriptorRecovery,
+        cross_check: &dyn InteractionDescriptorCrossCheck,
     ) -> Result<Vec<Interaction>, ChemAppError> {
-        crate::interactions::load_phase_interactions_with_recovery(
+        crate::interactions::load_phase_interactions_with_cross_check(
             &self.calculator.engine,
             self.index,
             channel,
-            Some(recovery),
+            Some(cross_check),
         )
+    }
+
+    /// Compatibility forwarding name for [`Self::interactions_with_cross_check`].
+    #[deprecated(note = "use interactions_with_cross_check")]
+    pub fn interactions_with_recovery(
+        &self,
+        channel: InteractionChannel,
+        cross_check: &dyn InteractionDescriptorCrossCheck,
+    ) -> Result<Vec<Interaction>, ChemAppError> {
+        self.interactions_with_cross_check(channel, cross_check)
     }
 
     /// Inspect excess Gibbs-energy interactions for this phase.

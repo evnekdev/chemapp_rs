@@ -13,8 +13,8 @@
   - model-aware TQBOND pair/quadruplet entities and combinatorial iterators
   - typed raw → parsed → name-resolved Gibbs and magnetic interaction
     inspection through `Phase` and `Calculator`, with diagnostic tables
-  - an optional, dependency-neutral ASCII-DAT interaction recovery boundary
-    with explicit native versus recovered descriptor provenance
+  - an optional, dependency-neutral ASCII-DAT interaction cross-check boundary
+    with explicit native, disagreement, and validated-recovery provenance
 
 ### Changed
   - `usize` in `tqgthi` output to `i32`
@@ -37,6 +37,10 @@
     high-level streams now have unique ownership per stream name.
   - a failed `Calculator::set_clim` retry now reports both bounded-ordering
     failures through `ChemAppError::RetryError`.
+  - renamed the interaction recovery surface to a cross-check API and retained
+    native parsing, cross-check status, effective structure, and resolution as
+    separate provenance layers; deprecated recovery-name aliases forward to the
+    same implementation.
 
 ### Fixed
 
@@ -85,12 +89,17 @@
   - replaced the partial interaction parser path with typed, model-aware
     parsing and native-metadata name resolution; unknown syntax is retained
     explicitly rather than dropped.
-  - detect valid-looking structural differences through optional DAT recovery,
-    covering ChemApp's known multi-digit-order TQLPAR text corruption without
-    replacing live TQGPAR values.
+  - detect valid-looking structural differences through optional DAT
+    cross-checking and recover ChemApp's known multi-digit-order TQLPAR text
+    corruption only through its typed validation rule, without replacing live
+    TQGPAR values.
   - corrected transformed interaction formatting to omit native parameter and
     arity markers plus diagnostic index annotations while retaining them in
     the structured/raw representations.
   - made sublattice count explicit in interaction reports and descriptors;
     colon-separated groups now preserve variable-sublattice models including
     four-sublattice Olivine interactions.
+  - stopped optional DAT-provider errors and ordinary cross-source differences
+    from invalidating healthy native interactions; DAT structure now becomes
+    effective only for a typed validated native-defect recovery, including the
+    known two-digit-order TQLPAR corruption.

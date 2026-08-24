@@ -20,7 +20,7 @@ record, and reconstructs the logical TQGPAR rows from Fortran column-major
 storage with the fixed expression leading dimension. Buffer capacity and
 logical result shape remain separate concepts.
 
-## Raw → parsed → optional recovery → resolved
+## Native → parsed → cross-checked → effective → resolved
 
 Interaction inspection is additive:
 
@@ -29,14 +29,16 @@ Interaction inspection is additive:
 2. `InteractionDescriptor` parses only indexed structure: powered members,
    colon-separated sublattice groups, reciprocal sides, exponent/order tokens,
    and an optional owned native type label. Unknown syntax becomes `Unparsed`.
-3. An optional `InteractionDescriptorRecovery` provider may compare the native
-   structure with the corresponding semantic interaction from an available
-   compatible ASCII DAT model. A difference is retained as
-   `InteractionDescriptorSource::DatRecovered`; the native text remains in
-   `InteractionRaw`.
-4. `ResolvedInteractionDescriptor` maps each usable index through ChemApp
-   metadata while retaining the parsed grouping and ordering. Resolution never
-   replaces or deletes the raw record.
+3. An optional `InteractionDescriptorCrossCheck` provider supplies an
+   independent source-side descriptor from an available compatible ASCII DAT
+   model. `InteractionCrossCheck` distinguishes not requested, unavailable,
+   provider error, agreement, disagreement, and typed validated recovery.
+4. `Interaction.effective_descriptor` is normally the native parse. A DAT
+   descriptor becomes effective only when a typed `InteractionRecoveryReason`
+   positively classifies a native defect.
+5. `ResolvedInteractionDescriptor` maps the effective indices through ChemApp
+   metadata while retaining grouping and ordering. Resolution never replaces
+   or deletes the raw record or its native parse.
 
 `Phase::gibbs_interactions`, `Phase::magnetic_interactions`, and
 `Phase::interactions` provide phase-local access. `Calculator::interaction_report`
@@ -44,13 +46,23 @@ collects both channels for every non-`PURE` phase. Interactions are static
 loaded-model data and are deliberately not duplicated into equilibrium
 snapshots or every TQMAP point.
 
-The recovery-enabled counterparts are `Phase::interactions_with_recovery` and
-`Calculator::interaction_report_with_recovery`. Recovery changes structural
-identity only. TQGPAR remains the authority for the live coefficient matrix,
+The cross-check-enabled counterparts are `Phase::interactions_with_cross_check`
+and `Calculator::interaction_report_with_cross_check`; deprecated recovery-name
+aliases forward to the same implementation. Cross-checking cannot supply or
+replace coefficient values. TQGPAR remains the authority for the live matrix,
 including parameters modified after the DAT file was loaded.
-An unavailable row or provider error never aborts the interaction inventory:
-the native text and values remain present and a failed recovery is reported as
-an explicitly unresolved row.
+
+`None` from a provider is `Unavailable`; an error is a row-local `DatError`.
+Neither changes the effective native descriptor or an otherwise successful
+native resolution. Exact structural agreement is `Agree`. An unexplained
+difference is `Disagree`, retains the DAT descriptor as evidence, and keeps the
+native parse effective. Consequently an optional parser failure cannot turn a
+healthy native interaction into an unresolved row, and no row disappears.
+Likewise, a syntactically parsed descriptor that fails native metadata
+resolution is not automatically replaced merely because DAT differs. An
+`Unparsed` native fragment such as `(Si)` may use the explicit
+`MalformedNativeDescriptor` recovery path only when the deterministic DAT row
+is itself structurally resolvable.
 
 ## Index namespaces
 
@@ -118,7 +130,7 @@ make an otherwise understood descriptor fail. The manual's reciprocal syntax
 is represented as distinct left and right two-member groups and is covered by
 synthetic tests; no reciprocal descriptor occurred in this EN22 run.
 
-## Known TQLPAR multi-digit-order corruption and DAT recovery
+## Known TQLPAR multi-digit-order corruption and validated recovery
 
 The checked ChemApp 7.14 Win64 build does not reliably print two-digit
 interaction orders. In EN22 it replaced every affected numeric order with the
@@ -126,7 +138,7 @@ valid-looking token `[*]`. A parser cannot distinguish these rows from a real
 wildcard using TQLPAR alone, so successful grammar parsing is not proof of
 structural correctness.
 
-Local cross-validation used `chemsage-parser` master
+Local cross-validation used independently maintained `chemsage-parser` master
 `785f3be35a74a99ca4b80b1c1ddcad6de7bcbb84`. TQLPAR/TQGPAR and DAT semantic
 interaction counts agreed for every phase and channel. The one-based native
 parameter position matched DAT declaration order for all 667 unaffected rows;
@@ -139,18 +151,32 @@ or greater:
 | Slag-liq#1 and Slag-liq#2 | SUBQ/G | 39→11, 40→14, 41→15, 47→15, 53→11, 59→15, 106→11, 107→13, 108→15, 115→15 |
 | Zincite | QKTO/G | 10→13, 11→15, 17→15, 19→15, 21→10 |
 
-Each native row retained its complete TQLPAR text, for example a powered member
-with `^[*]`; only the structural descriptor was recovered. The local DAT
-semantic views reconstructed all 25 affected rows exactly and name resolution
-continued through native TQGNPC/TQGNLC metadata. TQGPAR values were never read
-from or replaced by the DAT parser.
+The production classifier requires the same phase/channel/index correspondence,
+descriptor family, marker, member identities and ordering, sublattice groups,
+and type label. Every order must match except for at least one native wildcard
+versus DAT numeric order of 10 or greater. A wildcard by itself is legitimate
+and is not a recovery signal. Wildcard versus a one-digit order, numeric versus
+different numeric, or any other structural difference remains `Disagree`.
+
+Each native row retained its complete TQLPAR text and its valid-looking parsed
+`^[*]` structure; only the effective descriptor changed under
+`KnownMultiDigitOrderCorruption`. The local DAT semantic views reconstructed
+all 25 affected rows exactly and name resolution continued through native
+TQGNPC/TQGNLC metadata. TQGPAR values were byte-for-byte unchanged across the
+native-only and cross-checked inventories.
 
 The base crate deliberately has no `chemsage-parser` dependency. That repository
 is currently private and declares `publish = false`, so requiring it would make
-normal public builds depend on private credentials. The public recovery trait
+normal public builds depend on private credentials. The public cross-check trait
 is the adapter boundary; a future `dat-interaction-recovery` feature should
 remain default-off once the parser is publicly consumable. Recovery is only
 meaningful for a compatible available ASCII DAT source, not for BIN/CST alone.
+
+The external EN22 adapter also exposed a representation detail: SUBQ TQLPAR
+continues to print the `*2` family marker for DAT records whose semantic view
+contains an additional ternary member. The adapter preserves that observed
+marker while comparing the complete member list; it does not reinterpret `*N`
+as a sublattice count or as the number of printed powered members.
 
 ## EN22 phase coverage
 
@@ -205,20 +231,43 @@ represents as an empty collection.
 | Ca3SiO5 | QKTO | 1/1/1 | 0/0/0 |
 
 Native syntax/name-resolution totals are Gibbs `657/657/657/0 unparsed` and
-magnetic `35/35/35/0 unparsed`. Cross-source structural status is:
+magnetic `35/35/35/0 unparsed`. All 25 known defects are syntactically valid
+native parses, not grammar failures. The hardened cross-source run produced:
 
-| Channel | Total | Native valid | Native malformed | DAT recovered locally | Unresolved after local recovery |
-|---|---:|---:|---:|---:|---:|
-| Gibbs | 657 | 632 | 25 | 25 | 0 |
-| Magnetic | 35 | 35 | 0 | 0 | 0 |
-| Total | 692 | 667 | 25 | 25 | 0 |
+| Channel | Total | Agree | DAT unavailable | DAT error | Disagree | Validated recovery | Unresolved |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Gibbs | 657 | 632 | 0 | 0 | 0 | 25 | 0 |
+| Magnetic | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
+| Total | 692 | 667 | 0 | 0 | 0 | 25 | 0 |
+
+A separate native-only run retained and resolved all 692 rows with cross-check
+status `NotRequested`.
+
+## Native buffer-capacity evidence
+
+TQLPAR currently allocates 1,999 `CHARACTER*156` records. That boundary is
+documented by the legacy manual and independently mirrored by the checked GTT
+bridge, which allocates and copies exactly 1,999 records. The post-call count
+check cannot protect against a hypothetical newer native build that writes
+more records. `TQSIZE` exposes compiled thermodynamic dimensions, but the
+available manual/bridge evidence does not establish any one of them as the
+required TQLPAR caller-buffer extent. The implementation therefore retains a
+named, explicitly version-scoped 1,999 capacity rather than inventing dynamic
+sizing from unrelated counters.
+
+For TQGPAR, the expression leading dimension of 20 is established by the
+checked interface/source model and is required for column-major reconstruction.
+The current 28-value extent is compatible with the checked runtime, but broader
+version-wide proof is incomplete; it is not documented as a universal ChemApp
+limit.
 
 ## Tables, examples, and cache relationship
 
 `PhaseInteractionReport::table_string` uses the crate's shared `comfy-table`
-style and shows phase, model, channel, parameter index, structural kind,
-descriptor source, raw descriptor, resolved form, all coefficient rows, and
-state. The combined `interactions` demo outputs every parsed and transformed
+style and shows phase, model, sublattice count, channel, parameter index,
+structural kind, effective source, compact cross-check status, raw descriptor,
+resolved form, all coefficient rows, and state. The combined `interactions`
+demo outputs every parsed and transformed
 Gibbs and magnetic row. It and the focused `interactions_gibbs` and
 `interactions_magnetic` examples support
 `CHEMAPP_LIBRARY` plus `CHEMAPP_INTERACTION_DATAFILE` (falling back to
@@ -235,8 +284,8 @@ modified.
 
 Support is claimed only for the model/channel grammars above and for the
 synthetically tested reciprocal structure. Other models, labels, or syntax are
-retained raw as `Unparsed` or explicitly unresolved. A valid-looking native
-descriptor can also be marked DAT-recovered when deterministic cross-source
-comparison finds a structural difference. The public display string is derived
-from structural identity and is not the sole identity key. Native member
-ordering is preserved unless a model explicitly defines symmetry.
+retained raw as `Unparsed` or explicitly unresolved. A cross-source difference
+is evidence, not automatic recovery: native structure remains effective unless
+a typed validated-native-defect rule authorizes replacement. The public display
+string is derived from structural identity and is not the sole identity key.
+Native member ordering is preserved unless a model explicitly defines symmetry.

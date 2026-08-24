@@ -1,10 +1,12 @@
 //! Model-aware inspection of ChemApp excess Gibbs and magnetic interactions.
 //!
 //! The interaction path is deliberately additive: [`InteractionRaw`] retains
-//! the exact TQLPAR text and authoritative live TQGPAR coefficients, parsing describes
-//! the native indexed structure, and resolution maps those indices to names
-//! obtained from ChemApp metadata. Unknown syntax is retained as unparsed data
-//! instead of being discarded.
+//! the exact TQLPAR text and authoritative live TQGPAR coefficients,
+//! [`Interaction::native_parsed`] records how that native text parsed, and an
+//! optional ASCII-DAT cross-check supplies independent source-side evidence.
+//! DAT structure becomes effective only for a typed, validated native defect;
+//! ordinary disagreements and provider failures leave healthy native data in
+//! use. Unknown syntax is retained instead of being discarded.
 
 use std::fmt::{self, Display, Write};
 
@@ -55,6 +57,79 @@ impl Display for InteractionDescriptorSource {
             Self::Native => "Native",
             Self::DatRecovered => "DAT recovered",
         })
+    }
+}
+
+/// Positively classified reason that DAT structure replaced native structure.
+///
+/// This is deliberately typed: a mere cross-source difference is not a
+/// recovery condition and cannot select the DAT descriptor.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum InteractionRecoveryReason {
+    /// The native descriptor differs only where TQLPAR printed `[*]` and the
+    /// deterministically corresponding DAT interaction has an order >= 10.
+    KnownMultiDigitOrderCorruption,
+    /// The native text could not be parsed by a known complete grammar, while
+    /// the corresponding DAT descriptor is structurally usable.
+    MalformedNativeDescriptor,
+    /// Reserved for another independently validated native defect class.
+    OtherValidatedNativeDefect,
+}
+
+impl Display for InteractionRecoveryReason {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::KnownMultiDigitOrderCorruption => "known multi-digit order corruption",
+            Self::MalformedNativeDescriptor => "malformed native descriptor",
+            Self::OtherValidatedNativeDefect => "other validated native defect",
+        })
+    }
+}
+
+/// Result of independently comparing native TQLPAR structure with ASCII-DAT
+/// structure supplied by an optional provider.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum InteractionCrossCheck {
+    /// No provider was requested; the interaction is native-only.
+    NotRequested,
+    /// The provider has no corresponding DAT descriptor for this row.
+    Unavailable,
+    /// Native and DAT typed structures agree exactly.
+    Agree,
+    /// The provider failed for this row. Native parsing/resolution is retained.
+    DatError {
+        /// Row-local diagnostic from the provider or its contract validation.
+        reason: String,
+    },
+    /// Both structures are retained, but native remains effective because no
+    /// validated native defect explains the difference.
+    Disagree {
+        /// Independent DAT-side structural evidence.
+        dat_descriptor: InteractionDescriptor,
+        /// Why the difference was not promoted to a recovery.
+        reason: String,
+    },
+    /// DAT becomes effective only for this positively classified native defect.
+    ValidatedRecovery {
+        /// Independent DAT-side structure selected for effective resolution.
+        dat_descriptor: InteractionDescriptor,
+        /// Typed rule authorizing DAT selection.
+        reason: InteractionRecoveryReason,
+    },
+}
+
+impl Display for InteractionCrossCheck {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotRequested => formatter.write_str("Not requested"),
+            Self::Unavailable => formatter.write_str("DAT unavailable"),
+            Self::Agree => formatter.write_str("Agree"),
+            Self::DatError { reason } => write!(formatter, "DAT error: {reason}"),
+            Self::Disagree { reason, .. } => write!(formatter, "Disagree: {reason}"),
+            Self::ValidatedRecovery { reason, .. } => {
+                write!(formatter, "DAT recovered: {reason}")
+            }
+        }
     }
 }
 
@@ -187,13 +262,13 @@ impl InteractionDescriptor {
     }
 }
 
-/// Context supplied to an optional ASCII-DAT descriptor recovery provider.
+/// Context supplied to an optional ASCII-DAT descriptor cross-check provider.
 ///
 /// Providers should map the one-based TQLPAR/TQGPAR parameter index to a DAT
-/// semantic interaction deterministically and validate that mapping on healthy
-/// native descriptors before replacing a malformed descriptor.
+/// semantic interaction deterministically. Runtime agreement on healthy rows
+/// is evidence for that mapping, not an unconditional cross-model ordering law.
 #[derive(Clone, Copy, Debug)]
-pub struct InteractionRecoveryRequest<'a> {
+pub struct InteractionCrossCheckRequest<'a> {
     /// One-based ChemApp phase index.
     pub phase_index: usize,
     /// Phase name returned by TQGNP.
@@ -211,23 +286,31 @@ pub struct InteractionRecoveryRequest<'a> {
     pub native_parsed: &'a InteractionDescriptor,
 }
 
-/// Optional boundary for recovering interaction structure from a compatible
-/// ASCII DAT model.
+/// Optional, dependency-neutral source of compatible ASCII-DAT interaction
+/// structure for cross-checking.
 ///
 /// The base crate remains usable with CST/BIN inputs and has no mandatory DAT
-/// parser dependency. A provider returns the DAT descriptor for this exact
-/// phase/channel/index, or `None` when unavailable. It must never supply
-/// numerical parameters: live TQGPAR output remains authoritative. A provider
-/// error marks only that row unresolved; it does not discard the row or abort
-/// the surrounding inventory.
-pub trait InteractionDescriptorRecovery {
-    /// Return the deterministic DAT-side descriptor corresponding to this
-    /// native interaction.
-    fn recover_descriptor(
+/// parser dependency. The provider supplies evidence for the exact
+/// phase/channel/index or `None` when unavailable; it does not decide which
+/// descriptor is authoritative. It cannot supply numerical parameters: live
+/// TQGPAR output remains authoritative. Errors are row-local diagnostics and
+/// never invalidate an otherwise usable native descriptor.
+pub trait InteractionDescriptorCrossCheck {
+    /// Return the deterministic DAT-side descriptor corresponding to this row.
+    fn descriptor_for(
         &self,
-        request: InteractionRecoveryRequest<'_>,
+        request: InteractionCrossCheckRequest<'_>,
     ) -> Result<Option<InteractionDescriptor>, String>;
 }
+
+/// Compatibility name for the former recovery-oriented trait. This aliases
+/// the single cross-check contract rather than preserving competing semantics.
+#[deprecated(note = "use InteractionDescriptorCrossCheck")]
+pub use InteractionDescriptorCrossCheck as InteractionDescriptorRecovery;
+
+/// Compatibility name for the former recovery request.
+#[deprecated(note = "use InteractionCrossCheckRequest")]
+pub use InteractionCrossCheckRequest as InteractionRecoveryRequest;
 
 /// An owned native interaction record preserving exact textual evidence and
 /// authoritative live numerical values.
@@ -437,16 +520,20 @@ pub enum InteractionResolution {
     },
 }
 
-/// One complete raw → parsed → resolved interaction.
+/// One complete native → parsed → cross-checked → effective → resolved row.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Interaction {
     /// Authoritative native descriptor, identity, and coefficient matrix.
     pub raw: InteractionRaw,
-    /// Additive structural interpretation of the native descriptor.
-    pub parsed: InteractionDescriptor,
-    /// Origin of the structural descriptor used for resolution.
-    pub descriptor_source: InteractionDescriptorSource,
-    /// Additive model-aware name-resolution outcome.
+    /// Structural interpretation of the original TQLPAR text. This is never
+    /// overwritten by DAT recovery, even when the native text is malformed.
+    pub native_parsed: InteractionDescriptor,
+    /// Independent DAT comparison status and any retained DAT-side structure.
+    pub cross_check: InteractionCrossCheck,
+    /// Descriptor actually used for model-aware name resolution. It equals
+    /// `native_parsed` except for a typed validated-recovery condition.
+    pub effective_descriptor: InteractionDescriptor,
+    /// Model-aware resolution of `effective_descriptor`.
     pub resolution: InteractionResolution,
 }
 
@@ -454,6 +541,18 @@ impl Interaction {
     /// True only when both parsing and model-aware name resolution succeeded.
     pub fn is_resolved(&self) -> bool {
         matches!(self.resolution, InteractionResolution::Resolved(_))
+    }
+
+    /// Origin of the descriptor used for name resolution.
+    pub fn effective_source(&self) -> InteractionDescriptorSource {
+        if matches!(
+            &self.cross_check,
+            InteractionCrossCheck::ValidatedRecovery { .. }
+        ) {
+            InteractionDescriptorSource::DatRecovered
+        } else {
+            InteractionDescriptorSource::Native
+        }
     }
 
     /// Render the deterministic name-based form or an explicit unresolved
@@ -496,12 +595,9 @@ impl PhaseInteractionReport {
                     interaction.raw.sublattice_count.to_string(),
                     interaction.raw.channel.to_string(),
                     interaction.raw.parameter_index.to_string(),
-                    interaction.parsed.kind_name().to_owned(),
-                    if interaction.is_resolved() {
-                        interaction.descriptor_source.to_string()
-                    } else {
-                        "Unresolved".to_owned()
-                    },
+                    interaction.effective_descriptor.kind_name().to_owned(),
+                    interaction.effective_source().to_string(),
+                    interaction.cross_check.to_string(),
                     interaction.raw.raw_descriptor.clone(),
                     interaction.resolved_text(),
                     format_values(&interaction.raw.values),
@@ -522,7 +618,8 @@ impl PhaseInteractionReport {
                 "Channel",
                 "Index",
                 "Kind",
-                "Source",
+                "Effective source",
+                "Cross-check",
                 "Native/indexed",
                 "Name-based",
                 "Values",
@@ -882,56 +979,171 @@ fn is_no_interaction_data(error: &ChemAppError, channel: InteractionChannel) -> 
     )
 }
 
-fn descriptor_with_recovery(
-    raw: &InteractionRaw,
-    native_parsed: InteractionDescriptor,
-    recovery: Option<&dyn InteractionDescriptorRecovery>,
-) -> (
-    InteractionDescriptor,
-    InteractionDescriptorSource,
-    Option<String>,
-) {
-    let Some(recovery) = recovery else {
-        return (native_parsed, InteractionDescriptorSource::Native, None);
+/// True only for the validated ChemApp display defect where all structural
+/// fields agree and one or more native wildcard orders correspond to DAT
+/// numeric orders of at least two digits. A wildcard alone proves nothing.
+fn is_known_multi_digit_order_corruption(
+    native: &InteractionDescriptor,
+    dat: &InteractionDescriptor,
+) -> bool {
+    let (
+        InteractionDescriptor::Powered {
+            parameter_index: native_index,
+            declared_arity: native_arity,
+            first_sublattice: native_members,
+            following_sublattices: native_following,
+            type_label: native_label,
+        },
+        InteractionDescriptor::Powered {
+            parameter_index: dat_index,
+            declared_arity: dat_arity,
+            first_sublattice: dat_members,
+            following_sublattices: dat_following,
+            type_label: dat_label,
+        },
+    ) = (native, dat)
+    else {
+        return false;
     };
-    let recovered = match recovery.recover_descriptor(InteractionRecoveryRequest {
+    if native_index != dat_index
+        || native_arity != dat_arity
+        || native_following != dat_following
+        || native_label != dat_label
+        || native_members.len() != dat_members.len()
+    {
+        return false;
+    }
+
+    let mut recovered_order = false;
+    for (native_member, dat_member) in native_members.iter().zip(dat_members) {
+        if native_member.index != dat_member.index {
+            return false;
+        }
+        match (native_member.order, dat_member.order) {
+            (native_order, dat_order) if native_order == dat_order => {}
+            (InteractionOrder::Wildcard, InteractionOrder::Numeric(order)) if order >= 10 => {
+                recovered_order = true;
+            }
+            _ => return false,
+        }
+    }
+    recovered_order
+}
+
+fn descriptor_with_cross_check(
+    raw: &InteractionRaw,
+    native_parsed: &InteractionDescriptor,
+    cross_check: Option<&dyn InteractionDescriptorCrossCheck>,
+    strategy: ResolutionStrategy,
+    metadata: &InteractionMetadata,
+) -> (InteractionCrossCheck, InteractionDescriptor) {
+    let Some(cross_check) = cross_check else {
+        return (InteractionCrossCheck::NotRequested, native_parsed.clone());
+    };
+    let dat_descriptor = match cross_check.descriptor_for(InteractionCrossCheckRequest {
         phase_index: raw.phase_index,
         phase_name: &raw.phase_name,
         model: &raw.model,
         channel: raw.channel,
         parameter_index: raw.parameter_index,
         native_descriptor: &raw.raw_descriptor,
-        native_parsed: &native_parsed,
+        native_parsed,
     }) {
-        Ok(recovered) => recovered,
+        Ok(descriptor) => descriptor,
         Err(reason) => {
             return (
-                native_parsed,
-                InteractionDescriptorSource::Native,
-                Some(format!(
-                    "interaction DAT recovery failed for phase {} ({}) {} parameter {}: {reason}",
-                    raw.phase_name, raw.model, raw.channel, raw.parameter_index
-                )),
+                InteractionCrossCheck::DatError { reason },
+                native_parsed.clone(),
             )
         }
     };
-    let Some(recovered) = recovered else {
-        return (native_parsed, InteractionDescriptorSource::Native, None);
+    let Some(dat_descriptor) = dat_descriptor else {
+        return (InteractionCrossCheck::Unavailable, native_parsed.clone());
     };
-    if recovered.parameter_index() != Some(raw.parameter_index) {
+    if dat_descriptor.parameter_index() != Some(raw.parameter_index) {
         return (
-            native_parsed,
-            InteractionDescriptorSource::Native,
-            Some(format!(
-                "interaction DAT recovery returned the wrong parameter index for phase {} ({}) {} parameter {}",
-                raw.phase_name, raw.model, raw.channel, raw.parameter_index
-            )),
+            InteractionCrossCheck::DatError {
+                reason: format!(
+                    "DAT descriptor parameter index {:?} does not match native row {}",
+                    dat_descriptor.parameter_index(),
+                    raw.parameter_index
+                ),
+            },
+            native_parsed.clone(),
         );
     }
-    if recovered == native_parsed {
-        (native_parsed, InteractionDescriptorSource::Native, None)
+    if dat_descriptor == *native_parsed {
+        return (InteractionCrossCheck::Agree, native_parsed.clone());
+    }
+
+    let dat_resolution = resolve_descriptor(&dat_descriptor, strategy, metadata);
+    let validated_reason = if dat_resolution.is_ok()
+        && is_known_multi_digit_order_corruption(native_parsed, &dat_descriptor)
+    {
+        Some(InteractionRecoveryReason::KnownMultiDigitOrderCorruption)
+    } else if dat_resolution.is_ok()
+        && matches!(native_parsed, InteractionDescriptor::Unparsed { .. })
+        && !matches!(dat_descriptor, InteractionDescriptor::Unparsed { .. })
+    {
+        Some(InteractionRecoveryReason::MalformedNativeDescriptor)
     } else {
-        (recovered, InteractionDescriptorSource::DatRecovered, None)
+        None
+    };
+    if let Some(reason) = validated_reason {
+        return (
+            InteractionCrossCheck::ValidatedRecovery {
+                dat_descriptor: dat_descriptor.clone(),
+                reason,
+            },
+            dat_descriptor,
+        );
+    }
+
+    let reason = match dat_resolution {
+        Ok(_) => "structural difference is not a validated native defect".to_owned(),
+        Err(reason) => format!("DAT descriptor is not usable with native metadata: {reason}"),
+    };
+    (
+        InteractionCrossCheck::Disagree {
+            dat_descriptor,
+            reason,
+        },
+        native_parsed.clone(),
+    )
+}
+
+fn interpret_interaction(
+    raw: InteractionRaw,
+    native_parsed: InteractionDescriptor,
+    cross_check_provider: Option<&dyn InteractionDescriptorCrossCheck>,
+    strategy: ResolutionStrategy,
+    metadata: &InteractionMetadata,
+) -> Interaction {
+    let native_resolution = resolve_descriptor(&native_parsed, strategy, metadata);
+    let (cross_check, effective_descriptor) = descriptor_with_cross_check(
+        &raw,
+        &native_parsed,
+        cross_check_provider,
+        strategy,
+        metadata,
+    );
+    let effective_resolution = if matches!(
+        &cross_check,
+        InteractionCrossCheck::ValidatedRecovery { .. }
+    ) {
+        resolve_descriptor(&effective_descriptor, strategy, metadata)
+    } else {
+        native_resolution
+    };
+    let resolution = effective_resolution
+        .map(InteractionResolution::Resolved)
+        .unwrap_or_else(|reason| InteractionResolution::Unresolved { reason });
+    Interaction {
+        raw,
+        native_parsed,
+        cross_check,
+        effective_descriptor,
+        resolution,
     }
 }
 
@@ -940,14 +1152,14 @@ pub(crate) fn load_phase_interactions(
     phase_index: usize,
     channel: InteractionChannel,
 ) -> Result<Vec<Interaction>, ChemAppError> {
-    load_phase_interactions_with_recovery(engine, phase_index, channel, None)
+    load_phase_interactions_with_cross_check(engine, phase_index, channel, None)
 }
 
-pub(crate) fn load_phase_interactions_with_recovery(
+pub(crate) fn load_phase_interactions_with_cross_check(
     engine: &Engine,
     phase_index: usize,
     channel: InteractionChannel,
-    recovery: Option<&dyn InteractionDescriptorRecovery>,
+    cross_check: Option<&dyn InteractionDescriptorCrossCheck>,
 ) -> Result<Vec<Interaction>, ChemAppError> {
     let phase_name = engine.tqgnp(phase_index)?;
     let model = engine.tqmodl(phase_index)?;
@@ -988,29 +1200,21 @@ pub(crate) fn load_phase_interactions_with_recovery(
                 raw_descriptor,
                 values: engine.tqgpar(phase_index, channel.option(), parameter_index)?,
             };
-            let (parsed, descriptor_source, recovery_failure) =
-                descriptor_with_recovery(&raw, parsed, recovery);
-            let resolution = match recovery_failure {
-                Some(reason) => InteractionResolution::Unresolved { reason },
-                None => match resolve_descriptor(&parsed, strategy, &metadata) {
-                    Ok(value) => InteractionResolution::Resolved(value),
-                    Err(reason) => InteractionResolution::Unresolved { reason },
-                },
-            };
-            Ok(Interaction {
+            Ok(interpret_interaction(
                 raw,
                 parsed,
-                descriptor_source,
-                resolution,
-            })
+                cross_check,
+                strategy,
+                &metadata,
+            ))
         })
         .collect()
 }
 
-pub(crate) fn load_phase_interaction_report_with_recovery(
+pub(crate) fn load_phase_interaction_report_with_cross_check(
     engine: &Engine,
     phase_index: usize,
-    recovery: Option<&dyn InteractionDescriptorRecovery>,
+    cross_check: Option<&dyn InteractionDescriptorCrossCheck>,
 ) -> Result<PhaseInteractionReport, ChemAppError> {
     let phase_name = engine.tqgnp(phase_index)?;
     let model = engine.tqmodl(phase_index)?;
@@ -1020,17 +1224,17 @@ pub(crate) fn load_phase_interaction_report_with_recovery(
         phase_name,
         model,
         sublattice_count,
-        gibbs: load_phase_interactions_with_recovery(
+        gibbs: load_phase_interactions_with_cross_check(
             engine,
             phase_index,
             InteractionChannel::GibbsExcess,
-            recovery,
+            cross_check,
         )?,
-        magnetic: load_phase_interactions_with_recovery(
+        magnetic: load_phase_interactions_with_cross_check(
             engine,
             phase_index,
             InteractionChannel::Magnetic,
-            recovery,
+            cross_check,
         )?,
     })
 }
@@ -1039,42 +1243,59 @@ pub(crate) fn load_phase_interaction_report_with_recovery(
 mod tests {
     use super::*;
 
-    struct SyntheticDatRecovery {
-        power: usize,
+    #[derive(Clone)]
+    enum SyntheticCrossCheckOutcome {
+        Descriptor(InteractionDescriptor),
+        Unavailable,
+        Error(String),
     }
 
-    struct FailedDatRecovery;
+    struct SyntheticDatCrossCheck {
+        outcome: SyntheticCrossCheckOutcome,
+    }
 
-    impl InteractionDescriptorRecovery for SyntheticDatRecovery {
-        fn recover_descriptor(
+    impl InteractionDescriptorCrossCheck for SyntheticDatCrossCheck {
+        fn descriptor_for(
             &self,
-            request: InteractionRecoveryRequest<'_>,
+            _request: InteractionCrossCheckRequest<'_>,
         ) -> Result<Option<InteractionDescriptor>, String> {
-            Ok(Some(InteractionDescriptor::Powered {
-                parameter_index: request.parameter_index,
-                declared_arity: 2,
-                first_sublattice: vec![
-                    NativePoweredMember {
-                        index: NativeInteractionIndex(1),
-                        order: InteractionOrder::Numeric(self.power),
-                    },
-                    NativePoweredMember {
-                        index: NativeInteractionIndex(2),
-                        order: InteractionOrder::Numeric(0),
-                    },
-                ],
-                following_sublattices: Vec::new(),
-                type_label: None,
-            }))
+            match &self.outcome {
+                SyntheticCrossCheckOutcome::Descriptor(descriptor) => Ok(Some(descriptor.clone())),
+                SyntheticCrossCheckOutcome::Unavailable => Ok(None),
+                SyntheticCrossCheckOutcome::Error(reason) => Err(reason.clone()),
+            }
         }
     }
 
-    impl InteractionDescriptorRecovery for FailedDatRecovery {
-        fn recover_descriptor(
-            &self,
-            _request: InteractionRecoveryRequest<'_>,
-        ) -> Result<Option<InteractionDescriptor>, String> {
-            Err("synthetic lookup failure".to_owned())
+    fn powered_descriptor(order: InteractionOrder) -> InteractionDescriptor {
+        InteractionDescriptor::Powered {
+            parameter_index: 1,
+            declared_arity: 2,
+            first_sublattice: vec![
+                NativePoweredMember {
+                    index: NativeInteractionIndex(1),
+                    order,
+                },
+                NativePoweredMember {
+                    index: NativeInteractionIndex(2),
+                    order: InteractionOrder::Numeric(0),
+                },
+            ],
+            following_sublattices: Vec::new(),
+            type_label: None,
+        }
+    }
+
+    fn synthetic_raw(native_descriptor: &str, values: Vec<Vec<f64>>) -> InteractionRaw {
+        InteractionRaw {
+            phase_index: 1,
+            phase_name: "Synthetic".to_owned(),
+            model: "QKTO".to_owned(),
+            sublattice_count: 1,
+            channel: InteractionChannel::GibbsExcess,
+            parameter_index: 1,
+            raw_descriptor: native_descriptor.to_owned(),
+            values,
         }
     }
 
@@ -1191,47 +1412,37 @@ mod tests {
     }
 
     #[test]
-    fn dat_recovery_retains_corrupt_native_text_and_live_values() {
-        for (native_descriptor, power) in [("(Si)", 10usize), ("1: *2 (1)^[*]-(2)^[0]", 15usize)] {
+    fn two_digit_order_difference_is_a_typed_validated_recovery() {
+        for power in [10usize, 15usize] {
+            let native_descriptor = "1: *2 (1)^[*]-(2)^[0]";
             let values = vec![vec![1234.5, -6.0]];
-            let raw = InteractionRaw {
-                phase_index: 1,
-                phase_name: "Synthetic".to_owned(),
-                model: "QKTO".to_owned(),
-                sublattice_count: 1,
-                channel: InteractionChannel::GibbsExcess,
-                parameter_index: 1,
-                raw_descriptor: native_descriptor.to_owned(),
-                values: values.clone(),
+            let native_parsed = powered_descriptor(InteractionOrder::Wildcard);
+            let dat_descriptor = powered_descriptor(InteractionOrder::Numeric(power));
+            let provider = SyntheticDatCrossCheck {
+                outcome: SyntheticCrossCheckOutcome::Descriptor(dat_descriptor.clone()),
             };
-            let native_parsed = parse_interaction_descriptor(native_descriptor);
-            let recovery = SyntheticDatRecovery { power };
-            let (parsed, source, recovery_failure) =
-                descriptor_with_recovery(&raw, native_parsed, Some(&recovery));
-            assert_eq!(recovery_failure, None);
-            let resolution = resolve_descriptor(
-                &parsed,
+            let interaction = interpret_interaction(
+                synthetic_raw(native_descriptor, values.clone()),
+                native_parsed.clone(),
+                Some(&provider),
                 ResolutionStrategy::PhaseConstituents,
                 &phase_constituent_metadata(),
-            )
-            .unwrap();
-            let interaction = Interaction {
-                raw,
-                parsed,
-                descriptor_source: source,
-                resolution: InteractionResolution::Resolved(resolution),
-            };
+            );
 
             assert_eq!(interaction.raw.raw_descriptor, native_descriptor);
             assert_eq!(interaction.raw.values, values);
+            assert_eq!(interaction.native_parsed, native_parsed);
+            assert_eq!(interaction.effective_descriptor, dat_descriptor);
             assert_eq!(
-                interaction.descriptor_source,
+                interaction.effective_source(),
                 InteractionDescriptorSource::DatRecovered
             );
             assert!(matches!(
-                interaction.parsed,
-                InteractionDescriptor::Powered { ref first_sublattice, .. }
-                    if first_sublattice[0].order == InteractionOrder::Numeric(power)
+                interaction.cross_check,
+                InteractionCrossCheck::ValidatedRecovery {
+                    reason: InteractionRecoveryReason::KnownMultiDigitOrderCorruption,
+                    ..
+                }
             ));
             assert!(interaction.resolved_text().contains("PC1"));
             assert!(interaction.resolved_text().contains(&format!("^[{power}]")));
@@ -1239,29 +1450,122 @@ mod tests {
     }
 
     #[test]
-    fn dat_recovery_failure_preserves_native_row_for_unresolved_reporting() {
-        let native_descriptor = "(Si)";
-        let raw = InteractionRaw {
-            phase_index: 1,
-            phase_name: "Synthetic".to_owned(),
-            model: "QKTO".to_owned(),
-            sublattice_count: 1,
-            channel: InteractionChannel::GibbsExcess,
-            parameter_index: 1,
-            raw_descriptor: native_descriptor.to_owned(),
-            values: vec![vec![1234.5]],
+    fn wildcard_agreement_is_not_recovery() {
+        let native = powered_descriptor(InteractionOrder::Wildcard);
+        let provider = SyntheticDatCrossCheck {
+            outcome: SyntheticCrossCheckOutcome::Descriptor(native.clone()),
         };
-        let native_parsed = parse_interaction_descriptor(native_descriptor);
-        let (parsed, source, recovery_failure) =
-            descriptor_with_recovery(&raw, native_parsed.clone(), Some(&FailedDatRecovery));
+        let interaction = interpret_interaction(
+            synthetic_raw("1: *2 (1)^[*]-(2)^[0]", vec![vec![1.0]]),
+            native.clone(),
+            Some(&provider),
+            ResolutionStrategy::PhaseConstituents,
+            &phase_constituent_metadata(),
+        );
 
-        assert_eq!(parsed, native_parsed);
-        assert_eq!(source, InteractionDescriptorSource::Native);
-        assert!(recovery_failure
-            .as_deref()
-            .is_some_and(|reason| reason.contains("synthetic lookup failure")));
-        assert_eq!(raw.raw_descriptor, native_descriptor);
-        assert_eq!(raw.values, vec![vec![1234.5]]);
+        assert_eq!(interaction.cross_check, InteractionCrossCheck::Agree);
+        assert_eq!(interaction.effective_descriptor, native);
+        assert_eq!(
+            interaction.effective_source(),
+            InteractionDescriptorSource::Native
+        );
+    }
+
+    #[test]
+    fn ordinary_power_disagreements_keep_native_effective() {
+        for (native_order, dat_order) in [
+            (InteractionOrder::Wildcard, InteractionOrder::Numeric(3)),
+            (InteractionOrder::Numeric(2), InteractionOrder::Numeric(3)),
+        ] {
+            let native = powered_descriptor(native_order);
+            let dat = powered_descriptor(dat_order);
+            let provider = SyntheticDatCrossCheck {
+                outcome: SyntheticCrossCheckOutcome::Descriptor(dat.clone()),
+            };
+            let interaction = interpret_interaction(
+                synthetic_raw("synthetic native text", vec![vec![7.0]]),
+                native.clone(),
+                Some(&provider),
+                ResolutionStrategy::PhaseConstituents,
+                &phase_constituent_metadata(),
+            );
+
+            assert!(matches!(
+                interaction.cross_check,
+                InteractionCrossCheck::Disagree {
+                    ref dat_descriptor,
+                    ..
+                } if dat_descriptor == &dat
+            ));
+            assert_eq!(interaction.native_parsed, native);
+            assert_eq!(interaction.effective_descriptor, native);
+            assert_eq!(interaction.raw.values, vec![vec![7.0]]);
+            assert!(interaction.is_resolved());
+        }
+    }
+
+    #[test]
+    fn provider_error_and_unavailable_data_leave_healthy_native_resolved() {
+        let native = powered_descriptor(InteractionOrder::Numeric(2));
+        let make_interaction = |outcome| {
+            let provider = SyntheticDatCrossCheck { outcome };
+            interpret_interaction(
+                synthetic_raw("1: *2 (1)^[2]-(2)^[0]", vec![vec![1234.5]]),
+                native.clone(),
+                Some(&provider),
+                ResolutionStrategy::PhaseConstituents,
+                &phase_constituent_metadata(),
+            )
+        };
+        let failed = make_interaction(SyntheticCrossCheckOutcome::Error(
+            "synthetic lookup failure".to_owned(),
+        ));
+        let unavailable = make_interaction(SyntheticCrossCheckOutcome::Unavailable);
+
+        assert!(matches!(
+            failed.cross_check,
+            InteractionCrossCheck::DatError { ref reason }
+                if reason == "synthetic lookup failure"
+        ));
+        assert_eq!(unavailable.cross_check, InteractionCrossCheck::Unavailable);
+        for interaction in [failed, unavailable] {
+            assert_eq!(interaction.native_parsed, native);
+            assert_eq!(interaction.effective_descriptor, native);
+            assert_eq!(interaction.raw.values, vec![vec![1234.5]]);
+            assert!(interaction.is_resolved());
+        }
+    }
+
+    #[test]
+    fn malformed_native_descriptor_can_be_explicitly_recovered() {
+        let native_text = "(Si)";
+        let native = parse_interaction_descriptor(native_text);
+        let dat = powered_descriptor(InteractionOrder::Numeric(10));
+        let provider = SyntheticDatCrossCheck {
+            outcome: SyntheticCrossCheckOutcome::Descriptor(dat.clone()),
+        };
+        let values = vec![vec![42.0, -1.0]];
+        let interaction = interpret_interaction(
+            synthetic_raw(native_text, values.clone()),
+            native.clone(),
+            Some(&provider),
+            ResolutionStrategy::PhaseConstituents,
+            &phase_constituent_metadata(),
+        );
+
+        assert!(matches!(native, InteractionDescriptor::Unparsed { .. }));
+        assert_eq!(interaction.native_parsed, native);
+        assert_eq!(interaction.effective_descriptor, dat);
+        assert_eq!(interaction.raw.raw_descriptor, native_text);
+        assert_eq!(interaction.raw.values, values);
+        assert!(matches!(
+            interaction.cross_check,
+            InteractionCrossCheck::ValidatedRecovery {
+                reason: InteractionRecoveryReason::MalformedNativeDescriptor,
+                ..
+            }
+        ));
+        assert!(interaction.is_resolved());
     }
 
     #[test]

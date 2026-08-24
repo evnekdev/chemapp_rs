@@ -13,7 +13,7 @@ use tempfile::NamedTempFile;
 use crate::cache::ParameterCache;
 use crate::entities::system::System;
 use crate::interactions::{
-    InteractionChannel, InteractionDescriptorRecovery, PhaseInteractionReport,
+    InteractionChannel, InteractionDescriptorCrossCheck, PhaseInteractionReport,
 };
 use crate::iterator::PhaseIterator;
 use crate::iterator::SystemComponentIterator;
@@ -660,31 +660,41 @@ impl Calculator {
     /// loaded data-file. These static model parameters are intentionally not
     /// duplicated into equilibrium snapshots.
     pub fn interaction_report(&self) -> Result<Vec<PhaseInteractionReport>, ChemAppError> {
-        self.interaction_report_with_optional_recovery(None)
+        self.interaction_report_with_optional_cross_check(None)
     }
 
-    /// Collect both channels using an optional ASCII-DAT structural recovery
-    /// provider. Recovery never replaces live TQGPAR numerical values and is
-    /// visibly marked on every affected row.
+    /// Collect both channels with independent ASCII-DAT structural evidence.
+    /// Provider failures and unexplained differences never invalidate healthy
+    /// native rows, and live TQGPAR values are never replaced.
+    pub fn interaction_report_with_cross_check(
+        &self,
+        cross_check: &dyn InteractionDescriptorCrossCheck,
+    ) -> Result<Vec<PhaseInteractionReport>, ChemAppError> {
+        self.interaction_report_with_optional_cross_check(Some(cross_check))
+    }
+
+    /// Compatibility forwarding name for
+    /// [`Self::interaction_report_with_cross_check`].
+    #[deprecated(note = "use interaction_report_with_cross_check")]
     pub fn interaction_report_with_recovery(
         &self,
-        recovery: &dyn InteractionDescriptorRecovery,
+        cross_check: &dyn InteractionDescriptorCrossCheck,
     ) -> Result<Vec<PhaseInteractionReport>, ChemAppError> {
-        self.interaction_report_with_optional_recovery(Some(recovery))
+        self.interaction_report_with_cross_check(cross_check)
     }
 
-    fn interaction_report_with_optional_recovery(
+    fn interaction_report_with_optional_cross_check(
         &self,
-        recovery: Option<&dyn InteractionDescriptorRecovery>,
+        cross_check: Option<&dyn InteractionDescriptorCrossCheck>,
     ) -> Result<Vec<PhaseInteractionReport>, ChemAppError> {
         let mut reports = Vec::new();
         for phase_index in 1..=self.engine.tqnop()? {
             if self.engine.tqmodl(phase_index)? != "PURE" {
                 reports.push(
-                    crate::interactions::load_phase_interaction_report_with_recovery(
+                    crate::interactions::load_phase_interaction_report_with_cross_check(
                         &self.engine,
                         phase_index,
-                        recovery,
+                        cross_check,
                     )?,
                 );
             }

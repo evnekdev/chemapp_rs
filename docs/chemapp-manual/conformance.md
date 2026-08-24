@@ -206,10 +206,15 @@ model-aware resolution cover the runtime-observed `SUBQ`, `SUBL`, `SUBLM`,
 and name-resolved, with zero silently discarded. Cross-validation against the
 ASCII DAT semantic model found 25 known TQLPAR multi-digit-order corruptions:
 20 SUBQ/G and 5 QKTO/G rows printed `[*]` instead of orders 10–15. The other
-667 structures matched by phase/channel/position. An optional recovery-provider
-boundary now marks recovered provenance while preserving native text and live
-TQGPAR values. Unknown future syntax remains explicitly unparsed. See
-[Interaction inspection and name resolution](interactions.md).
+667 structures matched by phase/channel/position. The optional, dependency-free
+cross-check boundary now retains native parsing separately and reports
+`NotRequested`, `Unavailable`, `DatError`, `Agree`, `Disagree`, or a typed
+`ValidatedRecovery`. DAT absence, parser failure, and unexplained disagreement
+leave healthy native structure effective and cannot erase a row or make its
+native resolution fail. Only the validated wildcard-versus-order-10-or-greater
+defect (or another explicit recovery class) selects DAT structure. Live TQGPAR
+values remain authoritative. Unknown future syntax remains explicitly unparsed.
+See [Interaction inspection and name resolution](interactions.md).
 
 The transformed interaction surface now treats each colon-delimited group as
 one sublattice and reports the `TQNOSL` phase count explicitly. The native
@@ -220,6 +225,9 @@ Olivine descriptors; variable-sublattice models retain every group.
 That run also exposed and corrected TQGPAR's Rust-side matrix adaptation:
 native Fortran column-major storage is reconstructed as logical
 `NOEXPR × NVALA` rows. TQLPAR now honors each returned `LGTPAR` record length.
+The hardened Win64 rerun retained/resolved 692 native-only rows and produced
+667 agreements, 25 validated recoveries (20 SUBQ/G, 5 QKTO/G), zero ordinary
+disagreements, zero DAT errors/unavailable rows, and zero unresolved rows.
 
 ### Entity, snapshot, table, and mapping layer — implemented
 

@@ -44,8 +44,8 @@ fn main() -> Result<(), ChemAppError> {
     )?;
 
     eprintln!(
-        "Descriptor recovery: not configured (native TQLPAR parsing only; use \
-         interaction_report_with_recovery for a compatible ASCII DAT provider)."
+        "Descriptor cross-check: not configured (native TQLPAR parsing only; use \
+         interaction_report_with_cross_check for a compatible ASCII DAT provider)."
     );
 
     for report in calculator.interaction_report()? {

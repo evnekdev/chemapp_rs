@@ -26,11 +26,12 @@ pub use crate::entities::bond::{Bond, BondKind};
 pub use crate::entities::species::{Species, SpeciesRef};
 pub use crate::error::ChemAppError;
 pub use crate::interactions::{
-    Interaction, InteractionChannel, InteractionDescriptor, InteractionDescriptorRecovery,
+    Interaction, InteractionChannel, InteractionCrossCheck, InteractionCrossCheckRequest,
+    InteractionDescriptor, InteractionDescriptorCrossCheck, InteractionDescriptorRecovery,
     InteractionDescriptorSource, InteractionMember, InteractionOrder, InteractionRaw,
-    InteractionRecoveryRequest, InteractionResolution, NativeInteractionIndex,
-    NativePoweredMember, PhaseInteractionReport, ResolvedInteractionDescriptor,
-    ResolvedPoweredMember,
+    InteractionRecoveryReason, InteractionRecoveryRequest, InteractionResolution,
+    NativeInteractionIndex, NativePoweredMember, PhaseInteractionReport,
+    ResolvedInteractionDescriptor, ResolvedPoweredMember,
 };
 pub use crate::iterator::{
     BondIterator, ConstituentIterator, PhaseIterator, SpeciesIterator, SystemComponentIterator,

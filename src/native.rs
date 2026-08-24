@@ -42,6 +42,14 @@ const TQGTRH_USER_ID_NATIVE_LENGTH: ChemAppLen = 255;
 const TQGTRH_TEXT_NATIVE_LENGTH: ChemAppLen = 80;
 const TQERR_NATIVE_RECORD_LENGTH: ChemAppLen = 80;
 const TQLPAR_NATIVE_RECORD_LENGTH: ChemAppLen = 156;
+// The checked GTT bridge allocates and copies exactly 1,999 CHARACTER*156
+// records. The legacy manual documents the same version-scoped maximum.
+// TQSIZE reports compiled thermodynamic dimensions, but available evidence
+// does not establish any returned dimension as a TQLPAR caller-buffer size.
+const TQLPAR_DESCRIPTOR_CAPACITY: usize = 1999;
+// TQGPAR's expression leading dimension is established as 20 by the checked
+// interface/source model. The 28-value extent is runtime-compatible with the
+// checked library, but is not claimed as a version-independent ChemApp law.
 const TQGPAR_EXPRESSION_CAPACITY: usize = 20;
 const TQGPAR_VALUE_CAPACITY: usize = 28;
 
@@ -2069,8 +2077,10 @@ impl Engine {
 		let mut errcode: ChemAppInt = 0;
 		let mut nopar: ChemAppInt = 0;
 		let coption: CString = CString::new(option)?;
-		let mut lgtpar: [ChemAppInt;1999] = [0;1999];
-		let mut chrpar: [[u8;156];1999] = [[0u8;156];1999];
+		let mut lgtpar: [ChemAppInt; TQLPAR_DESCRIPTOR_CAPACITY] =
+			[0; TQLPAR_DESCRIPTOR_CAPACITY];
+		let mut chrpar: [[u8; 156]; TQLPAR_DESCRIPTOR_CAPACITY] =
+			[[0u8; 156]; TQLPAR_DESCRIPTOR_CAPACITY];
 		/******************************************************************************************************/
 		#[cfg(target_family="windows")]
 		unsafe {
