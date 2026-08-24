@@ -117,8 +117,14 @@ The native conformance matrix should contain separate columns for:
 
 This separation is mandatory. A routine can be semantically correct but ABI-wrong, or ABI-correct while exposing the wrong high-level semantics.
 
-## Current repository note
+## Current repository reference files
 
-`examples/cademo1.c` includes `cacint.h`, but the repository does not currently contain `cacint.h` or `cacint.c` themselves. Until those source files are added to an appropriate reference location, ABI audits must obtain them from the matching ChemApp distribution and record which ChemApp/compiler/platform package they came from.
+The repository now contains the matching C-interface reference material under `examples/`:
 
-Do not assume that a `cacint.c` from one ChemApp/compiler build proves the ABI of every other DLL/SO build.
+- `examples/cacint.c`;
+- `examples/cacint.h`;
+- `examples/cademo1.c`.
+
+The checked-in `cacint.c` identifies itself as the ChemApp C/C++ interface, revision 2499 dated 25 September 2013. It explicitly shows different UNIX and non-UNIX Fortran declarations. For example, UNIX declarations append `ftnlen` arguments for CHARACTER values, while the non-UNIX declarations shown in the same file place explicit string-length parameters adjacent to the corresponding character arguments. This is exactly why `native.rs` must be audited against the Fortran ABI rather than copied from the manual-facing signature.
+
+Treat these files as version/build-specific reference evidence. Do not assume that this `cacint.c` proves the ABI of every ChemApp DLL/SO version or compiler build. When supporting another native build, record the corresponding interface-source/compiler/version evidence and verify the binary independently.
