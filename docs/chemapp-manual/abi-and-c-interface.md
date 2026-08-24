@@ -128,3 +128,21 @@ The repository now contains the matching C-interface reference material under `e
 The checked-in `cacint.c` identifies itself as the ChemApp C/C++ interface, revision 2499 dated 25 September 2013. It explicitly shows different UNIX and non-UNIX Fortran declarations. For example, UNIX declarations append `ftnlen` arguments for CHARACTER values, while the non-UNIX declarations shown in the same file place explicit string-length parameters adjacent to the corresponding character arguments. This is exactly why `native.rs` must be audited against the Fortran ABI rather than copied from the manual-facing signature.
 
 Treat these files as version/build-specific reference evidence. Do not assume that this `cacint.c` proves the ABI of every ChemApp DLL/SO version or compiler build. When supporting another native build, record the corresponding interface-source/compiler/version evidence and verify the binary independently.
+
+## Concrete audit rule established for the checked-in builds
+
+The 2026 native audit inspected the checked Win32/x86, Win64/x64, and
+Linux/i386 exports.  It found that the 2013 Win32 DLL exports the same
+`_TQ...@NN` stdcall aliases used by `defs.rs`; the 2003 Linux binary exports
+the expected lowercase trailing-underscore names but lacks several later
+data-manipulation routines.
+
+The checked `cacint.h` uses 32-bit `LI`/`LIP` on its x64 branch (`int` and
+`int *`), while Rust currently uses `usize` for most native integers and for
+all error outputs.  Never use pointer width as evidence that `usize` is the
+right ChemApp integer type.  The matching 2013 bridge establishes
+interleaved lengths for non-UNIX and appended `ftnlen` values for UNIX; it
+does not by itself prove the ABI of the 2017 Win64 binary.
+
+For the detailed per-routine evidence and known string-length conflicts, see
+[native ABI audit](native-abi-audit.md).

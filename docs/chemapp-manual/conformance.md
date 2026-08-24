@@ -1,6 +1,6 @@
 # Current ChemApp conformance notes
 
-This is a living audit of the current `master` implementation against documented ChemApp behavior. It is not yet a routine-by-routine ABI certification.
+This is a living audit of the current `master` implementation against documented ChemApp behavior. The low-level inventory has now received a routine-by-routine audit; see [native ABI audit](native-abi-audit.md). It is scoped to the checked-in binaries and records remaining build-specific unknowns rather than certifying every ChemApp release.
 
 Status vocabulary:
 
@@ -90,6 +90,33 @@ ChemApp is stateful. The crate's architecture explicitly anticipates parallelism
 The current native layer contains a mixture of `usize`, `i32`, fixed `u8` buffers, and platform-specific ordering of string-length arguments. Some signatures have already required historical fixes (for example `tqgthi`, `tqgdat`, and `tqerr` according to the changelog).
 
 **Direction:** perform a routine-by-routine ABI audit against native headers/example interfaces and exported symbols for each supported library build. Record the result in a machine-readable or tabular matrix.
+
+## Native ABI audit summary (2026-08-24)
+
+The audit covers all 75 `src/native.rs` wrappers at repository commit
+`2227e9210f98a298a4c23e16bd2b4322c55c2c02`.
+
+| Primary verdict | Count |
+| --- | ---: |
+| VERIFIED (checked Win32/x86 evidence only) | 61 |
+| ABI-ISSUE | 6 |
+| SEMANTICS-ISSUE | 1 |
+| PLATFORM-SPECIFIC | 6 |
+| INCOMPLETE | 1 |
+| UNVERIFIED | 0 |
+
+The CRITICAL finding is `TQCHAR`: the Rust wrapper supplies an `i32` output
+where the C interface and Fortran bridge require a `double *`, making a native
+eight-byte write likely to corrupt memory.  HIGH findings cover several
+Fortran CHARACTER-length mismatches, one mutable-output declaration, truncated
+`TQGSU` options, and swallowed `TQGPAR` errors.
+
+The checked Win32, Win64, and Linux/i386 exports were inspected.  A Win64
+`maindemo` smoke run succeeded, but it does not resolve the unresolved Win64
+`LI`/`LIP` (32-bit C `int` versus Rust `usize`) question.  The Linux/i386
+binary lacks the later data-manipulation exports, so the affected wrappers are
+platform-specific.  The full matrix, character analysis, exact binary
+evidence, and C/Rust demo coverage are in [native-abi-audit.md](native-abi-audit.md).
 
 ## Advanced functionality
 

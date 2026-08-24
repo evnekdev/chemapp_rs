@@ -192,3 +192,13 @@ When a native wrapper changes, compare behavior with the canonical ChemApp examp
 A change that establishes a new documented ChemApp rule, version difference, ABI discovery, or intentional deviation must update `docs/chemapp-manual/` in the same development task.
 
 Future contributors and AI agents should not have to rediscover important ChemApp semantics or ABI facts from old commits or debugging sessions.
+
+## 18. Do not use Rust pointer-sized integers as a default ABI type
+
+`usize` and `isize` describe Rust pointer width, not necessarily a ChemApp
+Fortran/C-transition integer or a hidden CHARACTER length.  The checked C
+header uses 32-bit `LI`/`LIP` even in its x64 branch.  Any native declaration
+using a pointer-sized Rust integer must therefore cite target/build-specific
+evidence, and a successful call is not that evidence.
+
+The current complete evidence record is [native-abi-audit.md](native-abi-audit.md).  It includes a critical `TQCHAR` output-type defect and must be consulted before changing a native declaration.
