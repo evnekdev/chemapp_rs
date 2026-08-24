@@ -93,30 +93,27 @@ The current native layer contains a mixture of `usize`, `i32`, fixed `u8` buffer
 
 ## Native ABI audit summary (2026-08-24)
 
-The audit covers all 75 `src/native.rs` wrappers at repository commit
-`2227e9210f98a298a4c23e16bd2b4322c55c2c02`.
+The hardened audit covers all 75 `src/native.rs` wrappers at repository
+revision `5c3e1c350e97c314d7e84b5cb8bfd8461b3b9d74`.  It reports statuses per
+build rather than a misleading cross-platform primary verdict: Win32/x86 has
+65 verified wrappers, 6 confirmed machine-ABI defects, 1 Rust FFI-soundness
+declaration defect, 2 semantic/API defects, and 1 incomplete API.  All 75
+Win64 wrappers remain UNVERIFIED because the checked 2017 DLL lacks a
+version-matched raw-ABI source; Linux/i386 has 68 UNVERIFIED wrappers and 7
+absent exports; Unix64 has no checked binary.
 
-| Primary verdict | Count |
-| --- | ---: |
-| VERIFIED (checked Win32/x86 evidence only) | 61 |
-| ABI-ISSUE | 6 |
-| SEMANTICS-ISSUE | 1 |
-| PLATFORM-SPECIFIC | 6 |
-| INCOMPLETE | 1 |
-| UNVERIFIED | 0 |
-
-The CRITICAL finding is `TQCHAR`: the Rust wrapper supplies an `i32` output
-where the C interface and Fortran bridge require a `double *`, making a native
-eight-byte write likely to corrupt memory.  HIGH findings cover several
-Fortran CHARACTER-length mismatches, one mutable-output declaration, truncated
-`TQGSU` options, and swallowed `TQGPAR` errors.
+The CRITICAL finding remains `TQCHAR`: Rust supplies an `i32` output where the
+bridge requires `double *`, allowing an eight-byte native write into four-byte
+storage.  HIGH findings are the fixed CHARACTER-length mismatches in
+`TQGTID`, `TQGTPI`, `TQGTHI`, `TQGTRH`, and `TQERR`, plus the truncated `TQGSU`
+option and swallowed `TQGPAR` errors.  `TQGSPC` is a MEDIUM declaration-
+soundness defect, not evidence of a changed machine pointer layout.
 
 The checked Win32, Win64, and Linux/i386 exports were inspected.  A Win64
-`maindemo` smoke run succeeded, but it does not resolve the unresolved Win64
-`LI`/`LIP` (32-bit C `int` versus Rust `usize`) question.  The Linux/i386
-binary lacks the later data-manipulation exports, so the affected wrappers are
-platform-specific.  The full matrix, character analysis, exact binary
-evidence, and C/Rust demo coverage are in [native-abi-audit.md](native-abi-audit.md).
+`maindemo` smoke run succeeded, but it does not resolve the 32-bit C
+`LI`/`LIP` versus Rust `usize` question.  The full matrix, explicit character
+analysis, Unix return-convention conclusion, exact binary evidence, and C/Rust
+demo coverage are in [native-abi-audit.md](native-abi-audit.md).
 
 ## Advanced functionality
 

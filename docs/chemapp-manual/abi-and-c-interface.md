@@ -144,5 +144,18 @@ right ChemApp integer type.  The matching 2013 bridge establishes
 interleaved lengths for non-UNIX and appended `ftnlen` values for UNIX; it
 does not by itself prove the ABI of the 2017 Win64 binary.
 
+For fixed Fortran CHARACTER outputs, buffer capacity and the hidden declared
+length are independent facts: an oversized Rust buffer does not authorize an
+oversized hidden length. In the checked bridge, `TQGTHI` and `TQGTPI` use 25,
+`TQGTID` uses 255, `TQGTRH` uses 40/40/255/80/80, and `TQERR` uses a record
+length of 80 despite its three-record output buffer. Record lengths must be
+retained per CHARACTER argument and per platform convention.
+
+The UNIX bridge's `CMT` spelling is `extern int`, while the manual describes
+subroutines and the bridge ignores any return value. On the checked i386 C
+calling convention, ignoring `EAX` with a Rust `-> ()` declaration does not
+change the argument ABI. Do not use or infer a meaningful return value,
+however, until it is established for the exact supported binary.
+
 For the detailed per-routine evidence and known string-length conflicts, see
 [native ABI audit](native-abi-audit.md).
