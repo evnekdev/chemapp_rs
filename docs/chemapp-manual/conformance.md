@@ -211,6 +211,12 @@ boundary now marks recovered provenance while preserving native text and live
 TQGPAR values. Unknown future syntax remains explicitly unparsed. See
 [Interaction inspection and name resolution](interactions.md).
 
+The transformed interaction surface now treats each colon-delimited group as
+one sublattice and reports the `TQNOSL` phase count explicitly. The native
+`*N` interaction arity is not a sublattice count. Runtime coverage includes
+one-sublattice Monoxide, two-sublattice Slag/Spinel, and four-sublattice
+Olivine descriptors; variable-sublattice models retain every group.
+
 That run also exposed and corrected TQGPAR's Rust-side matrix adaptation:
 native Fortran column-major storage is reconstructed as logical
 `NOEXPR × NVALA` rows. TQLPAR now honors each returned `LGTPAR` record length.

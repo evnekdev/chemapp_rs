@@ -62,18 +62,39 @@ Resolution is selected from `TQMODL`:
   across all sublattices and are resolved with `TQNOLC` plus `TQGNLC`.
 - an unverified model is not guessed; parsed rows remain explicitly unresolved.
 
-For sublattice counts `[n1, n2, ...]`, flattened one-based index ranges are
+The number of sublattices is always explicit. `PhaseInteractionReport` records
+the authoritative phase count returned by `TQNOSL`, and every parsed/resolved
+descriptor reports the number of sublattice groups it contains. The native
+`*N` token is the interaction arity and is never used as a sublattice count.
+A descriptor for `S` sublattices has `S - 1` colon separators. Resolution
+rejects a descriptor whose represented count disagrees with `TQNOSL`.
+
+Some model families have a fixed interaction structure: observed `QKTO` and
+`QKTOM` descriptors have one sublattice, while `SUBQ` descriptors have two.
+`SUBL` and `SUBLM` are variable-sublattice families, so their count must come
+from the loaded phase rather than the model code. For sublattice population
+counts `[n1, n2, ...]`, flattened one-based index ranges are
 computed cumulatively. Thus `[3, 2]` maps `1..=3` to sublattice 1 and `4..=5`
 to sublattice 2. This replaces the old parser's inconsistent `<`/`<=` tests
 and both `+nspecies1` and `-nspecies1` offset variants. Zero and indices beyond
-the cumulative total are rejected. The implementation and tests support three
-or more sublattices; the EN22 corpus contains interaction phases with three
-sublattices.
+the cumulative total are rejected. The implementation and tests support an
+arbitrary number of sublattices. EN22 includes three-sublattice ferrites and
+four-sublattice Olivine rows such as `(Ca)-(Fe) : (Ca) : (Si) : (O)`.
 
 Resolved members distinguish `PhaseConstituent { index, name }` from
 `SublatticeSpecies { encoded_index, sublattice, local_index, name }`. User-facing
 text therefore uses native names without mislabelling phase constituents as
-sublattice species.
+sublattice species. The transformed display omits the leading native parameter
+index and arity marker (`1: *2`, for example), because those remain available
+as typed metadata rather than being part of the name-based thermodynamic
+descriptor. It also omits diagnostic index annotations, so
+`1: *2 (1)^[0]-(3)^[0] : (8) (Guts)` is rendered in the form
+`(Al)^[0]-(Ca)^[0] : (O) (Guts)` after model-aware resolution.
+The powered terms before the first colon form one sublattice group; every
+colon begins the next sublattice group. Models such as Spinel/SUBLM use the
+same group boundaries without power tokens and render, for example, as
+`(A)-(B) : (C)`. Monoxide/QKTOM has only one group, so its transformed
+descriptor contains no colon.
 
 ## Observed grammar matrix
 
@@ -82,14 +103,14 @@ rows were syntactically parsed and name-resolved, but DAT cross-validation
 found 25 valid-looking descriptors whose wildcard order token was corrupted;
 see the next section. No row was silently dropped.
 
-| Model | Channel | Structural grammar | Rows | Type labels |
-|---|---|---:|---:|---|
-| `SUBQ` | Gibbs | powered member list plus target member | 416 | Quasichemical (252), Guts (152), Bragg-Williams (12) |
-| `SUBLM` | Gibbs | colon-separated flattened sublattice groups | 70 | none |
-| `SUBLM` | Magnetic | colon-separated flattened sublattice groups | 35 | none |
-| `SUBL` | Gibbs | colon-separated flattened sublattice groups | 74 | none |
-| `QKTO` | Gibbs | powered phase-constituent list | 61 | none |
-| `QKTOM` | Gibbs | powered phase-constituent list | 36 | none |
+| Model | Channel | Sublattices | Structural grammar | Rows | Type labels |
+|---|---|---:|---|---:|---|
+| `SUBQ` | Gibbs | 2 (fixed) | powered first-sublattice group plus one following sublattice group | 416 | Quasichemical (252), Guts (152), Bragg-Williams (12) |
+| `SUBLM` | Gibbs | variable (`TQNOSL`) | colon-separated flattened sublattice groups | 70 | none |
+| `SUBLM` | Magnetic | variable (`TQNOSL`) | colon-separated flattened sublattice groups | 35 | none |
+| `SUBL` | Gibbs | variable (`TQNOSL`) | colon-separated flattened sublattice groups | 74 | none |
+| `QKTO` | Gibbs | 1 (fixed) | powered phase-constituent list | 61 | none |
+| `QKTOM` | Gibbs | 1 (fixed) | powered phase-constituent list | 36 | none |
 
 Numeric powers and the literal `*` order token are retained structurally.
 Native type labels are owned strings, so an unfamiliar label does not itself

@@ -88,3 +88,9 @@
   - detect valid-looking structural differences through optional DAT recovery,
     covering ChemApp's known multi-digit-order TQLPAR text corruption without
     replacing live TQGPAR values.
+  - corrected transformed interaction formatting to omit native parameter and
+    arity markers plus diagnostic index annotations while retaining them in
+    the structured/raw representations.
+  - made sublattice count explicit in interaction reports and descriptors;
+    colon-separated groups now preserve variable-sublattice models including
+    four-sublattice Olivine interactions.

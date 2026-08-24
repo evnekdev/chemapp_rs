@@ -95,17 +95,18 @@ pub struct NativePoweredMember {
 /// The structurally parsed form of a TQLPAR descriptor.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum InteractionDescriptor {
-    /// A powered binary/ternary member list, optionally followed by a member
-    /// after `:` and a native interaction type label.
+    /// A powered binary/ternary member list forming the first group, optionally
+    /// followed by further colon-separated sublattice groups.
     Powered {
         /// The one-based parameter index printed at the start of the record.
         parameter_index: usize,
         /// The arity printed after the native `*` marker.
         declared_arity: usize,
-        /// Ordered indexed members and their exponent/order tokens.
-        members: Vec<NativePoweredMember>,
-        /// Optional model-specific target member following `:`.
-        target: Option<NativeInteractionIndex>,
+        /// Ordered indexed members and exponent/order tokens in sublattice 1.
+        first_sublattice: Vec<NativePoweredMember>,
+        /// Additional sublattice groups following `:`. Group boundaries are
+        /// structural and are never flattened into the powered member list.
+        following_sublattices: Vec<Vec<NativeInteractionIndex>>,
         /// Native interaction-family label, retained without a closed enum.
         type_label: Option<String>,
     },
@@ -117,7 +118,7 @@ pub enum InteractionDescriptor {
         /// The arity printed after the native `*` marker.
         declared_arity: usize,
         /// Ordered colon-separated groups of native member indices.
-        groups: Vec<Vec<NativeInteractionIndex>>,
+        sublattices: Vec<Vec<NativeInteractionIndex>>,
         /// Optional native interaction-family label.
         type_label: Option<String>,
     },
@@ -150,6 +151,23 @@ impl InteractionDescriptor {
             Self::SublatticeGroups { .. } => "Sublattice groups",
             Self::Reciprocal { .. } => "Reciprocal",
             Self::Unparsed { .. } => "Unparsed",
+        }
+    }
+
+    /// Number of sublattice groups represented by the descriptor.
+    ///
+    /// This is structural: the native `*N` marker is an interaction arity,
+    /// not a sublattice count. A descriptor with `S` sublattices contains
+    /// exactly `S - 1` colon separators. Unparsed syntax has no trusted count.
+    pub fn sublattice_count(&self) -> Option<usize> {
+        match self {
+            Self::Powered {
+                following_sublattices,
+                ..
+            } => Some(1 + following_sublattices.len()),
+            Self::SublatticeGroups { sublattices, .. } => Some(sublattices.len()),
+            Self::Reciprocal { .. } => Some(2),
+            Self::Unparsed { .. } => None,
         }
     }
 
@@ -221,6 +239,8 @@ pub struct InteractionRaw {
     pub phase_name: String,
     /// Solution-model code obtained from TQMODL.
     pub model: String,
+    /// Number of sublattices returned by TQNOSL for the containing phase.
+    pub sublattice_count: usize,
     /// Independently queried Gibbs or magnetic channel.
     pub channel: InteractionChannel,
     /// One-based TQLPAR/TQGPAR parameter index.
@@ -269,6 +289,16 @@ impl Display for InteractionMember {
     }
 }
 
+impl InteractionMember {
+    /// Return the native ChemApp member name without diagnostic index
+    /// annotations. Structural identity remains available in the enum fields.
+    fn name(&self) -> &str {
+        match self {
+            Self::PhaseConstituent { name, .. } | Self::SublatticeSpecies { name, .. } => name,
+        }
+    }
+}
+
 /// A resolved member and its preserved exponent/order.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ResolvedPoweredMember {
@@ -282,14 +312,14 @@ pub struct ResolvedPoweredMember {
 /// ordering, reciprocal sides, powers, and type labels remain inspectable.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum ResolvedInteractionDescriptor {
-    /// Name-resolved powered member list and optional target.
+    /// Name-resolved powered first group and following sublattice groups.
     Powered {
         /// Arity printed by the native descriptor.
         declared_arity: usize,
-        /// Ordered name-resolved members.
-        members: Vec<ResolvedPoweredMember>,
-        /// Optional model-specific name-resolved target.
-        target: Option<InteractionMember>,
+        /// Ordered name-resolved members in sublattice 1.
+        first_sublattice: Vec<ResolvedPoweredMember>,
+        /// Name-resolved sublattice groups following `:`.
+        following_sublattices: Vec<Vec<InteractionMember>>,
         /// Optional native interaction-family label.
         type_label: Option<String>,
     },
@@ -298,7 +328,7 @@ pub enum ResolvedInteractionDescriptor {
         /// Arity printed by the native descriptor.
         declared_arity: usize,
         /// Ordered resolved groups; group boundaries remain significant.
-        groups: Vec<Vec<InteractionMember>>,
+        sublattices: Vec<Vec<InteractionMember>>,
         /// Optional native interaction-family label.
         type_label: Option<String>,
     },
@@ -313,6 +343,20 @@ pub enum ResolvedInteractionDescriptor {
     },
 }
 
+impl ResolvedInteractionDescriptor {
+    /// Number of sublattices retained in this resolved descriptor.
+    pub fn sublattice_count(&self) -> usize {
+        match self {
+            Self::Powered {
+                following_sublattices,
+                ..
+            } => 1 + following_sublattices.len(),
+            Self::SublatticeGroups { sublattices, .. } => sublattices.len(),
+            Self::Reciprocal { .. } => 2,
+        }
+    }
+}
+
 fn label_suffix(label: &Option<String>) -> String {
     label
         .as_ref()
@@ -324,38 +368,42 @@ impl Display for ResolvedInteractionDescriptor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Powered {
-                declared_arity,
-                members,
-                target,
+                first_sublattice,
+                following_sublattices,
                 type_label,
+                ..
             } => {
-                write!(f, "*{declared_arity} ")?;
-                for (offset, member) in members.iter().enumerate() {
+                for (offset, member) in first_sublattice.iter().enumerate() {
                     if offset > 0 {
-                        f.write_str(" - ")?;
+                        f.write_str("-")?;
                     }
-                    write!(f, "({})^[{}]", member.member, member.order)?;
+                    write!(f, "({})^[{}]", member.member.name(), member.order)?;
                 }
-                if let Some(target) = target {
-                    write!(f, " : ({target})")?;
+                for sublattice in following_sublattices {
+                    f.write_str(" : ")?;
+                    for (member_offset, member) in sublattice.iter().enumerate() {
+                        if member_offset > 0 {
+                            f.write_str("-")?;
+                        }
+                        write!(f, "({})", member.name())?;
+                    }
                 }
                 f.write_str(&label_suffix(type_label))
             }
             Self::SublatticeGroups {
-                declared_arity,
-                groups,
+                sublattices,
                 type_label,
+                ..
             } => {
-                write!(f, "*{declared_arity} ")?;
-                for (group_offset, group) in groups.iter().enumerate() {
-                    if group_offset > 0 {
+                for (sublattice_offset, sublattice) in sublattices.iter().enumerate() {
+                    if sublattice_offset > 0 {
                         f.write_str(" : ")?;
                     }
-                    for (member_offset, member) in group.iter().enumerate() {
+                    for (member_offset, member) in sublattice.iter().enumerate() {
                         if member_offset > 0 {
-                            f.write_str(" - ")?;
+                            f.write_str("-")?;
                         }
-                        write!(f, "({member})")?;
+                        write!(f, "({})", member.name())?;
                     }
                 }
                 f.write_str(&label_suffix(type_label))
@@ -366,11 +414,11 @@ impl Display for ResolvedInteractionDescriptor {
                 type_label,
             } => write!(
                 f,
-                "*R ({}) - ({}) : ({}) - ({}){}",
-                left[0],
-                left[1],
-                right[0],
-                right[1],
+                "({})-({}) : ({})-({}){}",
+                left[0].name(),
+                left[1].name(),
+                right[0].name(),
+                right[1].name(),
                 label_suffix(type_label)
             ),
         }
@@ -427,6 +475,8 @@ pub struct PhaseInteractionReport {
     pub phase_name: String,
     /// Solution-model code returned by TQMODL.
     pub model: String,
+    /// Authoritative number of sublattices returned by TQNOSL for this phase.
+    pub sublattice_count: usize,
     /// Independently retrieved Gibbs excess interactions.
     pub gibbs: Vec<Interaction>,
     /// Independently retrieved magnetic interactions.
@@ -443,6 +493,7 @@ impl PhaseInteractionReport {
                 vec![
                     format!("{} [{}]", self.phase_name, self.phase_index),
                     self.model.clone(),
+                    interaction.raw.sublattice_count.to_string(),
                     interaction.raw.channel.to_string(),
                     interaction.raw.parameter_index.to_string(),
                     interaction.parsed.kind_name().to_owned(),
@@ -467,6 +518,7 @@ impl PhaseInteractionReport {
             &[
                 "Phase",
                 "Model",
+                "Sublattices",
                 "Channel",
                 "Index",
                 "Kind",
@@ -600,36 +652,33 @@ fn parse_descriptor_result(raw: &str) -> Result<InteractionDescriptor, String> {
 
     if body.contains("^[") {
         let groups: Vec<_> = body.split(':').map(str::trim).collect();
-        if groups.len() > 2 {
-            return Err("powered interaction has more than one target group".to_owned());
-        }
-        let members: Result<Vec<_>, _> = groups[0].split('-').map(parse_powered_member).collect();
-        let members = members?;
-        if members.is_empty() {
+        let first_sublattice: Result<Vec<_>, _> =
+            groups[0].split('-').map(parse_powered_member).collect();
+        let first_sublattice = first_sublattice?;
+        if first_sublattice.is_empty() {
             return Err("powered interaction has no members".to_owned());
         }
-        let target = if groups.len() == 2 {
-            Some(parse_parenthesized_index(groups[1])?)
-        } else {
-            None
-        };
+        let following_sublattices = groups[1..]
+            .iter()
+            .map(|group| parse_group(group))
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(InteractionDescriptor::Powered {
             parameter_index,
             declared_arity,
-            members,
-            target,
+            first_sublattice,
+            following_sublattices,
             type_label,
         })
     } else {
-        let groups: Result<Vec<_>, _> = body.split(':').map(parse_group).collect();
-        let groups = groups?;
-        if groups.is_empty() {
+        let sublattices: Result<Vec<_>, _> = body.split(':').map(parse_group).collect();
+        let sublattices = sublattices?;
+        if sublattices.is_empty() {
             return Err("interaction has no groups".to_owned());
         }
         Ok(InteractionDescriptor::SublatticeGroups {
             parameter_index,
             declared_arity,
-            groups,
+            sublattices,
             type_label,
         })
     }
@@ -745,16 +794,24 @@ fn resolve_descriptor(
     strategy: ResolutionStrategy,
     metadata: &InteractionMetadata,
 ) -> Result<ResolvedInteractionDescriptor, String> {
+    if let Some(descriptor_count) = descriptor.sublattice_count() {
+        let phase_count = metadata.sublattices.len();
+        if descriptor_count != phase_count {
+            return Err(format!(
+                "descriptor represents {descriptor_count} sublattices, but TQNOSL reports {phase_count} for the phase"
+            ));
+        }
+    }
     match descriptor {
         InteractionDescriptor::Powered {
             declared_arity,
-            members,
-            target,
+            first_sublattice,
+            following_sublattices,
             type_label,
             ..
         } => Ok(ResolvedInteractionDescriptor::Powered {
             declared_arity: *declared_arity,
-            members: members
+            first_sublattice: first_sublattice
                 .iter()
                 .map(|member| {
                     Ok(ResolvedPoweredMember {
@@ -763,19 +820,25 @@ fn resolve_descriptor(
                     })
                 })
                 .collect::<Result<Vec<_>, String>>()?,
-            target: target
-                .map(|index| resolve_member(index, strategy, metadata))
-                .transpose()?,
+            following_sublattices: following_sublattices
+                .iter()
+                .map(|group| {
+                    group
+                        .iter()
+                        .map(|index| resolve_member(*index, strategy, metadata))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .collect::<Result<Vec<_>, _>>()?,
             type_label: type_label.clone(),
         }),
         InteractionDescriptor::SublatticeGroups {
             declared_arity,
-            groups,
+            sublattices,
             type_label,
             ..
         } => Ok(ResolvedInteractionDescriptor::SublatticeGroups {
             declared_arity: *declared_arity,
-            groups: groups
+            sublattices: sublattices
                 .iter()
                 .map(|group| {
                     group
@@ -897,6 +960,7 @@ pub(crate) fn load_phase_interactions_with_recovery(
         Err(error) => return Err(error),
     };
     let metadata = InteractionMetadata::from_engine(engine, phase_index)?;
+    let sublattice_count = metadata.sublattices.len();
     let strategy = resolution_strategy(&model);
     descriptors
         .into_iter()
@@ -918,6 +982,7 @@ pub(crate) fn load_phase_interactions_with_recovery(
                 phase_index,
                 phase_name: phase_name.clone(),
                 model: model.clone(),
+                sublattice_count,
                 channel,
                 parameter_index,
                 raw_descriptor,
@@ -949,10 +1014,12 @@ pub(crate) fn load_phase_interaction_report_with_recovery(
 ) -> Result<PhaseInteractionReport, ChemAppError> {
     let phase_name = engine.tqgnp(phase_index)?;
     let model = engine.tqmodl(phase_index)?;
+    let sublattice_count = engine.tqnosl(phase_index)?;
     Ok(PhaseInteractionReport {
         phase_index,
         phase_name,
         model,
+        sublattice_count,
         gibbs: load_phase_interactions_with_recovery(
             engine,
             phase_index,
@@ -986,7 +1053,7 @@ mod tests {
             Ok(Some(InteractionDescriptor::Powered {
                 parameter_index: request.parameter_index,
                 declared_arity: 2,
-                members: vec![
+                first_sublattice: vec![
                     NativePoweredMember {
                         index: NativeInteractionIndex(1),
                         order: InteractionOrder::Numeric(self.power),
@@ -996,7 +1063,7 @@ mod tests {
                         order: InteractionOrder::Numeric(0),
                     },
                 ],
-                target: None,
+                following_sublattices: Vec::new(),
                 type_label: None,
             }))
         }
@@ -1022,25 +1089,105 @@ mod tests {
         }
     }
 
+    fn phase_constituent_metadata() -> InteractionMetadata {
+        InteractionMetadata {
+            phase_constituents: vec!["PC1".into(), "PC2".into(), "PC3".into()],
+            // Phase-constituent interaction models such as QKTO/QKTOM have
+            // one interaction-bearing sublattice even though resolution uses
+            // the phase-constituent namespace.
+            sublattices: vec![vec!["unused".into()]],
+        }
+    }
+
     #[test]
-    fn parses_powered_members_wildcard_target_and_unknown_label() {
+    fn parses_powered_members_sublattice_groups_and_unknown_label() {
         let descriptor =
             parse_interaction_descriptor("17: *2 (2)^[*]-(3)^[0] : (5) (Future-Label)");
         match descriptor {
             InteractionDescriptor::Powered {
                 parameter_index,
-                members,
-                target,
+                first_sublattice,
+                following_sublattices,
                 type_label,
                 ..
             } => {
                 assert_eq!(parameter_index, 17);
-                assert_eq!(members[0].order, InteractionOrder::Wildcard);
-                assert_eq!(target, Some(NativeInteractionIndex(5)));
+                assert_eq!(first_sublattice[0].order, InteractionOrder::Wildcard);
+                assert_eq!(following_sublattices, vec![vec![NativeInteractionIndex(5)]]);
                 assert_eq!(type_label.as_deref(), Some("Future-Label"));
             }
             other => panic!("unexpected descriptor: {other:?}"),
         }
+    }
+
+    #[test]
+    fn transformed_descriptor_omits_native_index_arity_and_identity_annotations() {
+        let metadata = InteractionMetadata {
+            phase_constituents: Vec::new(),
+            sublattices: vec![
+                vec!["Al".into(), "Si".into(), "Ca".into()],
+                vec!["O".into()],
+            ],
+        };
+        let parsed = parse_interaction_descriptor("1: *2 (1)^[0]-(3)^[0] : (4) (Guts)");
+        let resolved =
+            resolve_descriptor(&parsed, ResolutionStrategy::FlattenedSublattices, &metadata)
+                .unwrap();
+
+        assert_eq!(resolved.to_string(), "(Al)^[0]-(Ca)^[0] : (O) (Guts)");
+    }
+
+    #[test]
+    fn transformed_unpowered_sublattice_groups_use_the_same_colon_structure() {
+        let parsed = parse_interaction_descriptor("1: *2 (1)-(2) : (4)");
+        let metadata = InteractionMetadata {
+            phase_constituents: Vec::new(),
+            sublattices: vec![vec!["A".into(), "B".into(), "C".into()], vec!["D".into()]],
+        };
+        let resolved =
+            resolve_descriptor(&parsed, ResolutionStrategy::FlattenedSublattices, &metadata)
+                .unwrap();
+
+        assert_eq!(resolved.to_string(), "(A)-(B) : (D)");
+        assert_eq!(parsed.sublattice_count(), Some(2));
+        assert_eq!(resolved.sublattice_count(), 2);
+    }
+
+    #[test]
+    fn transformed_olivine_style_descriptor_preserves_four_sublattice_groups() {
+        let metadata = InteractionMetadata {
+            phase_constituents: Vec::new(),
+            sublattices: vec![
+                vec!["Ca".into(), "Fe".into()],
+                vec!["Ca".into()],
+                vec!["Si".into()],
+                vec!["O".into()],
+            ],
+        };
+        let parsed = parse_interaction_descriptor("1: *2 (1)-(2) : (3) : (4) : (5)");
+        let resolved =
+            resolve_descriptor(&parsed, ResolutionStrategy::FlattenedSublattices, &metadata)
+                .unwrap();
+
+        assert_eq!(resolved.to_string(), "(Ca)-(Fe) : (Ca) : (Si) : (O)");
+        assert_eq!(parsed.sublattice_count(), Some(4));
+        assert_eq!(resolved.sublattice_count(), 4);
+    }
+
+    #[test]
+    fn transformed_single_group_has_no_colon() {
+        let parsed = parse_interaction_descriptor("1: *2 (1)^[0]-(2)^[1]");
+        let resolved = resolve_descriptor(
+            &parsed,
+            ResolutionStrategy::PhaseConstituents,
+            &phase_constituent_metadata(),
+        )
+        .unwrap();
+
+        assert_eq!(resolved.to_string(), "(PC1)^[0]-(PC2)^[1]");
+        assert!(!resolved.to_string().contains(':'));
+        assert_eq!(parsed.sublattice_count(), Some(1));
+        assert_eq!(resolved.sublattice_count(), 1);
     }
 
     #[test]
@@ -1051,6 +1198,7 @@ mod tests {
                 phase_index: 1,
                 phase_name: "Synthetic".to_owned(),
                 model: "QKTO".to_owned(),
+                sublattice_count: 1,
                 channel: InteractionChannel::GibbsExcess,
                 parameter_index: 1,
                 raw_descriptor: native_descriptor.to_owned(),
@@ -1061,9 +1209,12 @@ mod tests {
             let (parsed, source, recovery_failure) =
                 descriptor_with_recovery(&raw, native_parsed, Some(&recovery));
             assert_eq!(recovery_failure, None);
-            let resolution =
-                resolve_descriptor(&parsed, ResolutionStrategy::PhaseConstituents, &metadata())
-                    .unwrap();
+            let resolution = resolve_descriptor(
+                &parsed,
+                ResolutionStrategy::PhaseConstituents,
+                &phase_constituent_metadata(),
+            )
+            .unwrap();
             let interaction = Interaction {
                 raw,
                 parsed,
@@ -1079,8 +1230,8 @@ mod tests {
             );
             assert!(matches!(
                 interaction.parsed,
-                InteractionDescriptor::Powered { ref members, .. }
-                    if members[0].order == InteractionOrder::Numeric(power)
+                InteractionDescriptor::Powered { ref first_sublattice, .. }
+                    if first_sublattice[0].order == InteractionOrder::Numeric(power)
             ));
             assert!(interaction.resolved_text().contains("PC1"));
             assert!(interaction.resolved_text().contains(&format!("^[{power}]")));
@@ -1094,6 +1245,7 @@ mod tests {
             phase_index: 1,
             phase_name: "Synthetic".to_owned(),
             model: "QKTO".to_owned(),
+            sublattice_count: 1,
             channel: InteractionChannel::GibbsExcess,
             parameter_index: 1,
             raw_descriptor: native_descriptor.to_owned(),
@@ -1130,7 +1282,8 @@ mod tests {
         let descriptor = parse_interaction_descriptor("1: *2 (1)-(2) : (4) : (6)");
         assert!(matches!(
             descriptor,
-            InteractionDescriptor::SublatticeGroups { ref groups, .. } if groups.len() == 3
+            InteractionDescriptor::SublatticeGroups { ref sublattices, .. }
+                if sublattices.len() == 3
         ));
         assert!(matches!(
             parse_interaction_descriptor("1: *2 (1)^[0]-(2)^[0] trailing"),

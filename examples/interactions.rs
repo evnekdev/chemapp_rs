@@ -50,10 +50,11 @@ fn main() -> Result<(), ChemAppError> {
 
     for report in calculator.interaction_report()? {
         println!(
-            "Phase {} [{}], model {}: {} Gibbs, {} magnetic",
+            "Phase {} [{}], model {}, {} sublattice(s): {} Gibbs, {} magnetic",
             report.phase_name,
             report.phase_index,
             report.model,
+            report.sublattice_count,
             report.gibbs.len(),
             report.magnetic.len()
         );
