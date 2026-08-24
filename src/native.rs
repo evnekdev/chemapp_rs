@@ -11,9 +11,10 @@ extern crate libloading;
 
 use function_name::named;
 use libloading::{Library, Symbol};
-use std::cell::Cell;
 use std::cmp::min;
 use std::ffi::CString;
+use std::marker::PhantomData;
+use std::rc::Rc;
 use std::str::from_utf8;
 
 use crate::abi::{
@@ -222,10 +223,20 @@ fn system_dimensions_from_raw(
 /// is fallible, so `Engine` deliberately has no `Default` implementation; use
 /// [`Engine::new`] with an explicit compatible library path.
 ///
-/// ChemApp mutates native state even through methods taking `&self`. `Engine`
-/// is therefore deliberately not [`Sync`]: one instance must never be called
-/// concurrently. Ownership may be moved to another thread, but parallel work
-/// requires independent supported ChemApp library instances/copies.
+/// ChemApp mutates native state even through methods taking `&self`. No checked
+/// ChemApp documentation establishes that an initialized state may migrate to
+/// another OS thread, so `Engine` is conservatively neither [`Send`] nor
+/// [`Sync`]. One instance must never be called concurrently or moved between
+/// threads. Parallel work requires an isolation strategy supported by the
+/// specific ChemApp build and licence, such as proven-independent library
+/// instances/copies or separate processes; loading one DLL path twice does not
+/// itself prove independent native state.
+///
+/// ```compile_fail
+/// use chemapp_rs::Engine;
+/// fn assert_send<T: Send>() {}
+/// assert_send::<Engine>();
+/// ```
 ///
 /// ```compile_fail
 /// use chemapp_rs::Engine;
@@ -236,9 +247,10 @@ fn system_dimensions_from_raw(
 pub struct Engine {
     pub(crate) library_name: String,
     library: Library,
-    // Cell is zero-sized and Send but !Sync. It expresses ChemApp's mutable,
-    // non-reentrant per-library state without adding a locking fiction.
-    _not_sync: Cell<()>,
+    // Rc is !Send + !Sync; PhantomData carries those auto-trait constraints
+    // without allocation or runtime state. This is a conservative native-state
+    // contract, not a consequence of libloading's Library handle traits.
+    _not_send_or_sync: PhantomData<Rc<()>>,
 }
 
 impl Engine {
@@ -248,7 +260,7 @@ impl Engine {
         Ok(Engine {
             library_name: String::from(library_name),
             library: unsafe { Library::new(library_name)? },
-            _not_sync: Cell::new(()),
+            _not_send_or_sync: PhantomData,
         })
     }
 
@@ -4027,12 +4039,6 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn engine_ownership_can_move_between_threads() {
-        fn assert_send<T: Send>() {}
-        assert_send::<Engine>();
-    }
 
     #[test]
     fn fixed_output_lengths_match_the_checked_gtt_bridge() {

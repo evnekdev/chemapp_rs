@@ -48,6 +48,7 @@ This material is a paraphrased engineering reference. Do not copy substantial po
 - [Entities, snapshots, tables, and mapping](entities-and-snapshots.md)
 - [Interaction inspection and name resolution](interactions.md)
 - [Interaction parameter addressing and reversible mutation](parameter-mutation.md)
+- [Temperature-target calculations](target-calculations.md)
 - [Development policy](development-policy.md)
 - [Current conformance notes](conformance.md)
 

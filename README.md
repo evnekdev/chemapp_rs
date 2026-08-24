@@ -41,6 +41,9 @@ live views     owned data  inspection and mutation
   Raw calls that reinitialize/load another system
   invalidate Calculator metadata and must instead be performed through a new
   Calculator.
+- `Calculator::from_library_unloaded()` initializes the interface for
+  datafile-independent native operations; it is not a raw-load shortcut to a
+  fully configured high-level Calculator.
 - A live entity reads the current ChemApp state. A snapshot owns copied values
   and remains valid after another calculation changes that native state.
 

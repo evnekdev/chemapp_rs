@@ -33,9 +33,10 @@ ChemApp itself remains a separately obtained proprietary dependency.
   - `ChemAppError::NativeError` now retains the signed native error type
     (`i32`) rather than `usize`; public positive indices are checked before
     conversion to the native ChemApp integer.
-  - `Engine` is deliberately `!Sync` because its shared-reference methods
-    mutate one native ChemApp state. Sequential ownership transfer remains
-    possible; parallel work requires independent supported library instances.
+  - `Engine` is deliberately `!Send + !Sync` because its shared-reference
+    methods mutate one native ChemApp state and no checked ChemApp source
+    establishes safe migration of an initialized state between OS threads.
+    Parallel work requires a build/licence-supported isolation strategy.
   - removed unused public calculation counters and made Calculator's data-file,
     transform, error-redirection, and parameter-cache storage private, with
     read-only accessors for the first, transform, and cache.
@@ -45,7 +46,10 @@ ChemApp itself remains a separately obtained proprietary dependency.
   - bound parameter-cache mutation/reset methods to the owning Calculator and
     made detached cache construction and standard-state marker types private.
   - `calculate_target_t` now rejects unpaired, zero, out-of-range, or identical
-    correction indices and prevents zero/non-finite correction arithmetic.
+    correction indices and replaces the former damped fixed-point correction
+    with a safeguarded log-ratio self-consistency solve. Convergence tests the
+    physical incoming/phase ratio residual, handles exact zero boundaries, and
+    returns explicit non-convergence when its equilibrium budget is exhausted.
   - composition transforms now report dimension and non-spanning-basis errors
     instead of allowing dependency assertions to unwind through Calculator.
   - added `Calculator::calculate_isothermal_at_pressure`; the existing method

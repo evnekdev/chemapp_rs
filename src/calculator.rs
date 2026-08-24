@@ -147,13 +147,110 @@ fn validate_composition_rows(actual: usize, expected: usize) -> Result<(), ChemA
     }
 }
 
-fn validate_target_component_indices(
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct TargetRatioConstraint {
+    master_phase: usize,
+    fixed_component: usize,
+    adjusting_component: usize,
+}
+
+/// Maximum number of expensive target-temperature equilibria in one ratio solve.
+const TARGET_RATIO_MAX_EVALUATIONS: usize = 32;
+/// A one-part-per-million mismatch in the logarithmic incoming/phase ratio.
+/// This is materially tighter than ordinary thermochemical repeatability while
+/// avoiding a claim of machine-precision convergence from the native solver.
+const TARGET_RATIO_RESIDUAL_TOLERANCE: f64 = 1.0e-6;
+/// Before a bracket exists, one trial may change the ratio by at most a factor
+/// of 100 in either direction. Bracketed steps remain inside their bracket.
+const TARGET_RATIO_MAX_LOG_STEP: f64 = 4.605_170_185_988_092;
+const TARGET_RATIO_SECANT_DENOMINATOR_TOLERANCE: f64 = 1.0e-12;
+const TARGET_RATIO_BRACKET_GUARD_FRACTION: f64 = 0.1;
+const TARGET_RATIO_MIN_EXPLORATION_STEP: f64 = 0.5;
+
+#[derive(Clone, Copy, Debug)]
+struct TargetRatioSettings {
+    max_evaluations: usize,
+    residual_tolerance: f64,
+    max_log_step: f64,
+}
+
+impl Default for TargetRatioSettings {
+    fn default() -> Self {
+        Self {
+            max_evaluations: TARGET_RATIO_MAX_EVALUATIONS,
+            residual_tolerance: TARGET_RATIO_RESIDUAL_TOLERANCE,
+            max_log_step: TARGET_RATIO_MAX_LOG_STEP,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct TargetRatioTrial {
+    fixed_fraction: f64,
+    adjusting_fraction: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct TargetRatioPoint {
+    log_ratio: f64,
+    log_phase_ratio: f64,
+    ratio: f64,
+    phase_ratio: f64,
+    residual: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum TargetRatioEvaluation {
+    ZeroBoundary,
+    PositiveSeed(f64),
+    ZeroPhaseAtPositiveInput,
+    Positive(TargetRatioPoint),
+}
+
+#[derive(Clone, Copy, Debug)]
+struct TargetRatioSolution {
+    ratio: f64,
+    phase_ratio: f64,
+    residual: f64,
+    evaluations: usize,
+    bracketed: bool,
+    used_secant: bool,
+}
+
+impl TargetRatioSolution {
+    /// Guards the solver's internal success invariant at its production caller.
+    fn confirm(self, tolerance: f64) -> Result<(), ChemAppError> {
+        if self.ratio.is_finite()
+            && self.ratio >= 0.0
+            && self.phase_ratio.is_finite()
+            && self.phase_ratio >= 0.0
+            && self.residual.is_finite()
+            && self.residual.abs() <= tolerance
+            && self.evaluations > 0
+        {
+            Ok(())
+        } else {
+            Err(ChemAppError::OtherError(format!(
+                "calculate_target_t solver returned an invalid success state: ratio={}, phase ratio={}, residual={}, evaluations={}, bracketed={}, used secant={}",
+                self.ratio,
+                self.phase_ratio,
+                self.residual,
+                self.evaluations,
+                self.bracketed,
+                self.used_secant
+            )))
+        }
+    }
+}
+
+fn target_ratio_constraint(
     composition_len: usize,
+    master_phase: usize,
     fixed: Option<usize>,
     adjusting: Option<usize>,
-) -> Result<(), ChemAppError> {
+) -> Result<Option<TargetRatioConstraint>, ChemAppError> {
     match (fixed, adjusting) {
-        (None, None) => Ok(()),
+        (None, None) => Ok(None),
         (Some(fixed), Some(adjusting)) => {
             for (role, index) in [("fixed", fixed), ("adjusting", adjusting)] {
                 if index == 0 || index > composition_len {
@@ -167,7 +264,11 @@ fn validate_target_component_indices(
                     "fixed and adjusting system-component indices must be different".to_owned(),
                 ));
             }
-            Ok(())
+            Ok(Some(TargetRatioConstraint {
+                master_phase,
+                fixed_component: fixed,
+                adjusting_component: adjusting,
+            }))
         }
         _ => Err(ChemAppError::OtherError(
             "both fixed and adjusting system components must be defined, or neither".to_owned(),
@@ -175,30 +276,320 @@ fn validate_target_component_indices(
     }
 }
 
-fn adjusted_target_amount(
-    fixed_amount: f64,
-    fixed_fraction: f64,
-    adjusting_fraction: f64,
-) -> Result<f64, ChemAppError> {
-    if !fixed_amount.is_finite() || !fixed_fraction.is_finite() || !adjusting_fraction.is_finite() {
+fn target_ratio_residual(ratio: f64, phase_ratio: f64) -> Result<f64, ChemAppError> {
+    if !ratio.is_finite() || !phase_ratio.is_finite() || ratio <= 0.0 || phase_ratio <= 0.0 {
         return Err(ChemAppError::OtherError(
-            "target composition correction received a non-finite amount or phase fraction"
+            "target composition ratio residual requires finite, strictly positive ratios"
                 .to_owned(),
         ));
     }
-    if fixed_fraction == 0.0 {
+    let residual = ratio.ln() - phase_ratio.ln();
+    if !residual.is_finite() {
         return Err(ChemAppError::OtherError(
-            "target composition correction cannot divide by a zero fixed-component phase fraction"
+            "target composition ratio residual is not finite".to_owned(),
+        ));
+    }
+    Ok(residual)
+}
+
+fn initial_target_ratio(fixed_amount: f64, adjusting_amount: f64) -> Result<f64, ChemAppError> {
+    if !fixed_amount.is_finite() || fixed_amount <= 0.0 {
+        return Err(ChemAppError::OtherError(
+            "calculate_target_t requires a finite, positive incoming fixed-component amount"
                 .to_owned(),
         ));
     }
-    let adjusted = fixed_amount * adjusting_fraction / fixed_fraction;
-    if !adjusted.is_finite() {
+    if !adjusting_amount.is_finite() || adjusting_amount < 0.0 {
         return Err(ChemAppError::OtherError(
-            "target composition correction produced a non-finite incoming amount".to_owned(),
+            "calculate_target_t requires a finite, non-negative incoming adjusting-component amount"
+                .to_owned(),
         ));
     }
-    Ok(adjusted)
+    let ratio = adjusting_amount / fixed_amount;
+    if !ratio.is_finite() {
+        return Err(ChemAppError::OtherError(
+            "calculate_target_t initial incoming ratio is not finite".to_owned(),
+        ));
+    }
+    Ok(ratio)
+}
+
+fn target_ratio_point(
+    ratio: f64,
+    trial: TargetRatioTrial,
+) -> Result<TargetRatioEvaluation, ChemAppError> {
+    if !ratio.is_finite() || ratio < 0.0 {
+        return Err(ChemAppError::OtherError(
+            "target composition correction produced an invalid incoming ratio".to_owned(),
+        ));
+    }
+    if !trial.fixed_fraction.is_finite() || !trial.adjusting_fraction.is_finite() {
+        return Err(ChemAppError::OtherError(
+            "target composition correction received a non-finite master-phase fraction".to_owned(),
+        ));
+    }
+    if trial.fixed_fraction <= 0.0 {
+        return Err(ChemAppError::OtherError(
+            "target composition correction requires a positive fixed-component master-phase fraction"
+                .to_owned(),
+        ));
+    }
+    if trial.adjusting_fraction < 0.0 {
+        return Err(ChemAppError::OtherError(
+            "target composition correction received a negative adjusting-component master-phase fraction"
+                .to_owned(),
+        ));
+    }
+    if trial.adjusting_fraction == 0.0 {
+        return Ok(if ratio == 0.0 {
+            TargetRatioEvaluation::ZeroBoundary
+        } else {
+            TargetRatioEvaluation::ZeroPhaseAtPositiveInput
+        });
+    }
+    let phase_ratio = trial.adjusting_fraction / trial.fixed_fraction;
+    if !phase_ratio.is_finite() || phase_ratio <= 0.0 {
+        return Err(ChemAppError::OtherError(
+            "target composition correction produced an invalid master-phase ratio".to_owned(),
+        ));
+    }
+    if ratio == 0.0 {
+        return Ok(TargetRatioEvaluation::PositiveSeed(phase_ratio));
+    }
+    let log_ratio = ratio.ln();
+    let log_phase_ratio = phase_ratio.ln();
+    let residual = target_ratio_residual(ratio, phase_ratio)?;
+    if !log_ratio.is_finite() || !log_phase_ratio.is_finite() {
+        return Err(ChemAppError::OtherError(
+            "target composition correction produced a non-finite logarithmic ratio".to_owned(),
+        ));
+    }
+    Ok(TargetRatioEvaluation::Positive(TargetRatioPoint {
+        log_ratio,
+        log_phase_ratio,
+        ratio,
+        phase_ratio,
+        residual,
+    }))
+}
+
+fn opposite_sign(left: f64, right: f64) -> bool {
+    left.is_sign_positive() != right.is_sign_positive()
+}
+
+fn bounded_log_step(origin: f64, proposal: f64, maximum: f64) -> f64 {
+    proposal.clamp(origin - maximum, origin + maximum)
+}
+
+fn find_narrowest_bracket(
+    points: &[TargetRatioPoint],
+) -> Option<(TargetRatioPoint, TargetRatioPoint)> {
+    let mut bracket: Option<(TargetRatioPoint, TargetRatioPoint)> = None;
+    for (offset, left) in points.iter().enumerate() {
+        for right in &points[offset + 1..] {
+            if opposite_sign(left.residual, right.residual) {
+                let candidate = if left.log_ratio <= right.log_ratio {
+                    (*left, *right)
+                } else {
+                    (*right, *left)
+                };
+                if bracket.is_none_or(|current| {
+                    candidate.1.log_ratio - candidate.0.log_ratio
+                        < current.1.log_ratio - current.0.log_ratio
+                }) {
+                    bracket = Some(candidate);
+                }
+            }
+        }
+    }
+    bracket
+}
+
+fn target_ratio_nonconvergence(
+    constraint: TargetRatioConstraint,
+    evaluations: usize,
+    best: Option<TargetRatioPoint>,
+) -> ChemAppError {
+    let detail = best.map_or_else(
+        || "best residual unavailable".to_owned(),
+        |point| {
+            format!(
+                "best residual={:.6e}, best incoming ratio={:.6e}, best phase ratio={:.6e}",
+                point.residual.abs(),
+                point.ratio,
+                point.phase_ratio
+            )
+        },
+    );
+    ChemAppError::OtherError(format!(
+        "calculate_target_t composition-ratio solve did not converge after {evaluations} equilibrium evaluations ({detail}; master phase={}, fixed component={}, adjusting component={})",
+        constraint.master_phase, constraint.fixed_component, constraint.adjusting_component
+    ))
+}
+
+/// Drives the expensive native target calculation through a pure, derivative-
+/// free scalar state machine. The evaluator owns the one-TQCE-per-trial rule.
+fn solve_target_composition_ratio<F>(
+    initial_ratio: f64,
+    constraint: TargetRatioConstraint,
+    settings: TargetRatioSettings,
+    mut evaluate: F,
+) -> Result<TargetRatioSolution, ChemAppError>
+where
+    F: FnMut(f64) -> Result<TargetRatioTrial, ChemAppError>,
+{
+    if !initial_ratio.is_finite() || initial_ratio < 0.0 {
+        return Err(ChemAppError::OtherError(
+            "calculate_target_t requires a finite, non-negative initial adjusting/fixed ratio"
+                .to_owned(),
+        ));
+    }
+    if settings.max_evaluations == 0
+        || !settings.residual_tolerance.is_finite()
+        || settings.residual_tolerance <= 0.0
+        || !settings.max_log_step.is_finite()
+        || settings.max_log_step <= 0.0
+    {
+        return Err(ChemAppError::OtherError(
+            "calculate_target_t received invalid private solver settings".to_owned(),
+        ));
+    }
+
+    let mut next_ratio = initial_ratio;
+    let mut points = Vec::new();
+    let mut best: Option<TargetRatioPoint> = None;
+    let mut bracketed = false;
+    let mut used_secant = false;
+    let mut exploration_step = TARGET_RATIO_MIN_EXPLORATION_STEP;
+
+    for evaluations in 1..=settings.max_evaluations {
+        let trial = evaluate(next_ratio)?;
+        let evaluation = target_ratio_point(next_ratio, trial).map_err(|error| {
+            ChemAppError::OtherError(format!(
+                "calculate_target_t could not construct residual at equilibrium evaluation {evaluations} (master phase={}, fixed component={}, adjusting component={}): {}",
+                constraint.master_phase,
+                constraint.fixed_component,
+                constraint.adjusting_component,
+                error.description()
+            ))
+        })?;
+        let point = match evaluation {
+            // Exact zero is a physical boundary, not an epsilon-substituted log value.
+            TargetRatioEvaluation::ZeroBoundary => {
+                return Ok(TargetRatioSolution {
+                    ratio: 0.0,
+                    phase_ratio: 0.0,
+                    residual: 0.0,
+                    evaluations,
+                    bracketed,
+                    used_secant,
+                });
+            }
+            TargetRatioEvaluation::PositiveSeed(phase_ratio) => {
+                next_ratio = phase_ratio;
+                continue;
+            }
+            // Positive incoming amount with zero phase fraction explicitly
+            // probes the exact zero boundary on the next expensive trial.
+            TargetRatioEvaluation::ZeroPhaseAtPositiveInput => {
+                next_ratio = 0.0;
+                continue;
+            }
+            TargetRatioEvaluation::Positive(point) => point,
+        };
+
+        if point.residual.abs() <= settings.residual_tolerance {
+            return Ok(TargetRatioSolution {
+                ratio: point.ratio,
+                phase_ratio: point.phase_ratio,
+                residual: point.residual,
+                evaluations,
+                bracketed,
+                used_secant,
+            });
+        }
+        if best.is_none_or(|current| point.residual.abs() < current.residual.abs()) {
+            best = Some(point);
+        }
+        points.push(point);
+
+        if let Some((left, right)) = find_narrowest_bracket(&points) {
+            bracketed = true;
+            let width = right.log_ratio - left.log_ratio;
+            let denominator = right.residual - left.residual;
+            let secant =
+                right.log_ratio - right.residual * (right.log_ratio - left.log_ratio) / denominator;
+            let guard = width * TARGET_RATIO_BRACKET_GUARD_FRACTION;
+            let next_log_ratio = if denominator.is_finite()
+                && denominator.abs() > TARGET_RATIO_SECANT_DENOMINATOR_TOLERANCE
+                && secant.is_finite()
+                && secant > left.log_ratio + guard
+                && secant < right.log_ratio - guard
+            {
+                used_secant = true;
+                secant
+            } else {
+                left.log_ratio + width * 0.5
+            };
+            next_ratio = next_log_ratio.exp();
+        } else {
+            let best_point = best.ok_or_else(|| {
+                ChemAppError::OtherError(
+                    "calculate_target_t solver lost its just-evaluated finite point".to_owned(),
+                )
+            })?;
+            let proposal = if points.len() == 1 {
+                // The native phase ratio is the physically meaningful first
+                // predictor, equivalent to one legacy Picard update.
+                best_point.log_phase_ratio
+            } else {
+                let previous = points[points.len() - 2];
+                let current = points[points.len() - 1];
+                let denominator = current.residual - previous.residual;
+                let secant = current.log_ratio
+                    - current.residual * (current.log_ratio - previous.log_ratio) / denominator;
+                if denominator.is_finite()
+                    && denominator.abs() > TARGET_RATIO_SECANT_DENOMINATOR_TOLERANCE
+                    && secant.is_finite()
+                {
+                    used_secant = true;
+                    secant
+                } else {
+                    best_point.log_phase_ratio
+                }
+            };
+            let mut next_log_ratio =
+                bounded_log_step(best_point.log_ratio, proposal, settings.max_log_step);
+            if !next_log_ratio.is_finite()
+                || points
+                    .iter()
+                    .any(|known| (known.log_ratio - next_log_ratio).abs() <= f64::EPSILON * 16.0)
+            {
+                let direction = if best_point.residual.is_sign_positive() {
+                    -1.0
+                } else {
+                    1.0
+                };
+                next_log_ratio =
+                    best_point.log_ratio + direction * exploration_step.min(settings.max_log_step);
+                exploration_step = (exploration_step * 2.0).min(settings.max_log_step);
+            }
+            next_ratio = next_log_ratio.exp();
+        }
+
+        if !next_ratio.is_finite() || next_ratio <= 0.0 {
+            return Err(ChemAppError::OtherError(format!(
+                "calculate_target_t produced an invalid next incoming ratio for master phase={}, fixed component={}, adjusting component={}",
+                constraint.master_phase, constraint.fixed_component, constraint.adjusting_component
+            )));
+        }
+    }
+
+    Err(target_ratio_nonconvergence(
+        constraint,
+        settings.max_evaluations,
+        best,
+    ))
 }
 
 /*******************************************************************************************************************************************************************************************************************************/
@@ -223,6 +614,18 @@ fn adjusted_target_amount(
 /// fn replace_engine(calculator: &mut Calculator, replacement: Engine) {
 ///     calculator.engine = replacement;
 /// }
+/// ```
+///
+/// ```compile_fail
+/// use chemapp_rs::Calculator;
+/// fn assert_send<T: Send>() {}
+/// assert_send::<Calculator>();
+/// ```
+///
+/// ```compile_fail
+/// use chemapp_rs::Calculator;
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<Calculator>();
 /// ```
 #[derive(Debug)]
 pub struct Calculator {
@@ -318,7 +721,18 @@ impl Calculator {
         })
     }
 
-    /// Initializes a ChemApp interface without a datafile
+    /// Initializes ChemApp without loading a thermodynamic data-file.
+    ///
+    /// This constructor supports version/interface/licensing queries and other
+    /// native operations whose ChemApp contract does not require a loaded
+    /// system. System-dependent high-level operations require
+    /// [`Calculator::from_library`] unless their own documentation explicitly
+    /// states otherwise.
+    ///
+    /// This is not a high-level reload workflow. Loading a data-file manually
+    /// through [`Calculator::engine`] does not update this Calculator's stored
+    /// data-file identity, composition transform, parameter cache, or other
+    /// system-local metadata. Construct a new loaded Calculator instead.
     pub fn from_library_unloaded(libname: &str) -> Result<Calculator, ChemAppError> {
         let engine = Engine::new(libname)?;
         engine.tqini()?;
@@ -621,6 +1035,63 @@ impl Calculator {
         )
     }
 
+    /// Evaluates one incoming-ratio trial with exactly one target TQCE call.
+    /// The fixed amount and every unrelated component remain unchanged; only
+    /// the adjusting component is replaced at the native-call boundary.
+    fn evaluate_target_t_trial(
+        &self,
+        base_composition: &DVector<f64>,
+        constraint: TargetRatioConstraint,
+        fixed_amount: f64,
+        ratio: f64,
+        interval: (f64, f64),
+    ) -> Result<TargetRatioTrial, ChemAppError> {
+        if !fixed_amount.is_finite() || fixed_amount <= 0.0 {
+            return Err(ChemAppError::OtherError(
+                "calculate_target_t requires a finite, positive incoming fixed-component amount"
+                    .to_owned(),
+            ));
+        }
+        if !ratio.is_finite() || ratio < 0.0 {
+            return Err(ChemAppError::OtherError(
+                "calculate_target_t trial requires a finite, non-negative incoming ratio"
+                    .to_owned(),
+            ));
+        }
+        let adjusting_amount = fixed_amount * ratio;
+        if !adjusting_amount.is_finite() {
+            return Err(ChemAppError::OtherError(
+                "calculate_target_t trial produced a non-finite adjusting-component amount"
+                    .to_owned(),
+            ));
+        }
+
+        let mut trial_composition = base_composition.clone();
+        trial_composition[constraint.adjusting_component - 1] = adjusting_amount;
+        for (offset, amount) in trial_composition.iter().copied().enumerate() {
+            if !amount.is_finite() {
+                return Err(ChemAppError::OtherError(format!(
+                    "calculate_target_t incoming amount for system component {} is not finite",
+                    offset + 1
+                )));
+            }
+            self.engine.tqsetc("IA", 0, offset + 1, amount)?;
+        }
+        self.engine.tqce("T", 0, 0, interval)?;
+        Ok(TargetRatioTrial {
+            fixed_fraction: self.engine.tqgetr(
+                "XP",
+                constraint.master_phase,
+                constraint.fixed_component,
+            )?,
+            adjusting_fraction: self.engine.tqgetr(
+                "XP",
+                constraint.master_phase,
+                constraint.adjusting_component,
+            )?,
+        })
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn calculate_target_t_(
         &self,
@@ -632,66 +1103,90 @@ impl Calculator {
         fixed: Option<usize>,
         adjusting: Option<usize>,
     ) -> Result<(), ChemAppError> {
-        validate_target_component_indices(x_i.len(), fixed, adjusting)?;
-        // set non-compositional conditions
-        let nitermax = 10usize;
+        let constraint = target_ratio_constraint(x_i.len(), masterphase, fixed, adjusting)?;
+        if target == 0 {
+            return Err(ChemAppError::OtherError(
+                "target phase index must be a positive one-based ChemApp index".to_owned(),
+            ));
+        }
+        let correction = match constraint {
+            Some(constraint) => {
+                if constraint.master_phase == 0 {
+                    return Err(ChemAppError::OtherError(
+                        "master phase index must be a positive one-based ChemApp index".to_owned(),
+                    ));
+                }
+                let fixed_amount = x_i[constraint.fixed_component - 1];
+                let adjusting_amount = x_i[constraint.adjusting_component - 1];
+                let ratio =
+                    initial_target_ratio(fixed_amount, adjusting_amount).map_err(|error| {
+                        ChemAppError::OtherError(format!(
+                            "{} (fixed component={}, adjusting component={})",
+                            error.description(),
+                            constraint.fixed_component,
+                            constraint.adjusting_component
+                        ))
+                    })?;
+                Some((constraint, fixed_amount, ratio))
+            }
+            None => None,
+        };
+        // Set non-compositional conditions once. Trial evaluation changes only IA.
         let val = if precipitation { -0.5 } else { 0.0 };
         self.engine.tqsetc("A", target, 0, val)?;
         self.set_clim(interval, true)?;
-        // set compositions
-        let mut xvar: DVector<f64> = x_i.clone();
-        //let mut xvarprev : DVector<f64> = xvar.clone();
-        let mut xvarprev: DVector<f64>;
-        match (fixed, adjusting) {
-            (Some(sidxf), Some(sidxa)) => {
-                for iter in 0..nitermax {
-                    for k in 0..xvar.len() {
-                        self.engine.tqsetc("IA", 0, k + 1, xvar[k])?;
-                    }
-                    //self.engine.tqshow()?;
-                    self.engine.tqce("T", 0, 0, interval)?;
-                    xvarprev = xvar.clone();
-                    let xfnew = self.engine.tqgetr("XP", masterphase, sidxf)?;
-                    let xanew = self.engine.tqgetr("XP", masterphase, sidxa)?;
-                    xvar[sidxa - 1] = adjusted_target_amount(xvar[sidxf - 1], xfnew, xanew)?;
-                    if iter > 0 {
-                        xvar = (&xvar + &xvarprev) * 0.5;
-                    }
-                    //println!("iter = {:?}, tliq = {:?}, xfold = {:?}, xaold = {:?}, xfnew = {:?}, xanew = {:?}, xvarprev = {:?}, xvar = {:?}", &iter, &tliq, &xfold, &xaold, &xfnew, &xanew, &xvarprev, &xvar);
-                    if (&xvar - &xvarprev).abs().sum() < 5e-3 {
-                        return Ok(());
-                    }
-                }
+        match correction {
+            Some((constraint, fixed_amount, initial_ratio)) => {
+                let solution = solve_target_composition_ratio(
+                    initial_ratio,
+                    constraint,
+                    TargetRatioSettings::default(),
+                    |ratio| {
+                        self.evaluate_target_t_trial(x_i, constraint, fixed_amount, ratio, interval)
+                    },
+                )?;
+                solution.confirm(TARGET_RATIO_RESIDUAL_TOLERANCE)?;
             }
-            (None, None) => {
-                for k in 0..xvar.len() {
-                    self.engine.tqsetc("IA", 0, k + 1, xvar[k])?;
+            None => {
+                for (offset, amount) in x_i.iter().copied().enumerate() {
+                    if !amount.is_finite() {
+                        return Err(ChemAppError::OtherError(format!(
+                            "calculate_target_t incoming amount for system component {} is not finite",
+                            offset + 1
+                        )));
+                    }
+                    self.engine.tqsetc("IA", 0, offset + 1, amount)?;
                 }
-                // perform calculation
-                //self.engine.tqshow()?;
                 self.engine.tqce("T", 0, 0, interval)?;
-            }
-            _ => {
-                return Err(ChemAppError::OtherError(
-                    "both fixed and adjusting system components must be defined, or neither"
-                        .to_owned(),
-                ))
             }
         }
         Ok(())
     }
+
     /// Performs a temperature-target calculation after checked basis conversion.
     ///
     /// This method does **not** call `TQREMC`: it inherits the current pressure,
     /// units, phase/constituent statuses, and other active native conditions.
     /// It sets the phase-amount target `A`, rewrites temperature target limits,
     /// writes incoming component amounts, and calls `TQCE` with temperature as
-    /// the target variable. `fixed` and `adjusting` are optional, distinct,
-    /// one-based system-component indices; supply both or neither.
+    /// the target variable. `target` is a positive one-based phase index;
+    /// `masterphase` is likewise required when composition correction is used.
+    /// `fixed` and `adjusting` are optional, distinct,
+    /// one-based system-component indices; supply both or neither. Supplying
+    /// neither performs exactly one native target equilibrium.
+    ///
+    /// When both are supplied, the fixed incoming amount and all unrelated
+    /// amounts remain constant while only the adjusting amount is changed. A
+    /// safeguarded scalar solve in logarithmic ratio space requires the incoming
+    /// ratio `IA_adjusting / IA_fixed` to agree with the resulting master-phase
+    /// ratio `XP_adjusting / XP_fixed`. Exact zero-ratio boundaries are handled
+    /// without inventing an epsilon. Exhausting the equilibrium-evaluation
+    /// budget is an explicit non-convergence error, never success.
     ///
     /// On success, the target equilibrium and the conditions just described
-    /// remain live. On failure, ChemApp may retain any conditions written before
-    /// the failing call; this method does not attempt a hidden rollback.
+    /// remain live. On failure, ChemApp may retain the last trial and any
+    /// conditions written before the failing call; this method does not attempt
+    /// a hidden rollback. Native trial errors propagate immediately.
     #[allow(clippy::too_many_arguments)]
     pub fn calculate_target_t<D: Dim, S: Storage<f64, D>>(
         &self,
@@ -934,6 +1429,36 @@ mod tests {
     use super::*;
     use nalgebra::DVector;
 
+    fn test_constraint() -> TargetRatioConstraint {
+        TargetRatioConstraint {
+            master_phase: 1,
+            fixed_component: 1,
+            adjusting_component: 2,
+        }
+    }
+
+    fn test_settings(max_evaluations: usize) -> TargetRatioSettings {
+        TargetRatioSettings {
+            max_evaluations,
+            ..TargetRatioSettings::default()
+        }
+    }
+
+    fn trial_for_phase_ratio(phase_ratio: f64) -> TargetRatioTrial {
+        if phase_ratio == 0.0 {
+            TargetRatioTrial {
+                fixed_fraction: 1.0,
+                adjusting_fraction: 0.0,
+            }
+        } else {
+            let fixed_fraction = 1.0 / (1.0 + phase_ratio);
+            TargetRatioTrial {
+                fixed_fraction,
+                adjusting_fraction: phase_ratio * fixed_fraction,
+            }
+        }
+    }
+
     #[test]
     fn transform_boundary_rejects_unspanned_basis_without_unwinding() {
         assert!(build_transform(&["Al", "O"], &["Al2O3"]).is_err());
@@ -950,8 +1475,15 @@ mod tests {
 
     #[test]
     fn target_component_indices_are_one_based_bounded_and_paired() {
-        assert!(validate_target_component_indices(3, None, None).is_ok());
-        assert!(validate_target_component_indices(3, Some(1), Some(2)).is_ok());
+        assert!(target_ratio_constraint(3, 1, None, None).unwrap().is_none());
+        assert_eq!(
+            target_ratio_constraint(3, 4, Some(1), Some(2)).unwrap(),
+            Some(TargetRatioConstraint {
+                master_phase: 4,
+                fixed_component: 1,
+                adjusting_component: 2,
+            })
+        );
         for invalid in [
             (Some(0), Some(1)),
             (Some(1), Some(0)),
@@ -961,17 +1493,224 @@ mod tests {
             (None, Some(1)),
             (Some(2), Some(2)),
         ] {
-            assert!(validate_target_component_indices(3, invalid.0, invalid.1).is_err());
+            assert!(target_ratio_constraint(3, 1, invalid.0, invalid.1).is_err());
         }
     }
 
     #[test]
-    fn target_amount_correction_rejects_zero_and_non_finite_values() {
-        assert_eq!(adjusted_target_amount(2.0, 0.5, 0.25).unwrap(), 1.0);
-        assert!(adjusted_target_amount(2.0, 0.0, 0.25).is_err());
-        assert!(adjusted_target_amount(f64::NAN, 0.5, 0.25).is_err());
-        assert!(adjusted_target_amount(2.0, f64::INFINITY, 0.25).is_err());
-        assert!(adjusted_target_amount(2.0, 0.5, f64::NEG_INFINITY).is_err());
+    fn target_ratio_residual_has_scale_independent_sign() {
+        for ratio in [1.0_f64, 1.0e-2, 1.0e-8] {
+            assert!(target_ratio_residual(ratio, ratio).unwrap().abs() < 1.0e-14);
+            assert!(target_ratio_residual(ratio * 2.0, ratio).unwrap() > 0.0);
+            assert!(target_ratio_residual(ratio * 0.5, ratio).unwrap() < 0.0);
+        }
+        assert!(target_ratio_residual(0.0, 1.0).is_err());
+        assert!(target_ratio_residual(1.0, 0.0).is_err());
+        assert!(target_ratio_residual(f64::NAN, 1.0).is_err());
+    }
+
+    #[test]
+    fn initial_target_ratio_enforces_the_physical_amount_boundary() {
+        assert_eq!(initial_target_ratio(2.0, 0.0).unwrap(), 0.0);
+        assert_eq!(initial_target_ratio(2.0, 1.0).unwrap(), 0.5);
+        for fixed in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(initial_target_ratio(fixed, 1.0).is_err());
+        }
+        for adjusting in [-1.0, f64::NAN, f64::INFINITY] {
+            assert!(initial_target_ratio(1.0, adjusting).is_err());
+        }
+    }
+
+    #[test]
+    fn target_ratio_solver_accepts_an_already_converged_initial_state() {
+        let solution =
+            solve_target_composition_ratio(0.25, test_constraint(), test_settings(4), |ratio| {
+                Ok(trial_for_phase_ratio(ratio))
+            })
+            .unwrap();
+        assert_eq!(solution.evaluations, 1);
+        assert_eq!(solution.ratio, 0.25);
+        assert!(solution.residual.abs() <= TARGET_RATIO_RESIDUAL_TOLERANCE);
+    }
+
+    #[test]
+    fn target_ratio_solver_converges_for_an_ordinary_contraction() {
+        let root = 0.2_f64.ln();
+        let solution =
+            solve_target_composition_ratio(2.0, test_constraint(), test_settings(12), |ratio| {
+                let y = ratio.ln();
+                Ok(trial_for_phase_ratio((root + 0.5 * (y - root)).exp()))
+            })
+            .unwrap();
+        assert!((solution.ratio.ln() - root).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn root_solver_converges_when_the_old_picard_iteration_diverges() {
+        let root = 0.03_f64.ln();
+        let mapping = |y: f64| root - 2.0 * (y - root);
+        let mut old_picard = 0.8_f64.ln();
+        for _ in 0..4 {
+            old_picard = mapping(old_picard);
+        }
+        assert!((old_picard - root).abs() > 1.0);
+
+        let solution =
+            solve_target_composition_ratio(0.8, test_constraint(), test_settings(16), |ratio| {
+                Ok(trial_for_phase_ratio(mapping(ratio.ln()).exp()))
+            })
+            .unwrap();
+        assert!((solution.ratio.ln() - root).abs() < 1.0e-6);
+        assert!(solution.used_secant);
+    }
+
+    #[test]
+    fn target_ratio_solver_uses_secant_acceleration() {
+        let root = 3.0_f64.ln();
+        let solution =
+            solve_target_composition_ratio(0.1, test_constraint(), test_settings(12), |ratio| {
+                let y = ratio.ln();
+                Ok(trial_for_phase_ratio((root + 0.8 * (y - root)).exp()))
+            })
+            .unwrap();
+        assert!(solution.used_secant);
+        assert!(solution.evaluations < 12);
+    }
+
+    #[test]
+    fn target_ratio_solver_preserves_a_sign_bracket() {
+        let solution =
+            solve_target_composition_ratio(4.0, test_constraint(), test_settings(20), |ratio| {
+                let y = ratio.ln();
+                Ok(trial_for_phase_ratio((-0.5 * y).exp()))
+            })
+            .unwrap();
+        assert!(solution.bracketed);
+        assert!(solution.residual.abs() <= TARGET_RATIO_RESIDUAL_TOLERANCE);
+    }
+
+    #[test]
+    fn target_ratio_solver_handles_trace_scale_ratios() {
+        let root = 1.0e-8_f64.ln();
+        let solution =
+            solve_target_composition_ratio(1.0e-2, test_constraint(), test_settings(16), |ratio| {
+                let y = ratio.ln();
+                Ok(trial_for_phase_ratio((root + 0.25 * (y - root)).exp()))
+            })
+            .unwrap();
+        assert!((solution.ratio.ln() - root).abs() <= TARGET_RATIO_RESIDUAL_TOLERANCE);
+    }
+
+    #[test]
+    fn target_ratio_solver_handles_zero_boundaries_without_log_zero() {
+        let exact =
+            solve_target_composition_ratio(0.0, test_constraint(), test_settings(4), |_| {
+                Ok(trial_for_phase_ratio(0.0))
+            })
+            .unwrap();
+        assert_eq!(exact.ratio, 0.0);
+        assert_eq!(exact.phase_ratio, 0.0);
+
+        let seeded =
+            solve_target_composition_ratio(0.0, test_constraint(), test_settings(4), |ratio| {
+                Ok(trial_for_phase_ratio(if ratio == 0.0 {
+                    0.25
+                } else {
+                    ratio
+                }))
+            })
+            .unwrap();
+        assert_eq!(seeded.ratio, 0.25);
+
+        let boundary =
+            solve_target_composition_ratio(0.5, test_constraint(), test_settings(4), |_| {
+                Ok(trial_for_phase_ratio(0.0))
+            })
+            .unwrap();
+        assert_eq!(boundary.ratio, 0.0);
+    }
+
+    #[test]
+    fn target_ratio_solver_rejects_invalid_phase_fractions() {
+        for trial in [
+            TargetRatioTrial {
+                fixed_fraction: 0.0,
+                adjusting_fraction: 0.1,
+            },
+            TargetRatioTrial {
+                fixed_fraction: f64::NAN,
+                adjusting_fraction: 0.1,
+            },
+            TargetRatioTrial {
+                fixed_fraction: 0.5,
+                adjusting_fraction: f64::INFINITY,
+            },
+        ] {
+            assert!(solve_target_composition_ratio(
+                0.2,
+                test_constraint(),
+                test_settings(2),
+                |_| Ok(trial),
+            )
+            .is_err());
+        }
+    }
+
+    #[test]
+    fn degenerate_secant_denominator_is_safely_bounded() {
+        let error =
+            solve_target_composition_ratio(1.0, test_constraint(), test_settings(6), |ratio| {
+                Ok(trial_for_phase_ratio((ratio.ln() + 1.0).exp()))
+            })
+            .unwrap_err();
+        assert!(error.description().contains("6 equilibrium evaluations"));
+    }
+
+    #[test]
+    fn unbracketed_log_steps_respect_the_private_factor_limit() {
+        let ratios = RefCell::new(Vec::new());
+        let _ = solve_target_composition_ratio(1.0, test_constraint(), test_settings(2), |ratio| {
+            ratios.borrow_mut().push(ratio);
+            Ok(trial_for_phase_ratio(1.0e100))
+        });
+        let ratios = ratios.into_inner();
+        assert_eq!(ratios.len(), 2);
+        assert!(
+            (ratios[1].ln() - ratios[0].ln()).abs() <= TARGET_RATIO_MAX_LOG_STEP + f64::EPSILON
+        );
+    }
+
+    #[test]
+    fn evaluation_budget_exhaustion_returns_contextual_error() {
+        let error =
+            solve_target_composition_ratio(1.0, test_constraint(), test_settings(3), |ratio| {
+                Ok(trial_for_phase_ratio(ratio * 2.0))
+            })
+            .unwrap_err();
+        let description = error.description();
+        assert!(description.contains("did not converge"));
+        assert!(description.contains("3 equilibrium evaluations"));
+        assert!(description.contains("master phase=1"));
+        assert!(description.contains("fixed component=1"));
+        assert!(description.contains("adjusting component=2"));
+    }
+
+    #[test]
+    fn nonconvergence_can_never_construct_a_success_value() {
+        let result =
+            solve_target_composition_ratio(1.0, test_constraint(), test_settings(1), |ratio| {
+                Ok(trial_for_phase_ratio(ratio * 2.0))
+            });
+        assert!(matches!(result, Err(ChemAppError::OtherError(_))));
+    }
+
+    #[test]
+    fn native_trial_errors_propagate_without_numerical_backtracking() {
+        let result =
+            solve_target_composition_ratio(1.0, test_constraint(), test_settings(8), |_| {
+                Err(ChemAppError::NativeError(707))
+            });
+        assert!(matches!(result, Err(ChemAppError::NativeError(707))));
     }
 
     #[test]

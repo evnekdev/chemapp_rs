@@ -73,6 +73,13 @@ identity `Transform` construction → `Calculator`. `from_library_unloaded`
 propagates `Engine::new` and `TQINI` failures and retains the default transform
 only because no loaded component basis exists yet.
 
+The unloaded constructor is intentionally public for interface/version,
+licensing, and other operations whose native contract does not require a
+thermodynamic system. It is not a reload path: a raw data-file read through
+`engine()` cannot update the Calculator's data-file identity, transform,
+parameter cache, or system-local high-level metadata. Loaded high-level work
+requires constructing a new Calculator with `from_library`.
+
 Recoverable constructor failures, including an unavailable library, now return
 `ChemAppError`; focused tests cover both constructor paths without a native
 runtime.
@@ -127,22 +134,40 @@ limits, and incoming system-component amounts before calling temperature-
 target `TQCE`; success leaves that target state live, while failure performs no
 hidden rollback. Optional fixed/adjusting selectors must be supplied together
 as distinct one-based indices within the transformed composition. The Rust
-correction step rejects non-finite values and an exactly zero denominator
-instead of propagating NaN/infinity.
+correction now solves `IA_a / IA_f = XP_a / XP_f` in logarithmic ratio space.
+The native phase ratio is the first predictor; bounded secant exploration is
+used before a sign bracket, followed by a safeguarded bracketed secant/
+bisection hybrid. Success tests the physical log-ratio residual, exact zero is
+handled separately, and native/non-finite failures propagate. The 32-equilibrium
+budget now produces explicit non-convergence instead of the former false
+success. See [target-calculations.md](target-calculations.md).
 
-One `Engine` is structurally `!Sync`: methods taking `&self` still mutate one
-native ChemApp state and cannot run concurrently. Ownership remains movable
-for sequential transfer. Parallel calculations require independently loaded
-library instances/copies supported by the installation; this is not a claim
-that every ChemApp build or licence permits arbitrary repeated loading.
+The scalar driver has native-independent tests for residual signs across major
+and trace scales, converged and contractive mappings, a divergent legacy Picard
+mapping, secant and bracket safeguards, bounded log steps, exact zero, invalid
+fractions, native-error propagation, degenerate secants, and explicit budget
+failure. The checked Win64 `maindemo` continues to exercise ChemApp's native
+target calculation, but the repository has no scientifically defined
+fixed/adjusting high-level case; no artificial database-specific case was
+invented for this release.
+
+One `Engine` is structurally `!Send + !Sync`: methods taking `&self` still
+mutate one native ChemApp state, and no checked source provides a positive
+thread-migration contract. Parallel calculations require a build/licence-
+supported isolation strategy; repeated loading of one path does not prove
+independent native state.
 
 ### 7. Same-`Engine` concurrency semantics — encoded for 1.0
 
-ChemApp is stateful. A private zero-sized `Cell` marker makes `Engine` and its
-high-level owners `!Sync`, and a compile-fail rustdoc guards that invariant.
-`Engine` remains `Send`, allowing sequential ownership transfer. This does not
-establish native thread affinity or parallel safety: concurrent calculations
-require independent supported library instances/copies.
+ChemApp is stateful. A private zero-sized `PhantomData<Rc<()>>` marker makes
+`Engine` and its high-level owners `!Send + !Sync`; compile-fail rustdocs guard
+both invariants. The official manual, checked C interface/example sources, and
+repository runtime evidence contain no positive statement permitting one
+initialized state to move between OS threads. GTT's [public parallel-processing
+guidance](https://gtt-technologies.de/2024/01/chemapp-for-python-speeding-up-calculations-by-parallel-processing/)
+describes ChemApp as single-threaded and uses independent processes,
+which supports the conservative 1.0 contract but is not itself a complete ABI
+thread-affinity specification.
 
 ### 8. Integer/string ABI verification — audited, platform limits retained
 

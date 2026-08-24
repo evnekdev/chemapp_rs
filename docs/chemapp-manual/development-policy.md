@@ -96,12 +96,14 @@ ChemApp maintains internal mutable state inside the loaded native library.
 
 Even if an FFI method takes `&self`, callers must not infer that native operations are logically immutable or safe to execute concurrently on the same engine instance.
 
-`Engine` is deliberately `!Sync`, enforced by a private zero-sized marker and a
-compile-fail test. It remains `Send` for sequential ownership transfer; this is
-not permission to call one native state concurrently. Parallel calculations
-should use independent ChemApp library instances/copies only where the build
-and licence support doing so. Do not add an internal mutex that misleadingly
-suggests global native reentrancy.
+`Engine` is deliberately `!Send + !Sync`, enforced by a private zero-sized
+marker and compile-fail tests. The checked manual, examples, and interface
+sources provide no positive contract for moving one initialized ChemApp state
+between OS threads. The fact that a dynamic-library handle is movable does not
+establish that its native global state is. Parallel calculations require an
+isolation strategy supported by the particular ChemApp build and licence;
+loading the same DLL path twice is not by itself evidence of independent state.
+Do not add an internal mutex that misleadingly suggests native reentrancy.
 
 A `Calculator` owns one coherent loaded system. Its Engine storage is not a
 public replaceable field; `engine()` permits deliberate low-level calls without
@@ -191,6 +193,11 @@ For each nontrivial `Calculator` operation, documentation should make it possibl
 - what engine state is left behind.
 
 This is particularly important for iterative target calculations implemented partly in Rust.
+
+An iterative numerical helper must never report success merely because its
+iteration or native-evaluation budget was exhausted. Success requires an
+explicitly satisfied convergence criterion. A helper without an outer
+iteration may instead succeed when its required native operation succeeds.
 
 ## 16. Native conformance examples are tests of the binding layer
 
