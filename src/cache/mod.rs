@@ -189,40 +189,54 @@ pub struct CachedInteractionParameter {
     pub mutation: InteractionMutationSupport,
 }
 
-#[derive(Clone, Debug)]
-/// Captured standard-state baseline for one solution-phase endmember.
+#[derive(Clone, Debug, PartialEq)]
+/// Read-only cached standard-state baselines for one solution-phase endmember.
 ///
-/// Fields remain private because endmember mutation is an implementation
-/// detail of cache reset, not a stable public addressing interface.
-struct EndmemberParameter {
-    phase_index: usize,
-    constituent_index: usize,
-    phase_name: String,
-    name: String,
-    h298: f64,
-    s298: f64,
+/// Native indices and names describe the Calculator/system that captured the
+/// cache. They are suitable for owned discovery snapshots, but are not
+/// persistent identity across different loaded datafiles. Parameter mutation
+/// remains available only through Calculator-owned checked setters.
+pub struct CachedEndmemberParameter {
+    /// One-based native phase index.
+    pub phase_index: usize,
+    /// One-based native constituent index within the phase.
+    pub constituent_index: usize,
+    /// Exact native phase name.
+    pub phase_name: String,
+    /// Exact native constituent name.
+    pub constituent_name: String,
+    /// Captured H298 baseline.
+    pub h298: f64,
+    /// Captured S298 baseline.
+    pub s298: f64,
 }
 
-impl EndmemberParameter {
+impl CachedEndmemberParameter {
     fn reset(&self, engine: &Engine) -> Result<(), ChemAppError> {
         engine.tqcdat(1, 0, 0, self.constituent_index, self.phase_index, self.h298)?;
         engine.tqcdat(1, 0, 1, self.constituent_index, self.phase_index, self.s298)
     }
 }
 
-#[derive(Clone, Debug)]
-/// Captured standard-state baseline for one stoichiometric compound phase.
+#[derive(Clone, Debug, PartialEq)]
+/// Read-only cached standard-state baselines for one stoichiometric compound.
 ///
-/// Fields remain private because compound mutation is an implementation
-/// detail of cache reset, not a stable public addressing interface.
-struct CompoundParameter {
-    phase_index: usize,
-    phase_name: String,
-    h298: f64,
-    s298: f64,
+/// The one-based native phase index and exact name are Calculator/system-local
+/// discovery facts, not persistent identity across different datafiles.
+/// Parameter mutation remains available only through Calculator-owned checked
+/// setters.
+pub struct CachedCompoundParameter {
+    /// One-based native phase index.
+    pub phase_index: usize,
+    /// Exact native phase name.
+    pub phase_name: String,
+    /// Captured H298 baseline.
+    pub h298: f64,
+    /// Captured S298 baseline.
+    pub s298: f64,
 }
 
-impl CompoundParameter {
+impl CachedCompoundParameter {
     fn reset(&self, engine: &Engine) -> Result<(), ChemAppError> {
         engine.tqcdat(1, 0, 0, 1, self.phase_index, self.h298)?;
         engine.tqcdat(1, 0, 1, 1, self.phase_index, self.s298)
@@ -241,8 +255,8 @@ pub struct ParameterCache {
     interaction_parameters: Vec<CachedInteractionParameter>,
     endmember_lookup: HashMap<(String, String), usize>,
     compound_lookup: HashMap<String, usize>,
-    endmembers: Vec<EndmemberParameter>,
-    compounds: Vec<CompoundParameter>,
+    endmembers: Vec<CachedEndmemberParameter>,
+    compounds: Vec<CachedCompoundParameter>,
 }
 
 fn cache_interaction(interaction: Interaction) -> Vec<CachedInteractionParameter> {
@@ -336,7 +350,12 @@ impl ParameterCache {
         let endmember_lookup = endmembers
             .iter()
             .enumerate()
-            .map(|(offset, value)| ((value.phase_name.clone(), value.name.clone()), offset))
+            .map(|(offset, value)| {
+                (
+                    (value.phase_name.clone(), value.constituent_name.clone()),
+                    offset,
+                )
+            })
             .collect();
         let compound_lookup = compounds
             .iter()
@@ -356,6 +375,16 @@ impl ParameterCache {
     /// Complete cached TQGPAR surface, including read-only cells.
     pub fn interaction_parameters(&self) -> &[CachedInteractionParameter] {
         &self.interaction_parameters
+    }
+
+    /// Complete cached solution-endmember standard-state baselines.
+    pub fn endmember_parameters(&self) -> &[CachedEndmemberParameter] {
+        &self.endmembers
+    }
+
+    /// Complete cached stoichiometric-compound standard-state baselines.
+    pub fn compound_parameters(&self) -> &[CachedCompoundParameter] {
+        &self.compounds
     }
 
     /// Look up one mutable cell by its exact native structural address.
@@ -558,7 +587,7 @@ impl ParameterCache {
     fn load_compound(
         calculator: &Calculator,
         phase_name: &str,
-    ) -> Result<CompoundParameter, ChemAppError> {
+    ) -> Result<CachedCompoundParameter, ChemAppError> {
         let phase_index = calculator.engine().tqinp(phase_name)?;
         let h298 = first_tqgdat_value(
             calculator.engine().tqgdat(phase_index, 1, "H", 0)?,
@@ -572,7 +601,7 @@ impl ParameterCache {
             1,
             "S",
         )?;
-        Ok(CompoundParameter {
+        Ok(CachedCompoundParameter {
             phase_index,
             phase_name: phase_name.to_owned(),
             h298,
@@ -584,7 +613,7 @@ impl ParameterCache {
     fn load_endmembers(
         calculator: &Calculator,
         phase_name: &str,
-    ) -> Result<Vec<EndmemberParameter>, ChemAppError> {
+    ) -> Result<Vec<CachedEndmemberParameter>, ChemAppError> {
         let phase_index = calculator.engine().tqinp(phase_name)?;
         (1..=calculator.engine().tqnopc(phase_index)?)
             .map(|constituent_index| {
@@ -604,11 +633,11 @@ impl ParameterCache {
                     constituent_index,
                     "S",
                 )?;
-                Ok(EndmemberParameter {
+                Ok(CachedEndmemberParameter {
                     phase_index,
                     constituent_index,
                     phase_name: phase_name.to_owned(),
-                    name: calculator.engine().tqgnpc(phase_index, constituent_index)?,
+                    constituent_name: calculator.engine().tqgnpc(phase_index, constituent_index)?,
                     h298,
                     s298,
                 })
@@ -852,5 +881,34 @@ mod tests {
             .collect::<std::collections::HashSet<_>>();
         assert_eq!(reset_plan.len(), 6);
         assert_eq!(unique.len(), reset_plan.len());
+    }
+
+    #[test]
+    fn standard_state_cache_records_are_available_for_owned_discovery() {
+        let endmember = CachedEndmemberParameter {
+            phase_index: 2,
+            constituent_index: 3,
+            phase_name: "solution".to_owned(),
+            constituent_name: "CaO".to_owned(),
+            h298: -635_090.0,
+            s298: 38.1,
+        };
+        let compound = CachedCompoundParameter {
+            phase_index: 4,
+            phase_name: "Ca2SiO4".to_owned(),
+            h298: -2_307_000.0,
+            s298: 127.6,
+        };
+        let cache = ParameterCache {
+            interaction_lookup: HashMap::new(),
+            interaction_parameters: Vec::new(),
+            endmember_lookup: HashMap::new(),
+            compound_lookup: HashMap::new(),
+            endmembers: vec![endmember.clone()],
+            compounds: vec![compound.clone()],
+        };
+
+        assert_eq!(cache.endmember_parameters(), [endmember]);
+        assert_eq!(cache.compound_parameters(), [compound]);
     }
 }
