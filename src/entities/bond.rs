@@ -6,7 +6,7 @@ use crate::entities::species::{Species, SpeciesRef};
 use crate::error::ChemAppError;
 use crate::snapshot::BondSnapshot;
 
-/// TQBOND is model-dependent: QUAS/QSOL return pairs and SUBG returns
+/// TQBOND is model-dependent: QUAS/QSOL return pairs and SUBG/SUBQ return
 /// quadruplets. A pair is never represented by fake third/fourth members.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum BondKind {
@@ -17,7 +17,7 @@ pub enum BondKind {
         /// One-based second constituent index, not less than `constituent_a`.
         constituent_b: usize,
     },
-    /// A canonical SUBG quadruplet with two species from each sublattice.
+    /// A canonical SUBG/SUBQ quadruplet with two species from each sublattice.
     Quadruplet {
         /// First member on sublattice one.
         species_a: SpeciesRef,
@@ -31,7 +31,7 @@ pub enum BondKind {
 }
 
 /// A live high-level TQBOND entity representing either one QUAS/QSOL pair
-/// fraction or one SUBG quadruplet fraction.
+/// fraction or one SUBG/SUBQ quadruplet fraction.
 pub struct Bond<'a> {
     pub(crate) calculator: &'a Calculator,
     pub(crate) indexp: usize,
@@ -57,7 +57,7 @@ impl<'a> Bond<'a> {
         }
     }
 
-    /// Creates a canonical SUBG quadruplet from local indices on each sublattice.
+    /// Creates a canonical SUBG/SUBQ quadruplet from local indices on each sublattice.
     pub fn new_quadruplet(
         calculator: &'a Calculator,
         indexp: usize,
@@ -134,7 +134,9 @@ impl<'a> Bond<'a> {
                 species_c,
                 species_d,
             } => {
-                if model != "SUBG" || self.calculator.engine().tqnosl(self.indexp)? != 2 {
+                if !matches!(model.as_str(), "SUBG" | "SUBQ")
+                    || self.calculator.engine().tqnosl(self.indexp)? != 2
+                {
                     return Ok(false);
                 }
                 let first_count = self.calculator.engine().tqnolc(self.indexp, 1)?;
@@ -229,8 +231,8 @@ impl<'a> Bond<'a> {
                     self.indexp,
                     species_a.local_index,
                     species_b.local_index,
-                    subg_native_index(first_count, species_c)?,
-                    subg_native_index(first_count, species_d)?,
+                    quadruplet_native_index(first_count, species_c)?,
+                    quadruplet_native_index(first_count, species_d)?,
                 )
             }
         }
@@ -249,18 +251,20 @@ pub(crate) fn canonical_pair(a: usize, b: usize) -> (usize, usize) {
     }
 }
 
-pub(crate) fn subg_native_index(
+/// Converts a local second-sublattice identity to the combined native index.
+/// SUBG and runtime-verified SUBQ share this encoding; overflow is an error.
+pub(crate) fn quadruplet_native_index(
     first_sublattice_count: usize,
     species: SpeciesRef,
 ) -> Result<usize, ChemAppError> {
     if species.sublattice != 2 || species.local_index == 0 {
         return Err(ChemAppError::OtherError(
-            "SUBG offset conversion requires a positive second-sublattice identity".to_owned(),
+            "SUBG/SUBQ offset conversion requires a positive second-sublattice identity".to_owned(),
         ));
     }
     first_sublattice_count
         .checked_add(species.local_index)
-        .ok_or_else(|| ChemAppError::OtherError("SUBG native index overflow".to_owned()))
+        .ok_or_else(|| ChemAppError::OtherError("SUBG/SUBQ native index overflow".to_owned()))
 }
 
 #[cfg(test)]
@@ -274,9 +278,9 @@ mod tests {
     }
 
     #[test]
-    fn subg_second_sublattice_uses_first_count_offset() {
+    fn quadruplet_second_sublattice_uses_first_count_offset() {
         assert_eq!(
-            subg_native_index(
+            quadruplet_native_index(
                 4,
                 SpeciesRef {
                     sublattice: 2,

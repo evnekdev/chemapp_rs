@@ -176,9 +176,9 @@ must create an owned snapshot before the next native call. Use
 `SnapshotOptions::stable_only()` only when deliberately retaining phases with
 `AC > 0.9999`; do not substitute phase amount for that project-level rule.
 
-TQBOND requires model dispatch before enumeration: `SUBG` is a quadruplet,
+TQBOND requires model dispatch before enumeration: `SUBG`/`SUBQ` are quadruplets,
 `QUAS`/`QSOL` are pairs, and other models are not applicable. Keep local
-sublattice identity separate from SUBG's combined native index encoding.
+sublattice identity separate from the combined native index encoding.
 
 ## 15. Keep high-level stream ownership singular
 

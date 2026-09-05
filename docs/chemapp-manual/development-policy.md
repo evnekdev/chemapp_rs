@@ -240,9 +240,9 @@ stable filter is exactly `AC > 0.9999` and must be evaluated before deep phase
 snapshot work.
 
 Never model TQBOND as an unconditional four-member record. Dispatch by TQMODL:
-SUBG is a sublattice quadruplet, QUAS/QSOL are phase-constituent pairs, and
+SUBG/SUBQ are sublattice quadruplets, QUAS/QSOL are phase-constituent pairs, and
 other models expose no TQBOND entity. Preserve local sublattice identity and
-apply SUBG's combined second-sublattice offset only at the native boundary.
+apply their combined second-sublattice offset only at the native boundary.
 
 ## 20. Do not infer sublattice species from model spelling
 

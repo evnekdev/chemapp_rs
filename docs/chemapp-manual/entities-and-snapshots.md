@@ -35,15 +35,24 @@ filter was requested so omitted phases are not ambiguous.
 ## TQBOND is model-dependent
 
 TQBOND is a model-dependent result interface, not a universal quadruplet
-interface. The semantic rules below follow the official
+interface. The legacy semantic rules follow the official
 [ChemApp Programmer's Manual, TQBOND §5.13](https://gtt-technologies.de/ca-doc/index.html):
 
 | TQMODL base code | High-level result | Identity supplied to TQBOND |
 | --- | --- | --- |
 | `SUBG` | quadruplet fraction | four sublattice-constituent indices |
+| `SUBQ` | quadruplet fraction (7.1.4 runtime verified) | same combined sublattice indices as SUBG |
 | `QUAS` | pair fraction | two phase-constituent indices |
 | `QSOL` | pair fraction | two phase-constituent indices |
 | every other model | not applicable | no `Bond` entities |
+
+The legacy online section lists SUBG, QUAS and QSOL but omits SUBQ. Licensed
+ChemApp 7.1.4 Windows x64 tests on EN22 Slag-liq#1 establish SUBQ support: 54
+CaO/SiO2/Al2O3 states at 1600/1800 K, 1512 successful raw quadruplet queries,
+and each complete 28-row fraction table sums to one within 2.3e-16. The
+source/runtime species ordering agrees. See [runtime evidence](conformance.md#subq-bond-runtime-evidence).
+This extends high-level dispatch without changing the raw ABI. Earlier native
+builds may still report errors; no minimum-version guarantee is inferred.
 
 The public name `Bond` is retained, but it means one high-level TQBOND pair or
 quadruplet result. `BondKind` makes that distinction explicit; pairs never
@@ -59,7 +68,7 @@ slots. The checked manual section does not prescribe a distinct mandatory
 dummy value for those unused arguments; the zeroes are neutral adapter
 placeholders and are not exposed as member identity.
 
-For `SUBG`, high-level member identity remains
+For `SUBG` and `SUBQ`, high-level member identity remains
 `SpeciesRef { sublattice, local_index }`. Two canonical members belong to
 sublattice 1 and two to sublattice 2. Within each sublattice, member order is
 canonicalized and combinations with replacement are enumerated once. No
@@ -71,7 +80,7 @@ number of constituents in sublattice 1 + local index in sublattice 2
 ```
 
 `Phase::bonds()` queries TQMODL before constructing the iterator. Unsupported
-models produce an empty iterator without speculative TQBOND calls. A SUBG
+models produce an empty iterator without speculative TQBOND calls. A SUBG/SUBQ
 phase must expose exactly the two sublattices required by the documented
 quadruplet encoding; an inconsistent model structure is reported as an error.
 

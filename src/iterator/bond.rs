@@ -1,8 +1,11 @@
+//! Canonical pair/quadruplet enumeration, including runtime-verified SUBQ.
+
 use crate::calculator::Calculator;
 use crate::entities::bond::{normalized_model, Bond, BondKind};
 use crate::entities::species::SpeciesRef;
 use crate::error::ChemAppError;
 
+/// Identity family selected before querying model-specific native dimensions.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum BondIterationMode {
     Pair,
@@ -26,7 +29,7 @@ impl<'a> BondIterator<'a> {
             BondIterationMode::Quadruplet => {
                 if calculator.engine().tqnosl(indexp)? != 2 {
                     return Err(ChemAppError::OtherError(
-                        "SUBG TQBOND enumeration requires exactly two sublattices".to_owned(),
+                        "SUBG/SUBQ TQBOND enumeration requires exactly two sublattices".to_owned(),
                     ));
                 }
                 quadruplet_identities(
@@ -56,9 +59,11 @@ impl<'a> Iterator for BondIterator<'a> {
     }
 }
 
+/// SUBQ uses the SUBG selector convention in licensed ChemApp 7.1.4 evidence.
+/// Older native builds remain responsible for reporting unsupported queries.
 pub(crate) fn bond_iteration_mode(model: &str) -> BondIterationMode {
     match normalized_model(model).as_str() {
-        "SUBG" => BondIterationMode::Quadruplet,
+        "SUBG" | "SUBQ" => BondIterationMode::Quadruplet,
         "QUAS" | "QSOL" => BondIterationMode::Pair,
         _ => BondIterationMode::None,
     }
@@ -80,7 +85,7 @@ pub(crate) fn pair_identities(count: usize) -> Vec<BondKind> {
     values
 }
 
-/// SUBG permits either order of the two members belonging to each
+/// SUBG/SUBQ permit either order of the two members belonging to each
 /// sublattice. Each within-sublattice pair is therefore an unordered
 /// combination with replacement; no additional cross-sublattice equivalence
 /// is assumed.
@@ -126,6 +131,12 @@ mod tests {
     fn model_dispatch_is_explicit() {
         assert_eq!(bond_iteration_mode("SUBG"), BondIterationMode::Quadruplet);
         assert_eq!(bond_iteration_mode("SUBGM"), BondIterationMode::Quadruplet);
+        assert_eq!(bond_iteration_mode("SUBQ"), BondIterationMode::Quadruplet);
+        assert_eq!(
+            bond_iteration_mode(" subqm "),
+            BondIterationMode::Quadruplet
+        );
+        assert_eq!(bond_iteration_mode("SUBL"), BondIterationMode::None);
         assert_eq!(bond_iteration_mode("QUAS"), BondIterationMode::Pair);
         assert_eq!(bond_iteration_mode("QSOL"), BondIterationMode::Pair);
         assert_eq!(bond_iteration_mode("PURE"), BondIterationMode::None);

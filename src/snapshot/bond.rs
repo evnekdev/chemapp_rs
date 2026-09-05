@@ -33,7 +33,7 @@ pub enum BondSnapshotKind {
         /// Canonical second pair member.
         constituent_b: PairMemberSnapshot,
     },
-    /// A SUBG quadruplet with two members from each sublattice.
+    /// A SUBG/SUBQ quadruplet with two members from each sublattice.
     Quadruplet {
         /// First member on sublattice one.
         species_a: QuadrupletMemberSnapshot,

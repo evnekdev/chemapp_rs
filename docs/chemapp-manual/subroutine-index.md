@@ -101,7 +101,7 @@ Important: global conditions and streams are distinct input modes. `TQSETC` and 
 | `TQGDPC` | get thermodynamic property of a phase constituent | wrapped |
 | `TQSTXP` | retrieve stream thermodynamic property | wrapped |
 | `TQGTLC` | sublattice fraction/result | wrapped |
-| `TQBOND` | SUBG quadruplet or QUAS/QSOL pair fraction | wrapped; high-level model-aware `BondKind` |
+| `TQBOND` | SUBG/SUBQ quadruplet or QUAS/QSOL pair fraction | wrapped; high-level model-aware `BondKind` |
 | `TQERR` | retrieve current ChemApp error message | wrapped |
 
 `TQGETR` refers to the last relevant calculation/mapping state. High-level Rust code that needs historical states must snapshot results before the next native calculation changes them. `Engine::tqgetr` currently exposes only the scalar forms of the manual's `INDEXP`/`INDEX` table: positive phase/positive individual index, positive phase/index zero, `indexp == 0` with a positive system-component index, and `(0, 0)` for the system. Negative selectors return arrays and are intentionally not exposed by this scalar `f64` API.

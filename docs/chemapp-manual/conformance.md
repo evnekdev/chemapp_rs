@@ -365,9 +365,36 @@ Do not mix these into one compatibility assumption.
 The interaction inspection and verified mutation/cache layers are complete for
 the EN22 model/channel families. The next interaction milestone should build a
 sensitivity/Jacobian API on the typed reversible mutation boundary, without
-recreating selector arrays or text keys. Native TQBOND runtime conformance
-remains limited by the absence of a non-proprietary SUBG/QUAS/QSOL data set.
+recreating selector arrays or text keys. Native SUBQ TQBOND runtime conformance is now recorded below; SUBG/QUAS/QSOL
+still lack a corresponding live fixture in this audit.
 
 The routine-by-routine native ABI audit is already complete for the current
 75-wrapper surface; platform-specific binary verification remains a separate,
 ongoing evidence task.
+
+## SUBQ bond runtime evidence
+
+The legacy manual omits SUBQ from TQBOND applicability. A licensed ChemApp
+7.1.4 Windows x64 run (2026-09-06) on EN22 Slag-liq#1 returns all 28 canonical
+quadruplet fractions using the SUBG combined-index convention. Across 54
+CaO/SiO2 sections with 0, 0.1 and 0.3 incoming Al2O3 at 1600 and 1800 K,
+all 1512 native queries succeeded. Fraction sums deviate from one by at most
+2.3e-16. This identifies a high-level dispatch omission, not a raw ABI defect.
+
+Evidence lives in sibling equilibrium-engine `tests/fixtures/MQM-native-bonds.json`;
+its `examples/mqm_bond_diagnostic.rs` accepts library/datafile/output paths at
+runtime. DAT SHA-256:
+`ad4d2ab47ed91e0f4288c8675a79f06ee6f107965107d38b1d44e1967427ee24`.
+The raw diagnostic used chemapp_rs `e989781d4e4f9d59ec5ba60dba46515b7455bdba`
+and parser `785f3be35a74a99ca4b80b1c1ddcad6de7bcbb84`.
+No binary, license identifier, DAT copy or machine-specific path is distributed
+with this crate. This evidence does not establish Unix or every ChemApp version
+conformance, nor does it equate SUBQ and SUBG entropy models.
+
+After the dispatch fix, `cargo run --example bond_conformance -- LIBRARY DAT
+Slag-liq#1 1800 CaO 0.4 SiO2 0.4 Al2O3 0.2` also verified all 28 high-level
+identities, native fractions, owned snapshots and reversed within-sublattice
+selectors. The fraction sum was exactly 1.0 at binary64 precision. Formatting,
+workspace check, strict all-target/all-feature Clippy, 81 unit tests, six doc
+tests and all-feature Rust documentation passed without requiring a native
+library for the ordinary tests.
